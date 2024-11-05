@@ -1,0 +1,15 @@
+*.jl.*.cov
+*.jl.cov
+*.jl.mem
+/docs/build/
+Manifest.toml
+LocalPreferences.toml
+
+/dev/
+
+#VSCode
+.vscode
+*.code-workspace
+
+# Mac stuff
+.DS_Store
