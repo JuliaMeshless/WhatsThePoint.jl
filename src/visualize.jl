@@ -1,4 +1,4 @@
-_get_colorrange(labels) = (minimum(labels), maximum(labels))
+_get_colorrange(labels) = isnothing(labels) ? nothing : (minimum(labels), maximum(labels))
 
 function visualize(
     cloud::PointCloud{𝔼{3},C}; size=(1000, 1000), azimuth=1.275π, elevation=π / 8, kwargs...
@@ -214,7 +214,7 @@ end
 
 function visualize(
     coords::AbstractVector,
-    labels;
+    labels=nothing;
     size=(1000, 1000),
     colorrange=_get_colorrange(labels),
     azimuth=1.275π,
@@ -223,7 +223,7 @@ function visualize(
     colormap=:Spectral,
     kwargs...,
 )
-    N = length(first(coords))
+    N = embeddim(first(coords))
     return if N == 2
         _visualize2d(
             coords,
@@ -253,7 +253,7 @@ end
 
 function _visualize2d(
     coords::AbstractVector,
-    labels;
+    labels=nothing;
     size=(1000, 1000),
     colorrange=_get_colorrange(labels),
     levels=32,
@@ -263,26 +263,23 @@ function _visualize2d(
     fig = Figure(; size=size)
     ax = Axis(fig[1, 1]; aspect=DataAspect())
 
-    x = getindex.(coords, 1)
-    y = getindex.(coords, 2)
-    cmap = Makie.cgrad(colormap, levels; categorical=true)
-    m = meshscatter!(
-        ax,
-        x,
-        y;
-        color=labels,
-        shading=Makie.NoShading,
-        colorrange=colorrange,
-        colormap=cmap,
-        kwargs...,
-    )
-    Makie.Colorbar(fig[1, 2], m; colorrange=colorrange, colormap=cmap)
+    c = coords.(points)
+    x = map(c -> ustrip(c.x), c)
+    y = map(c -> ustrip(c.y), c)
+    if !isnothing(labels)
+        meshscatter!(
+            ax, x, y; color=labels, colorrange=colorrange, colormap=cmap, kwargs...
+        )
+        Makie.Colorbar(fig[1, 2]; colorrange=colorrange, colormap=cmap)
+    else
+        meshscatter!(ax, x, y; kwargs...)
+    end
     return fig
 end
 
 function _visualize3d(
-    coords::AbstractVector,
-    labels;
+    points::AbstractVector,
+    labels=nothing;
     size=(1000, 1000),
     colorrange=_get_colorrange(labels),
     azimuth=1.275π,
@@ -297,11 +294,18 @@ function _visualize3d(
 
     cmap = Makie.cgrad(colormap, levels; categorical=true)
 
-    x = getindex.(coords, 1)
-    y = getindex.(coords, 2)
-    z = getindex.(coords, 3)
-    meshscatter!(ax, x, y, z; color=labels, colorrange=colorrange, colormap=cmap, kwargs...)
-    Makie.Colorbar(fig[1, 2]; colorrange=colorrange, colormap=cmap)
+    c = coords.(points)
+    x = map(c -> ustrip(c.x), c)
+    y = map(c -> ustrip(c.y), c)
+    z = map(c -> ustrip(c.z), c)
+    if !isnothing(labels)
+        meshscatter!(
+            ax, x, y, z; color=labels, colorrange=colorrange, colormap=cmap, kwargs...
+        )
+        Makie.Colorbar(fig[1, 2]; colorrange=colorrange, colormap=cmap)
+    else
+        meshscatter!(ax, x, y, z; kwargs...)
+    end
     return fig
 end
 

@@ -6,9 +6,13 @@ Import a surface mesh. Re-uses code from MeshBridge.jl, did not use their packag
 """
 function import_surface(filepath::String)
     geo = GeoIO.load(filepath)
-    normals = geo.normal
     mesh = geo.geometry
     points = map(centroid, elements(mesh))
+    normals = try
+        geo.normal
+    catch
+        compute_normals(points)
+    end
     area = map(Meshes.area, elements(mesh))
     return points, normals, area, mesh
 end

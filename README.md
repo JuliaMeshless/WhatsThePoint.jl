@@ -9,3 +9,5 @@ This is a package providing various tools for manipulating point clouds for use 
 solution of PDEs.
 
 **Warning - This is not ready for prime-time use yet. Use at your own risk.**
+
+![Bunny](bunny.jpeg)
