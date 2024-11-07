@@ -33,7 +33,4 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
-ChunkSplitters = "3.1.0"
-OhMyThreads = "0.7.0"
-StructArrays = "0.6.18"
-Unitful = "1.21.0"
+julia = "1.9"
