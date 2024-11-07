@@ -40,7 +40,8 @@ import Meshes: Manifold, Domain
 import Meshes: to, centroid, boundingbox, discretize
 import Meshes: elements, nelements, lentype, normal, area
 # re-export from Meshes.jl
-export Point, Vec, isinside, centroid, boundingbox, KNearestSearch, search, searchdists
+export Point, Vec, coords, isinside, centroid, boundingbox
+export KNearestSearch, BallSearch, search, searchdists
 
 const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
@@ -82,9 +83,10 @@ export AbstractSpacing, ConstantSpacing, LogLike, Power
 
 include("discretization/discretization.jl")
 export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer
-export discretize!, discretize, noderepel!
+export discretize!, discretize
 
-include("discretization/repel.jl")
+include("repel.jl")
+export repel!
 
 include("metrics.jl")
 

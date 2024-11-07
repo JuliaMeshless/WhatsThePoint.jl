@@ -1,4 +1,4 @@
-function noderepel!(
+function repel!(
     cloud::PointCloud,
     spacing;
     β=0.2,

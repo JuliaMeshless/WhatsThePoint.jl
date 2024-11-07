@@ -19,6 +19,14 @@ function isinside(testpoint::Point{𝔼{2}}, points::PointSet{𝔼{2},C}) where 
     return abs(sumangles) < (1e3 * eps(T) * Unitful.rad) ? false : true
 end
 
+function isinside(testpoint::Point{𝔼{2}}, cloud::PointCloud{𝔼{2}})
+    return isinside(testpoint, cloud.points)
+end
+
+function isinside(testpoint::Point{𝔼{2}}, points::AbstractVector{<:Point{𝔼{2}}})
+    return isinside(testpoint, PointSet(points))
+end
+
 function isinside(testpoint::Point{𝔼{2}}, surf::Union{PointCloud{𝔼{2}},PointPart{𝔼{2}}})
     return isinside(testpoint, point(surf))
 end
@@ -35,8 +43,7 @@ function isinside(
 ) where {M<:Manifold}
     g = mapreduce(s -> _greens(testpoint, s), +, surfaces(cloud))
     # include the -4π missing from _greens in the inequality here
-    unitful_2π = 2π * unit(lentype(crs(testpoint)))
-    return g < -unitful_2π ? true : false
+    return g < -2π ? true : false
 end
 
 function _greens(testpoint::Point, surf::PointSurface)

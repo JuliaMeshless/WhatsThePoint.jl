@@ -9,6 +9,7 @@ Constant node spacing.
 struct ConstantSpacing{L<:Unitful.Length} <: AbstractSpacing
     Δx::L
 end
+(s::ConstantSpacing)() = s.Δx
 (s::ConstantSpacing)(_) = s.Δx
 
 """

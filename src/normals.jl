@@ -50,10 +50,9 @@ end
 
 function _compute_normal(points::AbstractVector{<:Point})
     # from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
-    ℒ = lentype(eltype(points))
     v = ustrip.(to.(points))
     _, Q = eigen(Symmetric(cov(v)))
-    return Vec(Q[:, 1] .* unit(ℒ))
+    return SVector(Q[:, 1])
 end
 
 """
