@@ -67,7 +67,7 @@ include("cloud.jl")
 export PointCloud
 
 include("normals.jl")
-export compute_normals, orient_normals!, compute_edge, compute_edges
+export compute_normals, orient_normals!, update_normals!, compute_edge, compute_edges
 
 include("neighbors.jl")
 

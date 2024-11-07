@@ -1,7 +1,7 @@
 function findmin_turbo(x)
     indmin = 0
     minval = typemax(eltype(x))
-    @turbo for (i, y) in enumerate(x)
+    for (i, y) in enumerate(x)
         newmin = y < minval
         minval = newmin ? y : minval
         indmin = newmin ? i : indmin
