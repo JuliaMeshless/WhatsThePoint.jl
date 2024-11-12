@@ -86,7 +86,8 @@ function split_surface!(
     g = SimpleGraph(length(surf))
     for n in neighbors, v in n[2:end]
         i = first(n)
-        abs(∠(parent(surf).normal[i], parent(surf).normal[v])) < angle && add_edge!(g, i, v)
+        abs(_angle(parent(surf).normal[i], parent(surf).normal[v])) < angle &&
+            add_edge!(g, i, v)
     end
 
     connec = connected_components(g)

@@ -12,11 +12,11 @@ using StaticArrays
     sw = -ones(SVector{2}) * sqrt(2) / 2
     nw = SVector(-sqrt(2) / 2, sqrt(2) / 2)
     se = SVector(sqrt(2) / 2, -sqrt(2) / 2)
-    correct_normals = Vec.((e, ne, n, nw, w, sw, s, se))
-    test_normals = [Vec.((n, -n)) for n in correct_normals]
+    correct_normals = (e, ne, n, nw, w, sw, s, se)
+    test_normals = [(n, -n) for n in correct_normals]
 
-    @test any((PointClouds._compute_normal(circle2D[2:4]),) .≈ Vec.((n, -n)))
-    @test any((PointClouds._compute_normal(circle2D[1:3]),) .≈ Vec.((ne, -ne)))
+    @test any((PointClouds._compute_normal(circle2D[2:4]),) .≈ (n, -n))
+    @test any((PointClouds._compute_normal(circle2D[1:3]),) .≈ (ne, -ne))
 
     k = 3
     search_method = KNearestSearch(circle2D, k)
@@ -27,9 +27,9 @@ using StaticArrays
     @test all(computed_normals .≈ correct_normals)
 end
 
-@testset "3d" begin
+@testset "3D" begin
     tri3d = Point.([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
-    n = Vec(ones(SVector{3}) * sqrt(3) / 3)
+    n = ones(SVector{3}) * sqrt(3) / 3
     computed_normal = PointClouds._compute_normal(tri3d)
     @test any(Ref(computed_normal) .≈ (n, -n))
 
@@ -42,7 +42,7 @@ end
     y = @. sin(θ) * sin(ϕ)
     z = @. cos(ϕ)
     sphere3d = Point.(x, y, z)
-    correct_normals = Vec.(x, y, z)
+    correct_normals = SVector.(x, y, z)
     test_normals = [[n, -n] for n in correct_normals]
 
     #tree = KDTree(coordinates.(sphere3d))
@@ -52,10 +52,10 @@ end
 
     # test if normals are within 5 deg of correct given it may be unoriented
     @test all([
-        any(∠.((computed_normals[i],), n) .< 10 * π / 180) for
+        any(PointClouds._angle.((computed_normals[i],), n) .< 10 * π / 180) for
         (i, n) in enumerate(test_normals)
     ])
     orient_normals!(computed_normals, sphere3d; k=5)
     # test if normals are within 5 deg of correct after correcting orientation
-    @test all(∠.(computed_normals, correct_normals) .< 10 * π / 180)
+    @test all(PointClouds._angle.(computed_normals, correct_normals) .< 10 * π / 180)
 end

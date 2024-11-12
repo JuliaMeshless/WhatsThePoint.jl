@@ -56,13 +56,13 @@ function _compute_normal(points::AbstractVector{<:Point})
 end
 
 """
-    orient_normals!(search_method::KNearestSearch, normals::AbstractVector{<:Vec}, points)
+    orient_normals!(search_method::KNearestSearch, normals::AbstractVector{<:AbstractVector}, points)
 
 Correct the orientation of normals on a surface as the [compute_normals](@ref) function does not guarantee if the normal is inward or outward facing. Uses the approach from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
 
 """
 function orient_normals!(
-    search_method::KNearestSearch, normals::AbstractVector{<:Vec}, points
+    search_method::KNearestSearch, normals::AbstractVector{<:AbstractVector}, points
 )
     # build minimum spanning tree based on angle between normals
     neighbors = search.(points, Ref(search_method))
@@ -78,7 +78,7 @@ function orient_normals!(
 
     # check if highest point (in Z direction) faces up, correct if not
     start = argmax(last.(to.(points)))
-    if last(normals[start]) < 0 * Unitful.m
+    if last(normals[start]) < 0
         normals[start] = -normals[start]
     end
 
@@ -87,7 +87,7 @@ function orient_normals!(
     visited = falses(length(parents))
     function visit(ivertex)
         visited[ivertex] = true
-        if normals[ivertex] ⋅ normals[parents[ivertex]] < (0 * Unitful.m^2)
+        if normals[ivertex] ⋅ normals[parents[ivertex]] < 0
             normals[ivertex] = -normals[ivertex]
         end
         for nb in Graphs.neighbors(g_mst, ivertex)
@@ -100,12 +100,12 @@ function orient_normals!(
 end
 
 """
-    orient_normals!(normals::Vector{<:Vec}, points; k::Int=5)
+    orient_normals!(normals::Vector{<:AbstractVector}, points; k::Int=5)
 
 Correct the orientation of normals on a surface as the [compute_normals](@ref) function does not guarantee if the normal is inward or outward facing. Uses the approach from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
 
 """
-function orient_normals!(normals::AbstractVector{<:Vec}, points; k::Int=5)
+function orient_normals!(normals::AbstractVector{<:AbstractVector}, points; k::Int=5)
     k = k > length(points) ? length(points) : k
     # build minimum spanning tree based on angle between normals
     search_method = KNearestSearch(points, k)
@@ -124,7 +124,7 @@ function orient_normals!(cloud::PointCloud; k::Int=5)
 end
 
 # TODO optimize
-function build_normal_weighted_graph(normals::AbstractVector{<:Vec}, neighbors)
+function build_normal_weighted_graph(normals::AbstractVector{<:AbstractVector}, neighbors)
     g = SimpleWeightedGraph(length(normals))
     T = eltype(first(normals))
     epsilon = eps(T) * 1e2 # offset because edge weight cannot be 0

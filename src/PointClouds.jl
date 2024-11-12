@@ -40,7 +40,7 @@ import Meshes: Manifold, Domain
 import Meshes: to, centroid, boundingbox, discretize
 import Meshes: elements, nelements, lentype, normal, area
 # re-export from Meshes.jl
-export Point, Vec, coords, isinside, centroid, boundingbox
+export Point, coords, isinside, centroid, boundingbox
 export KNearestSearch, BallSearch, search, searchdists
 
 const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"

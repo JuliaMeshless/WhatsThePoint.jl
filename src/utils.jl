@@ -31,3 +31,10 @@ function many_permute!(
 )
     return many_permute!(parent(points), permutations, ranges)
 end
+
+function _angle(u::SVector{2}, v::SVector{2}) # preserve sign
+    θ = atan(u × v, u ⋅ v) * u"rad"
+    return θ == oftype(θ, -π) ? -θ : θ
+end
+
+_angle(u::SVector{3}, v::SVector{3}) = atan(norm(u × v), u ⋅ v) * u"rad" # discard sign
