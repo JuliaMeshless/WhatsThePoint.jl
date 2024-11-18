@@ -52,7 +52,6 @@ function repel!(
     if i == max_iters
         @warn "Node repel reached maximum number of iterations ($max_iters), Convergence = ($(conv[end]))\n"
     end
-    vol = cloud.volume.points
-    parent(vol).geoms[vol.inds] .= p
+    cloud.volume = PointVolume(filter!(x -> isinside(x, cloud), p))
     return conv
 end

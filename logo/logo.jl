@@ -10,18 +10,19 @@ function get_xy(cloud)
     return x, y
 end
 
-function circle_nodes(O)
+function circle_nodes(origins)
     r = 0.75
     N = 12
     θ = 0:(π / N):(2π - π / (2N))
-    spacing = ConstantSpacing(3 * r / N * m)
+    s = 3 * r / N
+    spacing = ConstantSpacing(s * m)
 
-    points = PointClouds.Point.([(r * cos(i), r * sin(i)) for i in θ]) .+ (O,)
+    points = PointClouds.Point.([(r * cos(i), r * sin(i)) for i in θ]) .+ (origins,)
     boundary = PointBoundary(points)
     cloud = discretize(boundary, spacing; max_points=200)
 
-    α = (3 * r / N) / 500
-    repel!(cloud, spacing; α=α, β=0.2, k=5, max_iters=1000, tol=1e-6)
+    α = s / 10
+    repel!(cloud, spacing; α=α, β=0.2, k=12, max_iters=10_000, tol=1e-6)
 
     return get_xy(cloud)
 end
