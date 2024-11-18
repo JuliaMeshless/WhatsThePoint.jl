@@ -1,5 +1,5 @@
 """
-    compute_normals(points::PointSurface; k::Int=5)
+    compute_normals(surf::PointSurface; k::Int=5)
 
 Estimate the normals of a set of points that form a surface. Uses the PCA approach from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
 
@@ -17,7 +17,7 @@ end
 
 # TODO do not include points near edge. use map_edges() function to find edge points.
 """
-    compute_normals(search_method::KNearestSearch, points::PointSurface)
+    compute_normals(search_method::KNearestSearch, surf::PointSurface)
 
 Estimate the normals of a set of points that form a surface. Uses the PCA approach from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
 
@@ -37,7 +37,7 @@ end
 """
     update_normals!(surf::PointCloud; k::Int=5)
 
-Update the normals of the surfaces of a surf. This is necessary whenever the points change for any reason.
+Update the normals of the boundary of a surf. This is necessary whenever the points change for any reason.
 
 """
 function update_normals!(surf::PointSurface; k::Int=5)

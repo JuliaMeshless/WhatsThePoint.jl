@@ -16,8 +16,8 @@ end
     include("cloud.jl")
 end
 
-@safetestset "PointPart" begin
-    include("part.jl")
+@safetestset "PointBoundary" begin
+    include("boundary.jl")
 end
 
 @safetestset "isinside" begin

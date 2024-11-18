@@ -67,7 +67,7 @@ function visualize(
         y = zeros(T, N)
         z = zeros(T, N)
 
-        surf = only(surfaces(cloud))
+        surf = only(collect(surfaces(cloud)))
         ids = 1:length(surf)
         coords = to(surf)
         x[ids] = getindex.(coords, 1)
@@ -111,7 +111,11 @@ function visualize(
 end
 
 function visualize(
-    cloud::PointPart{𝔼{3},C}; size=(1000, 1000), azimuth=1.275π, elevation=π / 8, kwargs...
+    cloud::PointBoundary{𝔼{3},C};
+    size=(1000, 1000),
+    azimuth=1.275π,
+    elevation=π / 8,
+    kwargs...,
 ) where {C}
     fig = Figure(; size=size)
     ax = Axis3(fig[1, 1]; azimuth=azimuth, elevation=elevation)
@@ -161,7 +165,7 @@ function visualize(
         y = zeros(T, N)
         z = zeros(T, N)
 
-        surf = only(surfaces(cloud))
+        surf = only(collect(surfaces(cloud)))
         ids = 1:length(surf)
         coords = to(surf)
         x[ids] = getindex.(coords, 1)
@@ -193,7 +197,7 @@ function visualize(
 end
 
 function visualize(
-    cloud::Union{PointCloud,PointPart},
+    cloud::Union{PointCloud,PointBoundary},
     labels;
     size=(1000, 1000),
     colorrange=_get_colorrange(labels),
@@ -268,11 +272,17 @@ function _visualize2d(
     y = map(c -> ustrip(c.y), c)
     if !isnothing(labels)
         meshscatter!(
-            ax, x, y; color=labels, colorrange=colorrange, colormap=cmap, kwargs...
+            ax,
+            ustrip.(x),
+            ustrip.(y);
+            color=labels,
+            colorrange=colorrange,
+            colormap=cmap,
+            kwargs...,
         )
         Makie.Colorbar(fig[1, 2]; colorrange=colorrange, colormap=cmap)
     else
-        meshscatter!(ax, x, y; kwargs...)
+        meshscatter!(ax, ustrip.(x), ustrip.(y); kwargs...)
     end
     return fig
 end
@@ -300,16 +310,23 @@ function _visualize3d(
     z = map(c -> ustrip(c.z), c)
     if !isnothing(labels)
         meshscatter!(
-            ax, x, y, z; color=labels, colorrange=colorrange, colormap=cmap, kwargs...
+            ax,
+            ustrip.(x),
+            ustrip.(y),
+            ustrip.(z);
+            color=labels,
+            colorrange=colorrange,
+            colormap=cmap,
+            kwargs...,
         )
         Makie.Colorbar(fig[1, 2]; colorrange=colorrange, colormap=cmap)
     else
-        meshscatter!(ax, x, y, z; kwargs...)
+        meshscatter!(ax, ustrip.(x), ustrip.(y), ustrip.(z); kwargs...)
     end
     return fig
 end
 
-function visualize(cloud::PointPart{𝔼{2},C}; size=(1000, 1000), kwargs...) where {C}
+function visualize(cloud::PointBoundary{𝔼{2},C}; size=(1000, 1000), kwargs...) where {C}
     fig = Figure(; size=size)
     ax = Axis(fig[1, 1]; aspect=DataAspect())
     coords = to(cloud)
@@ -337,7 +354,13 @@ function visualize(cloud::PointPart{𝔼{2},C}; size=(1000, 1000), kwargs...) wh
         end
 
         meshscatter!(
-            ax, x, y; color=labels, colormap=:Spectral, shading=Makie.NoShading, kwargs...
+            ax,
+            ustrip.(x),
+            ustrip.(y);
+            color=labels,
+            colormap=:Spectral,
+            shading=Makie.NoShading,
+            kwargs...,
         )
         Makie.Colorbar(
             fig[1, 2]; limits=(1, Ns), colormap=Makie.cgrad(:Spectral, Ns; categorical=true)
@@ -349,7 +372,7 @@ function visualize(cloud::PointPart{𝔼{2},C}; size=(1000, 1000), kwargs...) wh
         x = zeros(T, N)
         y = zeros(T, N)
 
-        surf = only(surfaces(cloud))
+        surf = only(collect(surfaces(cloud)))
         ids = 1:length(surf)
         coords = to(surf)
         x[ids] = getindex.(coords, 1)
@@ -359,8 +382,8 @@ function visualize(cloud::PointPart{𝔼{2},C}; size=(1000, 1000), kwargs...) wh
         if Ns > 1
             meshscatter!(
                 ax,
-                x,
-                y;
+                ustrip.(x),
+                ustrip.(y);
                 color=labels,
                 colormap=:Spectral,
                 shading=Makie.NoShading,
@@ -372,7 +395,7 @@ function visualize(cloud::PointPart{𝔼{2},C}; size=(1000, 1000), kwargs...) wh
                 colormap=Makie.cgrad(:Spectral, Ns; categorical=true),
             )
         else
-            meshscatter!(ax, x, y; shading=Makie.NoShading, kwargs...)
+            meshscatter!(ax, ustrip.(x), ustrip.(y); shading=Makie.NoShading, kwargs...)
         end
     end
 
@@ -420,7 +443,13 @@ function visualize(cloud::PointCloud{𝔼{2},C}; size=(1000, 1000), kwargs...) w
         end
 
         meshscatter!(
-            ax, x, y; color=labels, colormap=:Spectral, shading=Makie.NoShading, kwargs...
+            ax,
+            ustrip.(x),
+            ustrip.(y);
+            color=labels,
+            colormap=:Spectral,
+            shading=Makie.NoShading,
+            kwargs...,
         )
         Makie.Colorbar(
             fig[1, 2];
@@ -434,12 +463,12 @@ function visualize(cloud::PointCloud{𝔼{2},C}; size=(1000, 1000), kwargs...) w
         x = zeros(T, N)
         y = zeros(T, N)
 
-        surf = only(surfaces(cloud))
+        surf = only(collect(surfaces(cloud)))
         ids = 1:length(surf)
         coords = to(surf)
         x[ids] = getindex.(coords, 1)
         y[ids] = getindex.(coords, 2)
-        println("1 -> $(only(names(cloud)))")
+        println("1 -> $(only(collect(names(cloud))))")
 
         # volume
         if !isempty(vol)
@@ -455,8 +484,8 @@ function visualize(cloud::PointCloud{𝔼{2},C}; size=(1000, 1000), kwargs...) w
         if Ns > 1
             meshscatter!(
                 ax,
-                x,
-                y;
+                ustrip.(x),
+                ustrip.(y);
                 color=labels,
                 colormap=:Spectral,
                 shading=Makie.NoShading,
@@ -468,7 +497,7 @@ function visualize(cloud::PointCloud{𝔼{2},C}; size=(1000, 1000), kwargs...) w
                 colormap=Makie.cgrad(:Spectral, Ns; categorical=true),
             )
         else
-            meshscatter!(ax, x, y; shading=Makie.NoShading, kwargs...)
+            meshscatter!(ax, ustrip.(x), ustrip.(y); shading=Makie.NoShading, kwargs...)
         end
     end
 
@@ -536,7 +565,7 @@ function visualize(surf::PointSurface{𝔼{3},C}; size=(1000, 1000), kwargs...) 
     z = getindex.(coords, 3)
     labels = zeros(Int, length(surf))
 
-    meshscatter!(ax, x, y, z; color=labels, kwargs...)
+    meshscatter!(ax, ustrip.(x), ustrip.(y), ustrip.(z); color=labels, kwargs...)
 
     return fig
 end

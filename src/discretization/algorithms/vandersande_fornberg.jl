@@ -17,7 +17,8 @@ function discretize!(
     pdp_grid = CartesianGrid(S(bbox.min), S(bbox.max), (dx, dy))
     pdp = Meshes.vertices(pdp_grid)
     T = CoordRefSystems.mactype(C)
-    heights = rand(T, length(pdp)) * spacing(cloud.points[1]) * 0.01 .+ coords(bbox.min).z
+    heights =
+        rand(T, length(pdp)) * spacing(pointify(cloud)[1]) * 0.01 .+ coords(bbox.min).z
     _, current_id = findmin_turbo(heights)
     p = pdp[current_id]
     points = Vector{Point{𝔼{3},C}}(undef, max_points)
@@ -54,8 +55,6 @@ function discretize!(
     points = vfilter(x -> isinside(x, cloud), points[1:dotnr])
     ProgressMeter.finish!(prog)
 
-    N = length(cloud.points)
-    append!(cloud.points.geoms, points)
-    cloud.volume = PointVolume(view(cloud.points, (N + 1):length(cloud.points)))
+    cloud.volume = PointVolume(points)
     return nothing
 end

@@ -1,9 +1,10 @@
 using PointClouds
 using Unitful: m, ustrip
 using Luxor
+using Meshes
 
 function get_xy(cloud)
-    points = cloud.points
+    points = pointify(cloud)
     x = map(p -> ustrip(PointClouds.coords(p).x), points)
     y = map(p -> ustrip(PointClouds.coords(p).y), points)
     return x, y
@@ -16,8 +17,11 @@ function circle_nodes(O)
     spacing = ConstantSpacing(3 * r / N * m)
 
     points = PointClouds.Point.([(r * cos(i), r * sin(i)) for i in θ]) .+ (O,)
-    part = PointPart(points)
-    cloud = discretize(part, spacing; max_points=2000)
+    boundary = PointBoundary(points)
+    cloud = discretize(boundary, spacing; max_points=200)
+
+    α = (3 * r / N) / 500
+    repel!(cloud, spacing; α=α, β=0.2, k=5, max_iters=1000, tol=1e-6)
 
     return get_xy(cloud)
 end
@@ -25,6 +29,7 @@ end
 Oy = 2cos(π / 6) - 1
 origins = [Vec(-1, Oy), Vec(1, Oy), Vec(0, -1)] #.+ Ref(Vec(2.5, -2.5))
 nodes = circle_nodes.(origins)
+
 colors = (Luxor.julia_red, Luxor.julia_green, Luxor.julia_purple)
 
 function draw_logo(colors, nodes, scale, r)

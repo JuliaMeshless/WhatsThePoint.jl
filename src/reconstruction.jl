@@ -5,10 +5,10 @@
 """
     struct ParameterizedSurface{Dim, T} <: AbstractSurface{Dim,T}
 A surface that has been parameterized from points into a continous function representation.
-Contains views (data, not visual) of a surface of a [PointSurface](@ref).
+Contains views (data, not visual) of a surface of a [PointBoundary](@ref).
 
 ## Note
-This is a data view, so mutations to this data will change the data in the [PointSurface](@ref)
+This is a data view, so mutations to this data will change the data in the [PointBoundary](@ref)
        which this surface resides as well.
 """
 struct ParameterizedSurface{Dim,T} <: AbstractSurface{Dim,T} end

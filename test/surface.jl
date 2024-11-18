@@ -70,7 +70,7 @@ end
 end
 
 @testset "Surface Operations" begin
-    part = PointPart(joinpath(@__DIR__, "data", "bifurcation.stl"))
-    split_surface!(part, 80)
-    @test length(surfaces(part)) == 4
+    boundary = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
+    split_surface!(boundary, 80)
+    @test length(surfaces(boundary)) == 4
 end

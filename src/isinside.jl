@@ -20,14 +20,14 @@ function isinside(testpoint::Point{𝔼{2}}, points::PointSet{𝔼{2},C}) where 
 end
 
 function isinside(testpoint::Point{𝔼{2}}, cloud::PointCloud{𝔼{2}})
-    return isinside(testpoint, cloud.points)
+    return isinside(testpoint, pointify(boundary(cloud)))
 end
 
 function isinside(testpoint::Point{𝔼{2}}, points::AbstractVector{<:Point{𝔼{2}}})
     return isinside(testpoint, PointSet(points))
 end
 
-function isinside(testpoint::Point{𝔼{2}}, surf::Union{PointCloud{𝔼{2}},PointPart{𝔼{2}}})
+function isinside(testpoint::Point{𝔼{2}}, surf::Union{PointCloud{𝔼{2}},PointSurface{𝔼{2}}})
     return isinside(testpoint, point(surf))
 end
 function isinside(testpoint::Point{𝔼{2}}, surf::PointSurface{𝔼{2}})
@@ -39,7 +39,7 @@ function isinside(testpoint::AbstractVector, surf::PointSurface{𝔼{Dim}}) wher
 end
 
 function isinside(
-    testpoint::Point{M}, cloud::Union{PointCloud{M},PointPart{M}}
+    testpoint::Point{M}, cloud::Union{PointCloud{M},PointBoundary{M}}
 ) where {M<:Manifold}
     g = mapreduce(s -> _greens(testpoint, s), +, surfaces(cloud))
     # include the -4π missing from _greens in the inequality here

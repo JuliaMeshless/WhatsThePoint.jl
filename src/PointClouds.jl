@@ -38,7 +38,7 @@ using Unitful
 
 import Meshes: Manifold, Domain
 import Meshes: to, centroid, boundingbox, discretize
-import Meshes: elements, nelements, lentype, normal, area
+import Meshes: elements, nelements, lentype, normal, area, pointify
 # re-export from Meshes.jl
 export Point, coords, isinside, centroid, boundingbox
 export KNearestSearch, BallSearch, search, searchdists
@@ -61,11 +61,11 @@ export point, normal, area
 include("volume.jl")
 export PointVolume
 
-include("part.jl")
-export PointPart, surfaces
+include("boundary.jl")
+export PointBoundary, surfaces, names, normals, areas, hassurface
 
 include("cloud.jl")
-export PointCloud
+export PointCloud, boundary, volume
 
 include("normals.jl")
 export compute_normals, orient_normals!, update_normals!, compute_edge, compute_edges
@@ -101,8 +101,8 @@ using PrecompileTools
 @setup_workload begin
     using Unitful: m
     @compile_workload begin
-        part = PointPart(joinpath(@__DIR__, "precompile_tools_dummy.stl"))
-        cloud = discretize(part, ConstantSpacing(1m); alg=VanDerSandeFornberg())
+        boundary = PointBoundary(joinpath(@__DIR__, "precompile_tools_dummy.stl"))
+        cloud = discretize(boundary, ConstantSpacing(1m); alg=VanDerSandeFornberg())
         visualize(cloud; markersize=0.01)
     end
 end

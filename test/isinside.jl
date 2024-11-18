@@ -9,8 +9,8 @@ using Meshes
 end
 
 @testset "3D" begin
-    part = PointPart(joinpath(@__DIR__, "data", "box.stl"))
-    @test isinside(Point(0.5, 0.5, 0.5), part)
-    @test !isinside(Point(0.5, 0.5, -0.5), part)
-    @test !isinside(Point(0.5, 0.5, -0.001), part)
+    boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
+    @test isinside(Point(0.5, 0.5, 0.5), boundary)
+    @test !isinside(Point(0.5, 0.5, -0.5), boundary)
+    @test !isinside(Point(0.5, 0.5, -0.001), boundary)
 end

@@ -8,11 +8,12 @@ function discretize!(
     xmin, _ = to(bbox.min)
     xmax, _ = to(bbox.max)
     dx = (xmax - xmin) / (ninit - 1)
+    b = boundary(cloud)
     r = spacing()
 
     x = xmin:dx:xmax
 
-    heights = rand(length(x)) * spacing(cloud.points[1]) * 0.01 .+ bbox.min.coords.y
+    heights = rand(length(x)) * spacing(b[1]) * 0.01 .+ bbox.min.coords.y
     pdp = Point.(x, heights)
     _, current_id = findmin_turbo(heights)
     p = pdp[current_id]
@@ -44,8 +45,6 @@ function discretize!(
     points = vfilter(x -> isinside(x, cloud), points[1:dotnr])
     ProgressMeter.finish!(prog)
 
-    N = length(cloud.points)
-    append!(parent(cloud.points), points)
-    cloud.volume = PointVolume(view(cloud.points, (N + 1):length(cloud.points)))
+    cloud.volume = PointVolume(points)
     return nothing
 end

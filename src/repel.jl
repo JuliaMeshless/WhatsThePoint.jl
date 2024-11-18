@@ -8,10 +8,11 @@ function repel!(
     tol=1e-6,
 )
     # Miotti 2023
-    p = to(cloud.volume)
+    α = ustrip(α)
+    p = collect(cloud.volume.points)
     p_old = deepcopy(p)
     N = length(p)
-    all_p = cloud.points
+    all_p = pointify(cloud)
     method = KNearestSearch(all_p, k)
 
     all_spacings = spacing(all_p)
@@ -19,7 +20,6 @@ function repel!(
         (p, p_old) -> norm(p .- p_old, Inf) ./ s
     end
 
-    Δ = similar(p)
     conv = Float64[]
     i = 1
     F = let β = β
@@ -29,31 +29,18 @@ function repel!(
         p_old .= p
         tmap!(p, 1:N) do id
             xi = p_old[id]
-            #=
-            ids, dists = knn(tree, xi, k + 1, true)
-            ids = @view ids[2:end]
-            neighborhood = @view all_p[ids]
-            rij = @view dists[2:end]
-            sbar = spacing(xi)
-
-            repel = sum(zip(neighborhood, rij)) do z
-                xj, r = z
-                F(r / sbar) * (xi - xj) / r
-            end
-            =#
-
             ids, dists = searchdists(xi, method)
             ids = @view ids[2:end]
             neighborhood = @view all_p[ids]
             rij = norm.(@view dists[2:end])
-            sbar = spacing(xi)
+            s = spacing(xi)
 
             repel = sum(zip(neighborhood, rij)) do z
                 xj, r = z
-                F(r / sbar) * (xi - xj) / r
+                F(r / s) * (xi - xj) / r
             end
 
-            return p_old[id] + sbar * α * repel
+            return xi + Vec(s * α * repel)
         end
         push!(conv, convergence(p, p_old))
         if all(x -> norm(x, Inf) < tol, conv[end])
@@ -65,6 +52,7 @@ function repel!(
     if i == max_iters
         @warn "Node repel reached maximum number of iterations ($max_iters), Convergence = ($(conv[end]))\n"
     end
-    cloud.volume.points .= Point.(p)
+    vol = cloud.volume.points
+    parent(vol).geoms[vol.inds] .= p
     return conv
 end

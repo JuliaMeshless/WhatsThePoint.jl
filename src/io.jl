@@ -19,7 +19,7 @@ function import_surface(filepath::String)
 end
 
 function export_cloud(filename::String, cloud::PointCloud)
-    exportvtk(filename, to(cloud.surfaces), [normals(cloud)], ["normals"])
+    exportvtk(filename, to(boundary(cloud)), [normals(cloud)], ["normals"])
     return nothing
 end
 

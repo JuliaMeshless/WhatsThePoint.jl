@@ -2,6 +2,7 @@ struct PointVolume{M<:Manifold,C<:CRS} <: Domain{M,C}
     points::Domain{M,C}
 end
 PointVolume{M,C}() where {M<:Manifold,C<:CRS} = PointVolume(PointSet(Point{M,C}[]))
+PointVolume(points::AbstractVector) = PointVolume(PointSet(points))
 
 Base.length(vol::PointVolume) = length(vol.points)
 Base.size(vol::PointVolume) = (length(vol),)
@@ -16,6 +17,8 @@ Base.filter!(f::Function, vol::PointVolume) = filter!(f, vol.points)
 to(vol::PointVolume) = to.(vol.points)
 centroid(vol::PointVolume) = centroid(PointSet(vol.points))
 boundingbox(vol::PointVolume) = boundingbox(vol.points)
+
+Meshes.pointify(vol::PointVolume) = Meshes.pointify(vol.points)
 
 # pretty printing
 function Base.show(io::IO, ::MIME"text/plain", vol::PointVolume{Dim,T}) where {Dim,T}

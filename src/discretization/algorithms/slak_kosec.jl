@@ -7,7 +7,7 @@ SlakKosec() = SlakKosec(10)
 function discretize!(
     cloud::PointCloud{𝔼{3},C}, spacing::AbstractSpacing, alg::SlakKosec; max_points=10_000
 ) where {C}
-    seeds = Point.(to(cloud.surfaces))
+    seeds = Point.(to(boundary(cloud)))
     tree = _kdtree(seeds)
     new_points = Point{𝔼{3},T}[]
 

@@ -72,6 +72,7 @@ Base.lastindex(surf::PointSurface) = length(surf)
 Base.getindex(surf::PointSurface, index::Int) = getindex(parent(surf), index)
 Base.iterate(surf::PointSurface, state=1) = iterate(parent(surf), state)
 
+Meshes.pointify(surf::PointSurface) = point(surf)
 Meshes.elements(surf::PointSurface) = (elem for elem in parent(surf))
 Meshes.nelements(surf::PointSurface) = length(parent(surf))
 Meshes.centroid(surf::PointSurface) = centroid(PointSet(point(surf)))

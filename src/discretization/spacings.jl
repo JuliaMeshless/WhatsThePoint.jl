@@ -28,7 +28,7 @@ end
 
 function LogLike(cloud::PointCloud, base_size::Real, growth_rate::Real)
     # TODO extract only points/surfaces used for growth rate
-    return LogLike(cloud.points, base_size, growth_rate)
+    return LogLike(pointify(cloud), base_size, growth_rate)
 end
 
 function (s::LogLike)(p::Union{Point,Vec})
