@@ -5,9 +5,11 @@
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://kylebeggs.github.io/PointClouds.jl/dev)
 [![License File](https://img.shields.io/badge/license-MIT-blue)](https://github.com/kylebeggs/PointClouds.jl/blob/master/LICENSE)
 
-This is a package providing various tools for manipulating point clouds for use in the
+Providing various tools for manipulating point clouds for use in the
 solution of PDEs.
 
-**Warning - This is not ready for prime-time use yet. Use at your own risk.**
+> [!CAUTION]
+> This is under heavy development and does not have robust testing for all methods
+yet. Use at your own risk.
 
 ![Bunny](bunny.jpeg)
