@@ -71,7 +71,7 @@ end
 # pretty printing
 function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim,T}) where {Dim,T}
     println(io, "PointBoundary{$Dim, $T}")
-    println(io, "├─Number of points: $(length(boundary.points))")
+    println(io, "├─$(length(boundary.points)) points")
     if !isnothing(surfaces(boundary))
         println(io, "└─Surfaces")
         N = length(surfaces(boundary))

@@ -71,12 +71,12 @@ end
 # pretty printing
 function Base.show(io::IO, ::MIME"text/plain", cloud::PointCloud{Dim,T}) where {Dim,T}
     println(io, "PointCloud{$Dim, $T}")
-    println(io, "├─Number of points: $(length(cloud))")
-    has_vol = length(cloud.volume) != 0
+    println(io, "├─$(length(cloud)) points")
+    has_vol = !iszero(length(cloud.volume))
     vert = has_vol ? "│ " : "  "
     if !isnothing(surfaces(cloud))
         char = has_vol ? "├" : "└"
-        println(io, char * "─Surfaces")
+        println(io, char * "─Boundary: $(length(boundary(cloud))) points")
         N = length(surfaces(cloud))
         for (i, name) in enumerate(names(boundary(cloud)))
             char = i < N ? "├" : "└"
@@ -84,8 +84,7 @@ function Base.show(io::IO, ::MIME"text/plain", cloud::PointCloud{Dim,T}) where {
         end
     end
     if has_vol
-        println(io, "└─Volume")
-        println(io, "  └─Number of points: $(length(volume(cloud)))")
+        println(io, "└─Volume: $(length(volume(cloud))) points")
     end
 end
 
