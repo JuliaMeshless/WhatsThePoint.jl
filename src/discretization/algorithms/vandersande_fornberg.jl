@@ -39,9 +39,9 @@ function discretize!(
         ProgressMeter.next!(prog; spinner=spinner_icons)
         inside_ids = search(p, search_method)
 
-        xydist = map(pdp_inside -> norm(p - pdp_inside), pdp[inside_ids])
-        new_heights = sqrt.(r^2 .- (xydist) .^ 2)
-        heights[inside_ids] .= max.(heights[current_id] .+ new_heights, heights[inside_ids])
+        xydist = map(pdp_inside -> norm(p - pdp_inside), @view pdp[inside_ids])
+        new_heights = @. sqrt(r^2 - xydist^2) + heights[current_id]
+        heights[inside_ids] .= max.(new_heights, heights[inside_ids])
 
         # naive search
         # TODO implement moving window search

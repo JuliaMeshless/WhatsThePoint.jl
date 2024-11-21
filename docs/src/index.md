@@ -41,6 +41,8 @@ using GLMakie
 visualize(boundary; markersize=0.15)
 ```
 
+![bunny boundary](assets/bunny-boundary.png)
+
 Then we can generate a point cloud using the `PointCloud` constructor.
 
 ```julia
@@ -48,6 +50,6 @@ spacing = ConstantSpacing(1m)
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
 ```
 
-```@raw html
-<img src="assets/bunny-boundary.png" width="75%"/>
-```
+and we can visualize again with `visualize(cloud; markersize=0.15)`
+
+![bunny discretized](assets/bunny-discretized.png)
