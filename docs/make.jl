@@ -2,7 +2,7 @@ using PointClouds
 using Documenter
 
 DocMeta.setdocmeta!(PointClouds, :DocTestSetup, :(using PointClouds); recursive=true)
-remote = Documenter.Remotes.GitHub("kylebeggs", "PointClouds.jl")
+remote = Documenter.Remotes.GitHub("JuliaMeshless", "PointClouds.jl")
 makedocs(;
     modules=[PointClouds],
     authors="Kyle Beggs",
@@ -11,7 +11,7 @@ makedocs(;
     remotes=nothing,
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://kylebeggs.github.io/PointClouds.jl",
+        canonical="https://JuliaMeshless.github.io/PointClouds.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -21,7 +21,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/kylebeggs/PointClouds.jl",
+    repo="github.com/JuliaMeshless/PointClouds.jl",
     devbranch="main",
     versions=["stable" => "v^", "dev" => "dev"],
 )

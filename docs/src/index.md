@@ -4,12 +4,12 @@ CurrentModule = PointClouds
 
 # PointClouds.jl
 
-[![Build Status](https://github.com/kylebeggs/PointClouds.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/kylebeggs/PointClouds.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://kylebeggs.github.io/PointClouds.jl/stable)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://kylebeggs.github.io/PointClouds.jl/dev)
-[![License File](https://img.shields.io/badge/license-MIT-blue)](https://github.com/kylebeggs/PointClouds.jl/blob/master/LICENSE)
+[![Build Status](https://github.com/JuliaMeshless/PointClouds.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/JuliaMeshless/PointClouds.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaMeshless.github.io/PointClouds.jl/stable)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaMeshless.github.io/PointClouds.jl/dev)
+[![License File](https://img.shields.io/badge/license-MIT-blue)](https://github.com/JuliaMeshless/PointClouds.jl/blob/master/LICENSE)
 
-Documentation for [PointClouds](https://github.com/kylebeggs/PointClouds.jl).
+Documentation for [PointClouds](https://github.com/JuliaMeshless/PointClouds.jl).
 
 This package intends to provide functions for all things regarding point clouds.
 
@@ -18,7 +18,7 @@ This package intends to provide functions for all things regarding point clouds.
 Simply install the latest stable release using Julia's package manager:
 
 ```julia
-] add https://github.com/kylebeggs/PointClouds.jl
+] add https://github.com/JuliaMeshless/PointClouds.jl
 ```
 
 ## Quick Start
