@@ -5,11 +5,11 @@ end
 SlakKosec() = SlakKosec(10)
 
 function discretize!(
-    cloud::PointCloud{𝔼{3},C}, spacing::AbstractSpacing, alg::SlakKosec; max_points=10_000
+    cloud::PointCloud{𝔼{3},C}, spacing::AbstractSpacing, alg::SlakKosec; max_points=1_000
 ) where {C}
-    seeds = Point.(to(boundary(cloud)))
-    tree = _kdtree(seeds)
-    new_points = Point{𝔼{3},T}[]
+    seeds = pointify(boundary(cloud))
+    search_method = KNearestSearch(seeds, 1)
+    new_points = Point{𝔼{3},C}[]
 
     i = 0
     while !isempty(seeds) && i < max_points
@@ -18,11 +18,11 @@ function discretize!(
         candidates = _get_candidates(p, r; n=alg.n)
         for c in candidates
             if isinside(c, cloud)
-                _, dist = nn(tree, c)
-                if dist > r
+                _, dist = searchdists(c, search_method)
+                if first(dist) > r
                     push!(seeds, c)
                     push!(new_points, c)
-                    tree = _kdtree(seeds)
+                    search_method = KNearestSearch(seeds, 1)
                     i += 1
                 end
             end
@@ -36,14 +36,16 @@ function discretize!(
     return new_points
 end
 
-function _get_candidates(p::Point{𝔼{3},C}, r::Real; n=10) where {C}
-    T = Meshes.lentype(C)
+function _get_candidates(p::Point{𝔼{3},C}, r; n=10) where {C}
+    T = CoordRefSystems.mactype(C)
+
     u = rand(T, n)
     v = rand(T, n)
 
-    ϕ = @. acos(2u - 1) - π / 2
+    one_T = one(T)
+    ϕ = @. acos(2u - one_T) - oftype(one_T, π / 2)
     λ = 2π * v
     coords = to(p)
     unit_points = @. Point(r * cos(λ) * cos(ϕ), r * sin(λ) * cos(ϕ), r * sin(ϕ))
-    return (coords,) .+ unit_points
+    return Ref(coords) .+ unit_points
 end
