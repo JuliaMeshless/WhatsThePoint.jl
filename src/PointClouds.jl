@@ -101,9 +101,9 @@ using PrecompileTools
 @setup_workload begin
     using Unitful: m
     @compile_workload begin
-        boundary = PointBoundary(joinpath(@__DIR__, "precompile_tools_dummy.stl"))
-        cloud = discretize(boundary, ConstantSpacing(1m); alg=VanDerSandeFornberg())
-        visualize(cloud; markersize=0.01)
+        #boundary = PointBoundary(joinpath(@__DIR__, "precompile_tools_dummy.stl"))
+        #cloud = discretize(boundary, ConstantSpacing(1m); alg=VanDerSandeFornberg())
+        #visualize(cloud; markersize=0.01)
     end
 end
 

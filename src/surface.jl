@@ -22,15 +22,21 @@ end
 This is a typical representation of a surface via points.
 """
 struct PointSurface{M<:Manifold,C<:CRS,N,A,S} <: AbstractSurface{M,C}
-    geoms::StructVector{SurfaceElement}
+    geoms::StructVector{SurfaceElement{M,C,N,A}}
     shadow::S
     function PointSurface(
-        points::AbstractVector{Point{M,C}}, normals::N, areas::A; shadow::S=nothing
-    ) where {M<:Manifold,C<:CRS,N,A,S}
-        @assert length(points) == length(normals) == length(areas) "All inputs must be same length. Got $(length(points)), $(length(normals)), $(length(areas))."
-        geoms = StructArray{SurfaceElement}((points, normals, areas))
+        geoms::StructVector{SurfaceElement{M,C,N,A}}, shadow::S
+    ) where {M,C,N,A,S}
         return new{M,C,N,A,S}(geoms, shadow)
     end
+end
+
+function PointSurface(
+    points::AbstractVector{Point{M,C}}, normals::N, areas::A; shadow::S=nothing
+) where {M<:Manifold,C<:CRS,N,A,S}
+    @assert length(points) == length(normals) == length(areas) "All inputs must be same length. Got $(length(points)), $(length(normals)), $(length(areas))."
+    geoms = StructArray{SurfaceElement{M,C,N,A}}((points, normals, areas))
+    return PointSurface(geoms, shadow)
 end
 
 function PointSurface(points::Domain, normals, areas; shadow=nothing)

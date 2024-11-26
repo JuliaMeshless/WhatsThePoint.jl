@@ -14,46 +14,22 @@ function add_surface!(boundary::PointBoundary, points::Vector{<:Point}, name::Sy
     return nothing
 end
 
-# TODO - did i finsih this? test it
 function combine_surfaces!(boundary::PointBoundary, surfs...)
     for surf in surfs
         @assert hassurface(boundary, surf) "Surface does not exist. Check spelling."
     end
 
-    ids = [only(boundary[surf].points.indices) for surf in surfs]
-    combined_ids = 1:sum(length, ids)
-    separate_surfs = filter(surf -> surf ∉ surfs, PointClouds.names(boundary))
+    combined_surfaces = filter(surf -> surf ∈ surfs, PointClouds.names(boundary))
 
-    old_ids = []
-    new_ids = [combined_ids]
-    for surf in separate_surfs
-        push!(old_ids, only(boundary[surf].points.indices))
-        push!(new_ids, last(new_ids[end]) .+ (1:length(old_ids[end])))
+    # add new combined surface
+    new_geoms = mapreduce(vcat, combined_surfaces) do name
+        boundary[name].geoms
     end
-    deleteat!(new_ids, 1)
-    new_order = mapfoldl(collect, vcat, vcat(ids, old_ids))
-    permute!(boundary.points, new_order)
-
-    fold_field(field) = mapfoldl(surf -> getfield(boundary[surf], field), vcat, surfs)
-    combined_normals = fold_field(:normals)
-    combined_areas = fold_field(:areas)
-
     # delete old surface of new combined name
     for name in surfs
-        delete!(surfaces(boundary), name)
+        delete!(boundary, name)
     end
-    # add new combined surface
-    boundary[first(surfs)] = PointSurface(
-        boundary.points, combined_normals, combined_areas, combined_ids
-    )
-
-    # reconstruct boundaries which were not combined
-    for (ids, surf) in zip(new_ids, separate_surfs)
-        n = deepcopy(normals(boundary[surf]))
-        a = deepcopy(areas(boundary[surf]))
-        delete!(surfaces(boundary), surf)
-        boundary[surf] = PointSurface(boundary.points, n, a, ids)
-    end
+    boundary[first(surfs)] = PointSurface(new_geoms, nothing)
 
     return nothing
 end

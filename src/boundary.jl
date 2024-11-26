@@ -68,6 +68,8 @@ function Base.iterate(boundary::PointBoundary, state=1)
     return state > length(boundary) ? nothing : (boundary[state], state + 1)
 end
 
+Base.delete!(boundary::PointBoundary, name::Symbol) = delete!(boundary.surfaces, name)
+
 # pretty printing
 function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim,T}) where {Dim,T}
     println(io, "PointBoundary{$Dim, $T}")
