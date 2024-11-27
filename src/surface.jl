@@ -17,17 +17,18 @@ struct SurfaceElement{M,C,N,A} <: Geometry{M,C}
 end
 
 """
-    struct PointSurface{Dim,T,P,N,A} <: AbstractSurface{Dim,T}
+    struct PointSurface{M,C} <: AbstractSurface{M,C}
 
 This is a typical representation of a surface via points.
 """
-struct PointSurface{M<:Manifold,C<:CRS,N,A,S} <: AbstractSurface{M,C}
-    geoms::StructVector{SurfaceElement{M,C,N,A}}
+struct PointSurface{M<:Manifold,C<:CRS,S} <: AbstractSurface{M,C}
+    geoms::StructVector{SurfaceElement}
     shadow::S
-    function PointSurface(
-        geoms::StructVector{SurfaceElement{M,C,N,A}}, shadow::S
-    ) where {M,C,N,A,S}
-        return new{M,C,N,A,S}(geoms, shadow)
+    function PointSurface(geoms::StructVector{SurfaceElement}, shadow::S) where {S}
+        p = first(geoms.point)
+        M = manifold(p)
+        C = crs(p)
+        return new{M,C,S}(geoms, shadow)
     end
 end
 
@@ -35,7 +36,7 @@ function PointSurface(
     points::AbstractVector{Point{M,C}}, normals::N, areas::A; shadow::S=nothing
 ) where {M<:Manifold,C<:CRS,N,A,S}
     @assert length(points) == length(normals) == length(areas) "All inputs must be same length. Got $(length(points)), $(length(normals)), $(length(areas))."
-    geoms = StructArray{SurfaceElement{M,C,N,A}}((points, normals, areas))
+    geoms = StructArray{SurfaceElement}((points, normals, areas))
     return PointSurface(geoms, shadow)
 end
 

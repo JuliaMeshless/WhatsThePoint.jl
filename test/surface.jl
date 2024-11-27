@@ -9,6 +9,10 @@ areas = rand(10) * m^2
 shadow = ShadowPoints(2m)
 
 @testset "PointSurface Constructors" begin
+    # Test default constructor
+    geoms = StructArray{SurfaceElement}((points, normals, areas))
+    surf = PointSurface(geoms, nothing)
+
     # Test constructor with points, normals, and areas
     surf = PointSurface(points, normals, areas)
     @test length(surf) == 10
