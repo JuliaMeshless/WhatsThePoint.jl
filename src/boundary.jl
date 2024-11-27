@@ -43,7 +43,6 @@ boundingbox(boundary::PointBoundary) = boundingbox(boundary.points)
 
 boundary(boundary::PointBoundary) = boundary
 surfaces(boundary::PointBoundary) = values(boundary.surfaces)
-names(boundary::PointBoundary) = keys(boundary.surfaces)
 normals(boundary::PointBoundary) = mapreduce(normals, vcat, surfaces(boundary))
 areas(boundary::PointBoundary) = mapreduce(areas, vcat, surfaces(boundary))
 
@@ -52,6 +51,7 @@ hassurface(boundary::PointBoundary, name) = haskey(boundary.surfaces, name)
 Meshes.pointify(boundary::PointBoundary) = Meshes.pointify(boundary.points)
 Meshes.nelements(boundary::PointBoundary) = Meshes.nelements(boundary.points)
 
+Base.names(boundary::PointBoundary) = keys(boundary.surfaces)
 Base.size(boundary::PointBoundary) = (length(boundary),)
 Base.getindex(boundary::PointBoundary, name::Symbol) = boundary.surfaces[name]
 Base.getindex(boundary::PointBoundary, index::Int) = boundary.points[index]

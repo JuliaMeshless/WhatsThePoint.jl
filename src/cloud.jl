@@ -43,6 +43,7 @@ end
 function Base.iterate(cloud::PointCloud, state=1)
     return state > length(cloud) ? nothing : (cloud[state], state + 1)
 end
+Base.names(cloud::PointCloud) = names(boundary(cloud))
 
 to(cloud::PointCloud) = to.(pointify(cloud))
 function to(surfaces::Dict{Symbol,<:AbstractSurface})
@@ -51,7 +52,6 @@ end
 boundary(cloud::PointCloud) = cloud.boundary
 volume(cloud::PointCloud) = cloud.volume
 surfaces(cloud::PointCloud) = surfaces(boundary(cloud))
-names(cloud::PointCloud) = names(boundary(cloud))
 normals(cloud::PointCloud) = mapreduce(normals, vcat, surfaces(cloud))
 areas(cloud::PointCloud) = mapreduce(areas, vcat, surfaces(cloud))
 
