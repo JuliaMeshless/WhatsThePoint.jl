@@ -37,7 +37,7 @@ using Graphs, SimpleWeightedGraphs
 using Unitful
 
 import Meshes: Manifold, Domain
-import Meshes: to, centroid, boundingbox, discretize
+import Meshes: centroid, boundingbox, discretize, to
 import Meshes: elements, nelements, lentype, normal, area, pointify
 # re-export from Meshes.jl
 export Point, coords, isinside, centroid, boundingbox
