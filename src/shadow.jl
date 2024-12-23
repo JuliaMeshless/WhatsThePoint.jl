@@ -6,7 +6,7 @@ struct ShadowPoints{O,T}
 end
 
 function generate_shadows(points, normals, shadow::ShadowPoints)
-    return map((p, n) -> p - shadow.Δ(p) * n, points, normals)
+    return map((p, n) -> Point(p - shadow.Δ(p) * n), points, normals)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", s::ShadowPoints{O,T}) where {O,T}
