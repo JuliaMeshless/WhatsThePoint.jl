@@ -1,7 +1,7 @@
 ## Exported Functions
 
 ```@autodocs
-Modules = [PointClouds]
+Modules = [WhatsThePoint]
 Private = false
 Order   = [:type, :function]
 ```
@@ -9,7 +9,7 @@ Order   = [:type, :function]
 ## Private
 
 ```@autodocs
-Modules = [PointClouds]
+Modules = [WhatsThePoint]
 Public = false
 Order   = [:type, :function]
 ```

@@ -13,7 +13,7 @@ function import_surface(filepath::String)
     catch
         compute_normals(points)
     end
-    normals = map(x -> ustrip(x / norm(x)), n)
+    normals = map(x -> ustrip.(x / norm(x)), n)
     area = map(Meshes.area, elements(mesh))
     return points, normals, area, mesh
 end

@@ -1,17 +1,17 @@
-using PointClouds
+using WhatsThePoint
 using Documenter
 
-DocMeta.setdocmeta!(PointClouds, :DocTestSetup, :(using PointClouds); recursive=true)
-remote = Documenter.Remotes.GitHub("JuliaMeshless", "PointClouds.jl")
+DocMeta.setdocmeta!(WhatsThePoint, :DocTestSetup, :(using WhatsThePoint); recursive=true)
+remote = Documenter.Remotes.GitHub("JuliaMeshless", "WhatsThePoint.jl")
 makedocs(;
-    modules=[PointClouds],
+    modules=[WhatsThePoint],
     authors="Kyle Beggs",
-    sitename="PointClouds.jl",
+    sitename="WhatsThePoint.jl",
     repo=remote,
     remotes=nothing,
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://JuliaMeshless.github.io/PointClouds.jl",
+        canonical="https://JuliaMeshless.github.io/WhatsThePoint.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -21,7 +21,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/JuliaMeshless/PointClouds.jl",
+    repo="github.com/JuliaMeshless/WhatsThePoint.jl",
     devbranch="main",
     versions=["stable" => "v^", "dev" => "dev"],
 )

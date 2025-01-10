@@ -19,7 +19,7 @@ function combine_surfaces!(boundary::PointBoundary, surfs...)
         @assert hassurface(boundary, surf) "Surface does not exist. Check spelling."
     end
 
-    combined_surfaces = filter(surf -> surf ∈ surfs, PointClouds.names(boundary))
+    combined_surfaces = filter(surf -> surf ∈ surfs, WhatsThePoint.names(boundary))
 
     # add new combined surface
     new_geoms = mapreduce(vcat, combined_surfaces) do name

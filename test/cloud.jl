@@ -1,4 +1,4 @@
-using PointClouds
+using WhatsThePoint
 using Meshes
 using Random
 
@@ -8,7 +8,7 @@ N = 10
     b = PointBoundary(rand(Point, N))
     cloud = PointCloud(b)
     @test cloud.volume isa PointVolume
-    @test PointClouds.boundary(cloud)[:surface1] == b[:surface1]
+    @test WhatsThePoint.boundary(cloud)[:surface1] == b[:surface1]
 end
 
 @testset "PointCloud from file" begin

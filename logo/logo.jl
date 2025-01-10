@@ -1,12 +1,12 @@
-using PointClouds
+using WhatsThePoint
 using Unitful: m, ustrip
 using Luxor
 using Meshes
 
 function get_xy(cloud)
     points = pointify(cloud)
-    x = map(p -> ustrip(PointClouds.coords(p).x), points)
-    y = map(p -> ustrip(PointClouds.coords(p).y), points)
+    x = map(p -> ustrip(WhatsThePoint.coords(p).x), points)
+    y = map(p -> ustrip(WhatsThePoint.coords(p).y), points)
     return x, y
 end
 
@@ -17,7 +17,7 @@ function circle_nodes(origins)
     s = 3 * r / N
     spacing = ConstantSpacing(s * m)
 
-    points = PointClouds.Point.([(r * cos(i), r * sin(i)) for i in θ]) .+ (origins,)
+    points = WhatsThePoint.Point.([(r * cos(i), r * sin(i)) for i in θ]) .+ (origins,)
     boundary = PointBoundary(points)
     cloud = discretize(boundary, spacing; max_points=200)
 

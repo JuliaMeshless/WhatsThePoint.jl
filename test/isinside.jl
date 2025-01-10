@@ -1,4 +1,4 @@
-using PointClouds
+using WhatsThePoint
 using Meshes
 
 @testset "2D" begin

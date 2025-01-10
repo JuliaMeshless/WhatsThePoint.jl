@@ -1,4 +1,4 @@
-module PointClouds
+module WhatsThePoint
 
 using Meshes
 using CoordRefSystems

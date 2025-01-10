@@ -1,4 +1,4 @@
-using PointClouds
+using WhatsThePoint
 using Meshes
 using StaticArrays
 
@@ -15,8 +15,8 @@ using StaticArrays
     correct_normals = (e, ne, n, nw, w, sw, s, se)
     test_normals = [(n, -n) for n in correct_normals]
 
-    @test any((PointClouds._compute_normal(circle2D[2:4]),) .≈ (n, -n))
-    @test any((PointClouds._compute_normal(circle2D[1:3]),) .≈ (ne, -ne))
+    @test any((WhatsThePoint._compute_normal(circle2D[2:4]),) .≈ (n, -n))
+    @test any((WhatsThePoint._compute_normal(circle2D[1:3]),) .≈ (ne, -ne))
 
     k = 3
     search_method = KNearestSearch(circle2D, k)
@@ -30,7 +30,7 @@ end
 @testset "3D" begin
     tri3d = Point.([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
     n = ones(SVector{3}) * sqrt(3) / 3
-    computed_normal = PointClouds._compute_normal(tri3d)
+    computed_normal = WhatsThePoint._compute_normal(tri3d)
     @test any(Ref(computed_normal) .≈ (n, -n))
 
     # create sphere using fibonacci lattice
@@ -52,10 +52,10 @@ end
 
     # test if normals are within 5 deg of correct given it may be unoriented
     @test all([
-        any(PointClouds._angle.((computed_normals[i],), n) .< 10 * π / 180) for
+        any(WhatsThePoint._angle.((computed_normals[i],), n) .< 10 * π / 180) for
         (i, n) in enumerate(test_normals)
     ])
     orient_normals!(computed_normals, sphere3d; k=5)
     # test if normals are within 5 deg of correct after correcting orientation
-    @test all(PointClouds._angle.(computed_normals, correct_normals) .< 10 * π / 180)
+    @test all(WhatsThePoint._angle.(computed_normals, correct_normals) .< 10 * π / 180)
 end
