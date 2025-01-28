@@ -19,7 +19,7 @@ function import_surface(filepath::String)
 end
 
 function export_cloud(filename::String, cloud::PointCloud)
-    exportvtk(filename, to(boundary(cloud)), [normals(cloud)], ["normals"])
+    exportvtk(filename, to(boundary(cloud)), [normal(cloud)], ["normals"])
     return nothing
 end
 
@@ -97,4 +97,6 @@ function savevtk!(vtkfile)
     return vtk_save(vtkfile)
 end
 
-FileIO.save(filename::String, cloud::PointCloud) = save(filename, Dict("cloud" => cloud))
+function FileIO.save(filename::String, cloud::PointCloud)
+    return save(filename, LittleDict("cloud" => cloud))
+end

@@ -7,7 +7,7 @@ N = 10
 @testset "PointCloud with PointBoundary" begin
     points = rand(Point, N)
     b = PointBoundary(points)
-    @test all(b.points .== points)
+    @test all(pointify(b) .== points)
     @test point(b[:surface1]) == points
 end
 
@@ -32,8 +32,8 @@ end
     @testset "iterate" begin
         points = rand(Point, N)
         b = PointBoundary(points)
-        for (i, point) in enumerate(b)
-            @test point == points[i]
+        for (i, p) in enumerate(b)
+            @test p.point == points[i]
         end
     end
 end
