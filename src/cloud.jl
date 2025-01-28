@@ -28,11 +28,7 @@ function Base.getindex(cloud::PointCloud, index::Int)
             ),
         )
     end
-    if index <= length(b)
-        return b[index]
-    elseif index > length(b)
-        return v[index - length(b)]
-    end
+    return index <= length(b) ? b[index] : v[index - length(b)]
 end
 function Base.setindex!(cloud::PointCloud, surf::PointSurface, name::Symbol)
     hassurface(boundary(cloud), name) &&
@@ -46,14 +42,14 @@ end
 Base.names(cloud::PointCloud) = names(boundary(cloud))
 
 to(cloud::PointCloud) = to.(pointify(cloud))
-function to(surfaces::Dict{Symbol,<:AbstractSurface})
+function to(surfaces::LittleDict{Symbol,<:AbstractSurface})
     return mapreduce(to, vcat, values(surfaces))
 end
 boundary(cloud::PointCloud) = cloud.boundary
 volume(cloud::PointCloud) = cloud.volume
 surfaces(cloud::PointCloud) = surfaces(boundary(cloud))
-normals(cloud::PointCloud) = mapreduce(normals, vcat, surfaces(cloud))
-areas(cloud::PointCloud) = mapreduce(areas, vcat, surfaces(cloud))
+normal(cloud::PointCloud) = mapreduce(normals, vcat, surfaces(cloud))
+area(cloud::PointCloud) = mapreduce(areas, vcat, surfaces(cloud))
 
 hassurface(cloud::PointCloud, name) = hassurface(boundary(cloud), name)
 
@@ -62,6 +58,9 @@ function Meshes.pointify(cloud::PointCloud)
 end
 function Meshes.nelements(cloud::PointCloud)
     return Meshes.nelements(boundary(cloud)) + Meshes.nelements(volume(cloud))
+end
+function Meshes.boundingbox(cloud::PointCloud)
+    return Meshes.boundingbox(PointSet(pointify(cloud)))
 end
 
 function generate_shadows(cloud::PointCloud, shadow::ShadowPoints)

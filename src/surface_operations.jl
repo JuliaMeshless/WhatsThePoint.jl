@@ -7,10 +7,9 @@ surface is given and it is added to that.
 """
 function add_surface!(boundary::PointBoundary, points::Vector{<:Point}, name::Symbol)
     haskey(surfaces(boundary), name) && throw(ArgumentError("surface name already exists."))
-    N_add = length(points)
-    append!(boundary.points, points)
-    N = length(boundary.points)
-    surfaces(boundary)[name] = PointSurface(boundary.points, (N - N_add + 1):N)
+    normals = compute_normals(points)
+    areas = zeros(length(points)) * Unitful.m^2
+    surfaces(boundary)[name] = PointBoundary(points, normals, areas)
     return nothing
 end
 
@@ -75,7 +74,7 @@ function split_surface!(
 
     for (i, ids) in enumerate(ranges)
         name = _generate_surface_name(cloud, i)
-        cloud[name] = PointSurface(view(cloud, ids), normals[ids], areas[ids])
+        cloud[name] = PointSurface(points[ids], normals[ids], areas[ids])
     end
 
     return cloud

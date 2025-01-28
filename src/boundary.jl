@@ -4,12 +4,11 @@
 A boundary of points.
 """
 struct PointBoundary{M<:Manifold,C<:CRS} <: Domain{M,C}
-    points::Domain{M,C}
-    surfaces::Dict{Symbol,AbstractSurface{M,C}}
+    surfaces::LittleDict{Symbol,AbstractSurface{M,C}}
     function PointBoundary(
-        points::Domain{M,C}, surfaces::Dict{Symbol,AbstractSurface{M,C}}
+        surfaces::LittleDict{Symbol,AbstractSurface{M,C}}
     ) where {M<:Manifold,C<:CRS}
-        return new{M,C}(points, surfaces)
+        return new{M,C}(surfaces)
     end
 end
 
@@ -17,8 +16,8 @@ function PointBoundary(points, normals, areas)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
-    surfaces = Dict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
-    return PointBoundary(PointSet(points), surfaces)
+    surfaces = LittleDict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
+    return PointBoundary(surfaces)
 end
 
 function PointBoundary(points)
@@ -28,41 +27,52 @@ function PointBoundary(points)
 end
 
 function PointBoundary(filepath::String)
+    println("Importing surface from $filepath")
     points, normals, areas, _ = import_surface(filepath)
     surf = PointSurface(points, normals, areas)
-    pointset = PointSet(points)
-    M = manifold(pointset)
-    C = crs(pointset)
-    surfaces = Dict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
-    return PointBoundary(pointset, surfaces)
+    M = manifold(surf)
+    C = crs(surf)
+    surfaces = LittleDict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
+    return PointBoundary(surfaces)
 end
 
-to(boundary::PointBoundary) = to.(boundary.points)
-centroid(boundary::PointBoundary) = centroid(PointSet(boundary.points))
-boundingbox(boundary::PointBoundary) = boundingbox(boundary.points)
+to(boundary::PointBoundary) = to.(Meshes.pointify(boundary))
+centroid(boundary::PointBoundary) = centroid(PointSet(Meshes.pointify(boundary)))
+boundingbox(boundary::PointBoundary) = boundingbox(Meshes.pointify(boundary))
 
 boundary(boundary::PointBoundary) = boundary
 surfaces(boundary::PointBoundary) = values(boundary.surfaces)
-normals(boundary::PointBoundary) = mapreduce(normals, vcat, surfaces(boundary))
-areas(boundary::PointBoundary) = mapreduce(areas, vcat, surfaces(boundary))
+normal(boundary::PointBoundary) = mapreduce(normal, vcat, surfaces(boundary))
+area(boundary::PointBoundary) = mapreduce(area, vcat, surfaces(boundary))
 
 hassurface(boundary::PointBoundary, name) = haskey(boundary.surfaces, name)
 
-Meshes.pointify(boundary::PointBoundary) = Meshes.pointify(boundary.points)
-Meshes.nelements(boundary::PointBoundary) = Meshes.nelements(boundary.points)
+Meshes.pointify(boundary::PointBoundary) = mapreduce(pointify, vcat, surfaces(boundary))
+Meshes.nelements(boundary::PointBoundary) = length(boundary)
 
+Base.length(boundary::PointBoundary) = sum(length, surfaces(boundary))
 Base.names(boundary::PointBoundary) = keys(boundary.surfaces)
 Base.size(boundary::PointBoundary) = (length(boundary),)
 Base.getindex(boundary::PointBoundary, name::Symbol) = boundary.surfaces[name]
-Base.getindex(boundary::PointBoundary, index::Int) = boundary.points[index]
+function Base.getindex(boundary::PointBoundary, index::Int)
+    if index > length(boundary)
+        throw(
+            BoundsError(
+                "attempt to access PointBoundary at index [$index], but there are only $(length(boundary)) points.",
+            ),
+        )
+    end
+    offset = 0
+    for surf in surfaces(boundary)
+        index <= (length(surf) + offset) && return surf[index - offset]
+        offset += length(surf)
+    end
+end
 function Base.setindex!(boundary::PointBoundary, surf::PointSurface, name::Symbol)
     hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))
     boundary.surfaces[name] = surf
     return nothing
 end
-
-Base.view(boundary::PointBoundary, range::UnitRange) = view(boundary.points, range)
-Base.view(boundary::PointBoundary, range::StepRange) = view(boundary.points, range)
 
 function Base.iterate(boundary::PointBoundary, state=1)
     return state > length(boundary) ? nothing : (boundary[state], state + 1)
@@ -73,7 +83,7 @@ Base.delete!(boundary::PointBoundary, name::Symbol) = delete!(boundary.surfaces,
 # pretty printing
 function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim,T}) where {Dim,T}
     println(io, "PointBoundary{$Dim, $T}")
-    println(io, "├─$(length(boundary.points)) points")
+    println(io, "├─$(length(boundary)) points")
     if !isnothing(surfaces(boundary))
         println(io, "└─Surfaces")
         N = length(surfaces(boundary))

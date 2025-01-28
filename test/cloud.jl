@@ -40,8 +40,8 @@ end
         points = rand(Point, N)
         b = PointBoundary(points)
         cloud = PointCloud(b)
-        for (i, point) in enumerate(cloud)
-            @test point == points[i]
+        for (i, p) in enumerate(cloud)
+            @test p.point == points[i]
         end
     end
 end

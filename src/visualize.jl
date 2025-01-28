@@ -206,7 +206,7 @@ function visualize(
     kwargs...,
 )
     return visualize(
-        to(cloud),
+        pointify(cloud),
         labels;
         size=size,
         colorrange=colorrange,
@@ -256,7 +256,7 @@ function visualize(
 end
 
 function _visualize2d(
-    coords::AbstractVector,
+    points::AbstractVector,
     labels=nothing;
     size=(1000, 1000),
     colorrange=_get_colorrange(labels),
@@ -295,9 +295,10 @@ function _visualize3d(
     azimuth=1.275π,
     elevation=π / 8,
     levels=32,
-    colormap=cmap,
+    colormap=:Spectral,
     kwargs...,
 )
+    println("here")
     fig = Figure(; size=size)
     ax = Axis3(fig[1, 1]; azimuth=azimuth, elevation=elevation)
     ax.aspect = :data

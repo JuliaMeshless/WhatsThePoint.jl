@@ -38,3 +38,4 @@ function _angle(u::SVector{2}, v::SVector{2}) # preserve sign
 end
 
 _angle(u::SVector{3}, v::SVector{3}) = atan(norm(u × v), u ⋅ v) * u"rad" # discard sign
+_angle(u::Vec, v::Vec) = ∠(u, v)

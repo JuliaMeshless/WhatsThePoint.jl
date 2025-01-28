@@ -12,6 +12,7 @@ using LoopVectorization
 using ThreadsX
 using ChunkSplitters
 using OhMyThreads: tmap, tmap!, tmapreduce
+using OrderedCollections: LittleDict
 using Accessors
 using Statistics
 using Random
