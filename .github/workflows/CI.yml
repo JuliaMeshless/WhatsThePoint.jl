@@ -81,6 +81,6 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using RadialBasisFunctions
-            DocMeta.setdocmeta!(RadialBasisFunctions, :DocTestSetup, :(using RadialBasisFunctions); recursive=true)
-            doctest(RadialBasisFunctions)'
+            using WhatsThePoint
+            DocMeta.setdocmeta!(WhatsThePoint, :DocTestSetup, :(using WhatsThePoint); recursive=true)
+            doctest(WhatsThePoint)'
