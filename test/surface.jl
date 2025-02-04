@@ -1,7 +1,7 @@
 using WhatsThePoint
 using Meshes
 using StructArrays
-using Unitful: m
+using Unitful: m, °
 
 points = rand(Point, 10)
 normals = [rand(3) .* m for _ in 1:10]
@@ -75,6 +75,6 @@ end
 
 @testset "Surface Operations" begin
     boundary = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
-    split_surface!(boundary, 80)
+    split_surface!(boundary, 80°)
     @test length(surfaces(boundary)) == 4
 end
