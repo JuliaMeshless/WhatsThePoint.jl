@@ -33,24 +33,23 @@ function combine_surfaces!(boundary::PointBoundary, surfs...)
     return nothing
 end
 
-function split_surface!(cloud::Union{PointCloud,PointBoundary}, angle::Real; k::Int=5)
+function split_surface!(cloud::Union{PointCloud,PointBoundary}, angle::Angle; k::Int=10)
     @assert length(surfaces(cloud)) == 1 "More than 1 surface in this cloud. Please specify a target surface."
     target_surf = only(names(boundary(cloud)))
     return split_surface!(cloud, target_surf, angle; k=k)
 end
 
 function split_surface!(
-    cloud::Union{PointCloud,PointBoundary}, target_surf::Symbol, angle::Real; k::Int=5
+    cloud::Union{PointCloud,PointBoundary}, target_surf::Symbol, angle::Angle; k::Int=10
 )
     @assert hassurface(cloud, target_surf) "Target surface not found in cloud."
-    angle = deg2rad(angle) # convert to radians
     surf = cloud[target_surf]
     delete!(boundary(cloud).surfaces, target_surf)
     return split_surface!(cloud, surf, angle; k=k)
 end
 
 function split_surface!(
-    cloud::Union{PointCloud,PointBoundary}, surf::PointSurface, angle::Real; k::Int=5
+    cloud::Union{PointCloud,PointBoundary}, surf::PointSurface, angle::Angle; k::Int=10
 )
     points = point(surf)
     normals = normal(surf)
@@ -59,10 +58,11 @@ function split_surface!(
     neighbors = search(surf, KNearestSearch(surf, k))
 
     g = SimpleGraph(length(surf))
-    for n in neighbors, v in n[2:end]
+    for n in neighbors
         i = first(n)
-        abs(_angle(parent(surf).normal[i], parent(surf).normal[v])) < angle &&
-            add_edge!(g, i, v)
+        for v in n[2:end]
+            abs(_angle(normals[i], normals[v])) < angle && add_edge!(g, i, v)
+        end
     end
 
     connec = connected_components(g)
