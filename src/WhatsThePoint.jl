@@ -7,7 +7,6 @@ using SparseArrays
 using StaticArrays
 using StructArrays
 using NearestNeighbors
-using Distances
 using LoopVectorization
 using ThreadsX
 using ChunkSplitters
