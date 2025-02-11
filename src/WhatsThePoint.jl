@@ -7,13 +7,10 @@ using SparseArrays
 using StaticArrays
 using StructArrays
 using NearestNeighbors
-using Distances
-using LoopVectorization
 using ThreadsX
 using ChunkSplitters
 using OhMyThreads: tmap, tmap!, tmapreduce
 using OrderedCollections: LittleDict
-using Accessors
 using Statistics
 using Random
 using FileIO
@@ -44,6 +41,7 @@ export Point, coords, isinside, centroid, boundingbox, pointify
 export KNearestSearch, BallSearch, search, searchdists
 
 const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+const Angle{T} = Union{Quantity{T,NoDims,typeof(u"rad")},Quantity{T,NoDims,typeof(u"°")}}
 
 include("utils.jl")
 export metrics
@@ -99,10 +97,10 @@ include("visualize.jl")
 using PrecompileTools
 
 @setup_workload begin
-    using Unitful: m
+    using Unitful: m, °
     @compile_workload begin
         b = PointBoundary(joinpath(@__DIR__, "precompile_tools_dummy.stl"))
-        split_surface!(b, 75)
+        split_surface!(b, 75°)
         cloud = discretize(b, ConstantSpacing(1m); alg=VanDerSandeFornberg())
         visualize(cloud; markersize=0.01)
     end

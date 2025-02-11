@@ -52,7 +52,7 @@ function discretize!(
         c = coords(p)
         points[dotnr] = Point(c.x, c.y, heights[current_id])
     end
-    points = vfilter(x -> isinside(x, cloud), points[1:dotnr])
+    points = filter(x -> isinside(x, cloud), points[1:dotnr])
     ProgressMeter.finish!(prog)
 
     cloud.volume = PointVolume(points)
