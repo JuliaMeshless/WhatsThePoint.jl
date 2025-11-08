@@ -10,6 +10,7 @@ end
 
 @testset "3D" begin
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
+    display(boundingbox(boundary))
     @test isinside(Point(0.5, 0.5, 0.5), boundary)
     @test !isinside(Point(0.5, 0.5, -0.5), boundary)
     @test !isinside(Point(0.5, 0.5, -0.001), boundary)
