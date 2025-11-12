@@ -61,12 +61,6 @@ jobs:
           flag-name: run-${{ join(matrix.*, '-') }}
           parallel: true
           path-to-lcov: ./lcov.info
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
 
   docs:
     name: Documentation
