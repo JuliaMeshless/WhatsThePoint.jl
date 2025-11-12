@@ -22,7 +22,10 @@ function circle_nodes(origins)
     cloud = discretize(boundary, spacing; max_points=200)
 
     α = s / 10
-    repel!(cloud, spacing; α=α, β=0.2, k=12, max_iters=10_000, tol=1e-6)
+    for _ in 1:5
+        repel!(cloud, spacing; α=α, β=0.2, k=12, max_iters=10_000, tol=1e-6)
+        α /= 2
+    end
 
     return get_xy(cloud)
 end
