@@ -1,3 +1,5 @@
+using Pkg
+Pkg.activate(@__DIR__)
 using WhatsThePoint
 using Unitful: m, ustrip
 using Luxor
@@ -46,9 +48,12 @@ end
 begin
     s = 1000
     N = 3.8 * s
-    Drawing(N, N, joinpath(@__DIR__, "../docs/src/assets/logo.svg"))
-    origin()
-    draw_logo(colors, nodes, s, 0.06 * s)
-    finish()
-    preview()
+    for file_type in (:png, :svg)
+        @info "Generating logo.$(file_type)..."
+        Drawing(N, N, joinpath(@__DIR__, "../docs/src/assets/logo.$(file_type)"))
+        origin()
+        draw_logo(colors, nodes, s, 0.06 * s)
+        finish()
+        preview()
+    end
 end
