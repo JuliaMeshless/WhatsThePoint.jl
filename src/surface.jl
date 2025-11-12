@@ -77,7 +77,10 @@ Base.parent(surf::PointSurface) = surf.geoms
 Base.firstindex(::PointSurface) = 1
 Base.lastindex(surf::PointSurface) = length(surf)
 Base.getindex(surf::PointSurface, index::Int) = getindex(parent(surf), index)
-Base.iterate(surf::PointSurface, state=1) = iterate(parent(surf), state)
+function Base.iterate(surf::PointSurface, state=1)
+    state > length(surf) && return nothing
+    return (surf[state], state + 1)
+end
 
 Meshes.pointify(surf::PointSurface) = point(surf)
 Meshes.elements(surf::PointSurface) = (elem for elem in parent(surf))

@@ -62,7 +62,7 @@ end
     @test firstindex(surf) == 1
     @test lastindex(surf) == 10
     @test getindex(surf, 1) == surf.geoms[1]
-    @test iterate(surf, 1) == iterate(surf.geoms, 1)
+    @test collect(surf) == collect(surf.geoms)  # Test iteration works correctly
     @test view(surf, 1:5) == view(surf.geoms, 1:5)
     @test view(surf, 1:2:5) == view(surf.geoms, 1:2:5)
 end
