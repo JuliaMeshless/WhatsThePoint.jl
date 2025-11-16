@@ -48,8 +48,8 @@ end
 boundary(cloud::PointCloud) = cloud.boundary
 volume(cloud::PointCloud) = cloud.volume
 surfaces(cloud::PointCloud) = surfaces(boundary(cloud))
-normal(cloud::PointCloud) = mapreduce(normals, vcat, surfaces(cloud))
-area(cloud::PointCloud) = mapreduce(areas, vcat, surfaces(cloud))
+normal(cloud::PointCloud) = mapreduce(normal, vcat, values(surfaces(cloud)))
+area(cloud::PointCloud) = mapreduce(area, vcat, values(surfaces(cloud)))
 
 hassurface(cloud::PointCloud, name) = hassurface(boundary(cloud), name)
 
