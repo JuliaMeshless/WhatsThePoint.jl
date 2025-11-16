@@ -45,3 +45,11 @@ end
         end
     end
 end
+
+@testset "generate_shadows" begin
+    # Test that generate_shadows works without error (issue #50)
+    points = rand(Point, N)
+    cloud = PointCloud(PointBoundary(points))
+    shadow = ShadowPoints(0.1u"m")
+    @test_nowarn generate_shadows(cloud, shadow)
+end
