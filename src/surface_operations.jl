@@ -6,10 +6,10 @@ surface is given and it is added to that.
 
 """
 function add_surface!(boundary::PointBoundary, points::Vector{<:Point}, name::Symbol)
-    haskey(surfaces(boundary), name) && throw(ArgumentError("surface name already exists."))
+    hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))
     normals = compute_normals(points)
     areas = zeros(length(points)) * Unitful.m^2
-    surfaces(boundary)[name] = PointBoundary(points, normals, areas)
+    boundary[name] = PointSurface(points, normals, areas)
     return nothing
 end
 
