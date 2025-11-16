@@ -59,3 +59,10 @@ end
     # test if normals are within 5 deg of correct after correcting orientation
     @test all(WhatsThePoint._angle.(computed_normals, correct_normals) .< 10 * π / 180)
 end
+
+@testset "update_normals!" begin
+    # Test that update_normals! works without error (issue #47)
+    points = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
+    surf = PointSurface(points; k=3)
+    @test_nowarn update_normals!(surf; k=3)
+end

@@ -41,9 +41,9 @@ Update the normals of the boundary of a surf. This is necessary whenever the poi
 
 """
 function update_normals!(surf::PointSurface; k::Int=5)
-    k = k > length(points) ? length(points) : k
+    k = k > length(surf) ? length(surf) : k
     neighbors = search(surf, KNearestSearch(surf, k))
-    Threads.@threads for i in eachindex(normals)
+    Threads.@threads for i in eachindex(parent(surf).normal)
         parent(surf).normal[i] = _compute_normal(parent(surf).point[neighbors[i]])
     end
 end
