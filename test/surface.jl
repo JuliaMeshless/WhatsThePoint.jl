@@ -4,7 +4,7 @@ using StructArrays
 using Unitful: m, °
 
 points = rand(Point, 10)
-normals = [rand(3) .* m for _ in 1:10]
+normals = [Vec(rand(3)...) for _ in 1:10]
 areas = rand(10) * m^2
 shadow = ShadowPoints(2m)
 
@@ -17,6 +17,17 @@ shadow = ShadowPoints(2m)
     surf = PointSurface(points, normals, areas)
     @test length(surf) == 10
     @test surf.geoms isa StructVector
+
+    # Test constructor with Domain (PointSet)
+    pointset = PointSet(points)
+    surf = PointSurface(pointset, normals, areas)
+    @test length(surf) == 10
+    @test surf.geoms isa StructVector
+
+    # Test constructor with Domain and shadow
+    surf = PointSurface(pointset, normals, areas; shadow=shadow)
+    @test length(surf) == 10
+    @test surf.shadow == shadow
 
     # Test constructor with points and normals only
     surf = PointSurface(points, normals)
@@ -67,10 +78,39 @@ end
     @test view(surf, 1:2:5) == view(surf.geoms, 1:2:5)
 end
 
-@testset "Overloads" begin
+@testset "Meshes.jl Interface" begin
     surf = PointSurface(points, normals, areas)
+
+    # Test pointify
+    pts = Meshes.pointify(surf)
+    @test pts == point(surf)
+    @test length(pts) == 10
+
+    # Test elements
     @test collect(Meshes.elements(surf)) == collect(surf.geoms)
+
+    # Test nelements
     @test Meshes.nelements(surf) == length(surf)
+
+    # Test centroid
+    c = Meshes.centroid(surf)
+    @test c isa Point
+
+    # Test boundingbox
+    bbox = Meshes.boundingbox(surf)
+    @test bbox isa Box
+end
+
+@testset "Shadow Generation" begin
+    # Create a proper surface with normals computed from geometry
+    # Using the bifurcation test file ensures normals are properly computed
+    surf_file = PointSurface(joinpath(@__DIR__, "data", "bifurcation.stl"))
+    shadow = ShadowPoints(2m)
+
+    # Test generate_shadows on surface
+    shadow_points = generate_shadows(surf_file, shadow)
+    @test length(shadow_points) == length(surf_file)
+    @test all(p -> p isa Point, shadow_points)
 end
 
 @testset "Surface Operations" begin

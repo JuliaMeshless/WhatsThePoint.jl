@@ -2,6 +2,7 @@ using WhatsThePoint
 using Meshes
 using Random
 using Unitful
+using OrderedCollections: LittleDict
 
 N = 10
 
@@ -100,4 +101,103 @@ end
     @test_nowarn area(cloud)
     @test length(normal(cloud)) == N
     @test length(area(cloud)) == N
+end
+
+@testset "to functions" begin
+    # Test to(cloud::PointCloud)
+    points = rand(Point, N)
+    cloud = PointCloud(PointBoundary(points))
+    coords = to(cloud)
+    @test coords isa Vector
+    @test length(coords) == N
+    @test all(c -> c isa Vector, coords)
+
+    # Test to(surfaces::LittleDict)
+    surf1 = PointSurface(rand(Point, 5))
+    surf2 = PointSurface(rand(Point, 7))
+    surfaces_dict = LittleDict(:surf1 => surf1, :surf2 => surf2)
+    coords_from_dict = to(surfaces_dict)
+    @test coords_from_dict isa Vector
+    @test length(coords_from_dict) == 12  # 5 + 7
+end
+
+@testset "accessor functions" begin
+    # Test boundary(cloud), volume(cloud), surfaces(cloud)
+    points = rand(Point, N)
+    b = PointBoundary(points)
+    cloud = PointCloud(b)
+
+    @test boundary(cloud) isa PointBoundary
+    @test boundary(cloud) === cloud.boundary
+
+    @test volume(cloud) isa PointVolume
+    @test volume(cloud) === cloud.volume
+
+    @test surfaces(cloud) isa LittleDict
+    @test :surface1 in keys(surfaces(cloud))
+end
+
+@testset "hassurface function" begin
+    points = rand(Point, N)
+    b = PointBoundary(points)
+    cloud = PointCloud(b)
+
+    # Test with existing surface
+    @test hassurface(cloud, :surface1) == true
+
+    # Test with non-existing surface
+    @test hassurface(cloud, :nonexistent) == false
+
+    # Add a new surface and test
+    cloud[:newsurface] = PointSurface(rand(Point, 5))
+    @test hassurface(cloud, :newsurface) == true
+end
+
+@testset "Meshes interface functions" begin
+    points = rand(Point, N)
+    cloud = PointCloud(PointBoundary(points))
+
+    # Test Meshes.pointify
+    pts = Meshes.pointify(cloud)
+    @test pts isa Vector{<:Point}
+    @test length(pts) == N
+
+    # Test Meshes.nelements
+    n_elems = Meshes.nelements(cloud)
+    @test n_elems isa Int
+    @test n_elems == N
+
+    # Test Meshes.boundingbox
+    bbox = Meshes.boundingbox(cloud)
+    @test bbox isa Box
+
+    # Test with cloud that has volume points
+    # Add some volume points by creating a new PointVolume
+    vol_points = rand(Point, 5)
+    cloud_with_vol = PointCloud(PointBoundary(points))
+    # Manually add volume points for testing
+    cloud_with_vol.volume = PointVolume(vol_points)
+
+    pts_total = Meshes.pointify(cloud_with_vol)
+    @test length(pts_total) == N + 5
+
+    n_elems_total = Meshes.nelements(cloud_with_vol)
+    @test n_elems_total == N + 5
+
+    bbox_total = Meshes.boundingbox(cloud_with_vol)
+    @test bbox_total isa Box
+end
+
+@testset "names function" begin
+    points = rand(Point, N)
+    cloud = PointCloud(PointBoundary(points))
+
+    @test names(cloud) == [:surface1]
+
+    # Add another surface
+    cloud[:surface2] = PointSurface(rand(Point, 3))
+    surface_names = names(cloud)
+    @test :surface1 in surface_names
+    @test :surface2 in surface_names
+    @test length(surface_names) == 2
 end
