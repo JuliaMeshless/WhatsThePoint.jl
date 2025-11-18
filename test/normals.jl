@@ -1,6 +1,7 @@
 using WhatsThePoint
 using Meshes
 using StaticArrays
+using LinearAlgebra
 
 @testset "2D" begin
     circle2D = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
@@ -58,4 +59,33 @@ end
     orient_normals!(computed_normals, sphere3d; k=5)
     # test if normals are within 5 deg of correct after correcting orientation
     @test all(WhatsThePoint._angle.(computed_normals, correct_normals) .< 10 * π / 180)
+end
+
+@testset "update_normals!" begin
+    # Test that update_normals! correctly recomputes normals (issue #47)
+    # Use the same 2D circle from the 2D test
+    circle2D = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
+
+    # Create surface with computed normals
+    k = 3
+    surf = PointSurface(circle2D; k=k)
+
+    # Save the correctly computed normals
+    original_normals = copy(normal(surf))
+
+    # Randomize the normals
+    normals_ref = normal(surf)
+    for i in eachindex(normals_ref)
+        normals_ref[i] = normalize(randn(SVector{2,Float64}))
+    end
+
+    # Verify normals were actually randomized
+    @test !(normal(surf) ≈ original_normals)
+
+    # Call update_normals! to recompute them
+    update_normals!(surf; k=k)
+    orient_normals!(surf)
+
+    # Test that the recomputed normals match the original
+    @test normal(surf) ≈ original_normals
 end

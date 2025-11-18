@@ -28,9 +28,7 @@ end
 
 function compute_normals(search_method::KNearestSearch, points::AbstractVector{<:Point})
     neighbors = search.(points, Ref(search_method))
-    normals = tmap(neighbors) do neighborhood
-        _compute_normal(points[neighborhood])
-    end
+    normals = tmap(n -> _compute_normal(points[n]), neighbors)
     return normals
 end
 
@@ -41,11 +39,11 @@ Update the normals of the boundary of a surf. This is necessary whenever the poi
 
 """
 function update_normals!(surf::PointSurface; k::Int=5)
-    k = k > length(points) ? length(points) : k
+    k = k > length(surf) ? length(surf) : k
     neighbors = search(surf, KNearestSearch(surf, k))
-    Threads.@threads for i in eachindex(normals)
-        parent(surf).normal[i] = _compute_normal(parent(surf).point[neighbors[i]])
-    end
+    normals = normal(surf)
+    points = point(surf)
+    return tmap!(n -> _compute_normal(points[n]), normals, neighbors)
 end
 
 function _compute_normal(points::AbstractVector{<:Point})
