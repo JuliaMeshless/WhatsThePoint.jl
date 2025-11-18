@@ -43,7 +43,7 @@ function update_normals!(surf::PointSurface; k::Int=5)
     neighbors = search(surf, KNearestSearch(surf, k))
     normals = normal(surf)
     points = point(surf)
-    return OhMyThreads.tmap!(n -> _compute_normal(points[n]), normals, neighbors)
+    return tmap!(n -> _compute_normal(points[n]), normals, neighbors)
 end
 
 function _compute_normal(points::AbstractVector{<:Point})

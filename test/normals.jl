@@ -1,6 +1,7 @@
 using WhatsThePoint
 using Meshes
 using StaticArrays
+using LinearAlgebra
 
 @testset "2D" begin
     circle2D = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
@@ -75,7 +76,7 @@ end
     # Randomize the normals
     normals_ref = normal(surf)
     for i in eachindex(normals_ref)
-        normals_ref[i] = normalize(randn(SVector{2, Float64}))
+        normals_ref[i] = normalize(randn(SVector{2,Float64}))
     end
 
     # Verify normals were actually randomized
