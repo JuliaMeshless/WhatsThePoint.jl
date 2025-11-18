@@ -84,6 +84,7 @@ end
 
     # Call update_normals! to recompute them
     update_normals!(surf; k=k)
+    orient_normals!(surf)
 
     # Test that the recomputed normals match the original
     @test normal(surf) ≈ original_normals
