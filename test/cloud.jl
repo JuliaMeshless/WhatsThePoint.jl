@@ -45,3 +45,13 @@ end
         end
     end
 end
+
+@testset "normal and area functions" begin
+    # Test that normal(cloud) and area(cloud) work correctly (issue #49)
+    points = rand(Point, N)
+    cloud = PointCloud(PointBoundary(points))
+    @test_nowarn normal(cloud)
+    @test_nowarn area(cloud)
+    @test length(normal(cloud)) == N
+    @test length(area(cloud)) == N
+end
