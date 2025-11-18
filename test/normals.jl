@@ -61,8 +61,29 @@ end
 end
 
 @testset "update_normals!" begin
-    # Test that update_normals! works without error (issue #47)
-    points = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
-    surf = PointSurface(points; k=3)
-    @test_nowarn update_normals!(surf; k=3)
+    # Test that update_normals! correctly recomputes normals (issue #47)
+    # Use the same 2D circle from the 2D test
+    circle2D = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
+
+    # Create surface with computed normals
+    k = 3
+    surf = PointSurface(circle2D; k=k)
+
+    # Save the correctly computed normals
+    original_normals = copy(normal(surf))
+
+    # Randomize the normals
+    normals_ref = normal(surf)
+    for i in eachindex(normals_ref)
+        normals_ref[i] = normalize(randn(SVector{2, Float64}))
+    end
+
+    # Verify normals were actually randomized
+    @test !(normal(surf) ≈ original_normals)
+
+    # Call update_normals! to recompute them
+    update_normals!(surf; k=k)
+
+    # Test that the recomputed normals match the original
+    @test normal(surf) ≈ original_normals
 end
