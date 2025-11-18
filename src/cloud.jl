@@ -64,7 +64,7 @@ function Meshes.boundingbox(cloud::PointCloud)
 end
 
 function generate_shadows(cloud::PointCloud, shadow::ShadowPoints)
-    return mapreduce(s -> generate_shadows(s, shadow), vcat, values(surfaces(cloud)))
+    return mapreduce(s -> generate_shadows(s, shadow), vcat, surfaces(cloud))
 end
 
 # pretty printing
