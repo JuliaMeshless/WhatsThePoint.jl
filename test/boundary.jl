@@ -37,3 +37,18 @@ end
         end
     end
 end
+
+@testset "add_surface!" begin
+    # Test that add_surface! works correctly (issue #48)
+    points1 = rand(Point, N)
+    b = PointBoundary(points1)
+
+    # Add a new surface with a different name - should succeed
+    points2 = rand(Point, N)
+    @test_nowarn add_surface!(b, points2, :newsurface)
+    @test hassurface(b, :newsurface)
+    @test point(b[:newsurface]) == points2
+
+    # Try to add a surface with existing name - should throw error
+    @test_throws ArgumentError add_surface!(b, points2, :newsurface)
+end
