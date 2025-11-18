@@ -59,12 +59,3 @@ end
     # test if normals are within 5 deg of correct after correcting orientation
     @test all(WhatsThePoint._angle.(computed_normals, correct_normals) .< 10 * π / 180)
 end
-
-@testset "map_edges" begin
-    # Test that map_edges works with PointSurface (issue #51)
-    points = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
-    surf = PointSurface(points; k=3)
-    @test_nowarn WhatsThePoint.map_edges(surf; k=3)
-    edges = WhatsThePoint.map_edges(surf; k=3)
-    @test length(edges) == length(points)
-end

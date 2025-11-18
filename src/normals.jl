@@ -15,7 +15,7 @@ function compute_normals(points::AbstractVector{<:Point}; k::Int=5)
     return compute_normals(search_method, points)
 end
 
-# TODO do not include points near edge. use map_edges() function to find edge points.
+# TODO do not include points near edge.
 """
     compute_normals(search_method::KNearestSearch, surf::PointSurface)
 
@@ -134,21 +134,4 @@ function build_normal_weighted_graph(normals::AbstractVector{<:AbstractVector}, 
         add_edge!(g, n[1], v, weight)
     end
     return g
-end
-
-function map_edge(points)
-    v = ustrip.(to.(points))
-    λ, _ = eigen(Symmetric(cov(v)))
-    return λ[1] / sum(λ)
-end
-
-function map_edges(points::Domain; k::Int=5)
-    k = k > length(points) ? length(points) : k
-    # find neighbors of each point
-    neighbors = search(points, KNearestSearch(points, k))
-    pts = pointify(points)
-    edges = tmap(neighbors) do neighborhood
-        map_edge(pts[neighborhood])
-    end
-    return edges
 end
