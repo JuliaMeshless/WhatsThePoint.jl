@@ -201,3 +201,37 @@ end
     @test :surface2 in surface_names
     @test length(surface_names) == 2
 end
+
+@testset "Pretty Printing" begin
+    # Test boundary-only cloud
+    points = rand(Point, N)
+    cloud = PointCloud(PointBoundary(points))
+    io = IOBuffer()
+    show(io, MIME("text/plain"), cloud)
+    output = String(take!(io))
+    @test contains(output, "PointCloud")
+    @test contains(output, "$(N) points")
+    @test contains(output, "Boundary: $(N) points")
+    @test contains(output, "surface1")
+
+    # Test cloud with volume points
+    vol_points = rand(Point, 5)
+    cloud_with_vol = PointCloud(PointBoundary(points))
+    cloud_with_vol.volume = PointVolume(vol_points)
+    io = IOBuffer()
+    show(io, MIME("text/plain"), cloud_with_vol)
+    output = String(take!(io))
+    @test contains(output, "PointCloud")
+    @test contains(output, "$(N + 5) points")
+    @test contains(output, "Boundary: $(N) points")
+    @test contains(output, "Volume: 5 points")
+
+    # Test cloud with multiple surfaces
+    cloud_multi = PointCloud(PointBoundary(points))
+    cloud_multi[:surface2] = PointSurface(rand(Point, N))
+    io = IOBuffer()
+    show(io, MIME("text/plain"), cloud_multi)
+    output = String(take!(io))
+    @test contains(output, "surface1")
+    @test contains(output, "surface2")
+end

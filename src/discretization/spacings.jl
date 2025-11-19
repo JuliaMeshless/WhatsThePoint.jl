@@ -1,6 +1,10 @@
 abstract type AbstractSpacing end
 abstract type VariableSpacing <: AbstractSpacing end
 
+# Helper function for computing Euclidean distance between points
+# Used by variable spacing implementations
+distance(p1::Union{Point,Vec}, p2::Union{Point,Vec}) = evaluate(Euclidean(), p1, p2)
+
 """
     ConstantSpacing{L<:Unitful.Length} <: AbstractSpacing
 
@@ -21,12 +25,12 @@ Node spacing based on a log-like function of the distance to nearest boundary ``
     parameter.
 """
 struct LogLike{B,G} <: VariableSpacing
-    surfaces
+    boundary
     base_size::B
     growth_rate::G
 end
 
-function LogLike(cloud::PointCloud, base_size::Real, growth_rate::Real)
+function LogLike(cloud::PointCloud, base_size, growth_rate)
     # TODO extract only points/surfaces used for growth rate
     return LogLike(pointify(cloud), base_size, growth_rate)
 end
@@ -34,7 +38,8 @@ end
 function (s::LogLike)(p::Union{Point,Vec})
     x, _ = findmin_turbo(distance.(p, s.boundary))
     inv_growth = 1 - (s.growth_rate - 1)
-    return s.base_size * x / (inv_growth + x)
+    a = s.base_size * inv_growth  # characteristic length scale with proper units
+    return s.base_size * x / (a + x)
 end
 
 """
@@ -44,7 +49,7 @@ Node spacing based on a power of the distance to nearest boundary ``x^{g}`` wher
     the distance to the nearest boundary and ``g`` is the growth_rate.
 """
 struct Power{B,G} <: VariableSpacing
-    surfaces
+    boundary
     base_size::B
     growth_rate::G
     function Power(cloud::PointCloud, surfaces, base_size::Real, growth_rate::Real)

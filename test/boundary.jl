@@ -205,3 +205,27 @@ end
     total_points = sum(length, surfs)
     @test total_points == N + N ÷ 2 + N * 2
 end
+
+@testset "Pretty Printing" begin
+    points = rand(Point, N)
+    b = PointBoundary(points)
+    io = IOBuffer()
+    show(io, MIME("text/plain"), b)
+    output = String(take!(io))
+    @test contains(output, "PointBoundary")
+    @test contains(output, "$(N) points")
+    @test contains(output, "Surfaces")
+    @test contains(output, "surface1")
+
+    # Test with multiple surfaces
+    points2 = rand(Point, N)
+    b[:surface2] = PointSurface(points2)
+    b[:mysurface] = PointSurface(rand(Point, N))
+    io = IOBuffer()
+    show(io, MIME("text/plain"), b)
+    output = String(take!(io))
+    @test contains(output, "$(3 * N) points")
+    @test contains(output, "surface1")
+    @test contains(output, "surface2")
+    @test contains(output, "mysurface")
+end

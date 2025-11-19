@@ -21,11 +21,21 @@ using Unitful: m
     end
 
     @testset "LogLike" begin
-        # Create a simple cloud for LogLike spacing
-        points = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
+        # Create a simple cloud for LogLike spacing with enough points for k-nearest neighbors
+        points =
+            Point.([
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (0.0, 0.0, 1.0),
+                (1.0, 1.0, 0.0),
+                (0.0, 1.0, 1.0),
+                (1.0, 0.0, 1.0),
+                (1.0, 1.0, 1.0),
+            ])
         cloud = PointCloud(PointBoundary(points))
 
-        base_size = 0.1
+        base_size = 0.1m
         growth_rate = 1.5
         s = LogLike(cloud, base_size, growth_rate)
 
@@ -35,8 +45,8 @@ using Unitful: m
         # Test calling operator on a point
         test_point = Point(0.5, 0.5, 0.5)
         spacing_value = s(test_point)
-        @test spacing_value > 0
-        @test spacing_value isa Float64
+        @test spacing_value > 0m
+        @test spacing_value isa typeof(base_size)
 
         # Point closer to boundary should have smaller spacing
         close_point = Point(0.01, 0.0, 0.0)
@@ -48,12 +58,13 @@ end
 @testset "calculate_ninit" begin
     @testset "3D ConstantSpacing" begin
         # Create simple 3D boundary
-        points = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
+        points =
+            Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
         cloud = PointCloud(PointBoundary(points))
         spacing = ConstantSpacing(0.1m)
 
         ninit = WhatsThePoint.calculate_ninit(cloud, spacing)
-        @test ninit isa Tuple{Int, Int}
+        @test ninit isa Tuple{Int,Int}
         @test ninit[1] > 0
         @test ninit[2] > 0
     end
@@ -72,12 +83,7 @@ end
 
 @testset "discretize with SlakKosec (3D)" begin
     # Create a small 3D tetrahedral boundary
-    points = Point.([
-        (0.0, 0.0, 0.0),
-        (1.0, 0.0, 0.0),
-        (0.5, 1.0, 0.0),
-        (0.5, 0.5, 1.0)
-    ])
+    points = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.5, 1.0, 0.0), (0.5, 0.5, 1.0)])
     boundary = PointBoundary(points)
     spacing = ConstantSpacing(0.5m)
 
@@ -97,13 +103,14 @@ end
 
 @testset "discretize with VanDerSandeFornberg (3D)" begin
     # Create a small 3D box boundary
-    points = Point.([
-        (0.0, 0.0, 0.0),
-        (1.0, 0.0, 0.0),
-        (1.0, 1.0, 0.0),
-        (0.0, 1.0, 0.0),
-        (0.5, 0.5, 1.0)
-    ])
+    points =
+        Point.([
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.5, 0.5, 1.0),
+        ])
     boundary = PointBoundary(points)
     spacing = ConstantSpacing(0.5m)
 
@@ -126,9 +133,9 @@ end
     spacing = ConstantSpacing(0.2m)
 
     # Test discretize - should automatically use FornbergFlyer for 2D
-    cloud = @test_logs (:warn, "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.") discretize(
-        boundary, spacing; alg=FornbergFlyer(), max_points=100
-    )
+    cloud = @test_logs (
+        :warn, "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
+    ) discretize(boundary, spacing; alg=FornbergFlyer(), max_points=100)
     @test cloud isa PointCloud
     @test length(volume(cloud)) <= 100
 
@@ -140,7 +147,8 @@ end
 
 @testset "discretize default algorithms" begin
     @testset "3D default (SlakKosec)" begin
-        points = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
+        points =
+            Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
         boundary = PointBoundary(points)
         spacing = ConstantSpacing(0.5m)
 
@@ -156,9 +164,10 @@ end
         spacing = ConstantSpacing(0.2m)
 
         # Should use FornbergFlyer by default for 2D and warn
-        cloud = @test_logs (:warn, "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.") discretize(
-            boundary, spacing; max_points=100
-        )
+        cloud = @test_logs (
+            :warn,
+            "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.",
+        ) discretize(boundary, spacing; max_points=100)
         @test cloud isa PointCloud
         @test length(volume(cloud)) <= 100
     end

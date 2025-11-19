@@ -118,3 +118,22 @@ end
     split_surface!(boundary, 80°)
     @test length(surfaces(boundary)) == 4
 end
+
+@testset "Pretty Printing" begin
+    surf = PointSurface(points, normals, areas)
+    io = IOBuffer()
+    show(io, MIME("text/plain"), surf)
+    output = String(take!(io))
+    @test contains(output, "PointSurface")
+    @test contains(output, "Number of points: 10")
+    @test contains(output, "Area:")
+    @test contains(output, "Shadow:")
+
+    # Test with shadow
+    surf_with_shadow = PointSurface(points, normals, areas; shadow=shadow)
+    io = IOBuffer()
+    show(io, MIME("text/plain"), surf_with_shadow)
+    output = String(take!(io))
+    @test contains(output, "Shadow:")
+    @test contains(output, "2")
+end
