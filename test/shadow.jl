@@ -3,7 +3,7 @@ using Meshes
 using Unitful
 using StaticArrays
 
-@testset "ShadowPoints Constructors" begin
+@testitem "ShadowPoints Constructors" begin
     # Test constant Δ constructor (converted to function when using single-arg constructor)
     shadow = ShadowPoints(0.1u"m")
     @test shadow isa ShadowPoints{1}
@@ -40,7 +40,7 @@ using StaticArrays
     @test shadow_func.Δ(test_point) == 0.5u"m"
 end
 
-@testset "ShadowPoints with Variable Δ Function" begin
+@testitem "ShadowPoints with Variable Δ Function" begin
     # Test position-dependent Δ function
     Δ_var = p -> begin
         coords = to(p)
@@ -57,7 +57,7 @@ end
     @test shadow.Δ(p2) ≈ 0.2u"m"
 end
 
-@testset "generate_shadows with Constant Δ" begin
+@testitem "generate_shadows with Constant Δ" begin
     # Create simple test points and normals in 2D
     points = [
         Point(1.0u"m", 0.0u"m"),
@@ -98,7 +98,7 @@ end
     end
 end
 
-@testset "generate_shadows with Function Δ" begin
+@testitem "generate_shadows with Function Δ" begin
     # Create test points
     points = [
         Point(2.0u"m", 0.0u"m"),
@@ -131,7 +131,7 @@ end
     @test sp2_coords[1] ≈ 3.6u"m" atol=1e-10u"m"
 end
 
-@testset "generate_shadows Different Orders" begin
+@testitem "generate_shadows Different Orders" begin
     # Test that different orders still generate shadows correctly
     points = [Point(1.0u"m", 1.0u"m")]
     normals = [SVector(1.0, 0.0) / sqrt(2.0)]
@@ -148,7 +148,7 @@ end
     end
 end
 
-@testset "generate_shadows 3D" begin
+@testitem "generate_shadows 3D" begin
     # Test with 3D points
     points = [
         Point(1.0u"m", 0.0u"m", 0.0u"m"),
@@ -178,7 +178,7 @@ end
     @test sp2_coords[3] ≈ 0.0u"m" atol=1e-10u"m"
 end
 
-@testset "ShadowPoints Display" begin
+@testitem "ShadowPoints Display" begin
     # Test show methods don't error
     shadow1 = ShadowPoints(0.1u"m", 1)
     @test_nowarn show(IOBuffer(), MIME"text/plain"(), shadow1)

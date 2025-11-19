@@ -5,7 +5,7 @@ using LinearAlgebra
 using Unitful
 using Unitful: m, °, @u_str
 
-@testset "import_surface" begin
+@testitem "import_surface" begin
     # Test importing from STL file
     filepath = joinpath(@__DIR__, "data", "box.stl")
     points, normals, areas, mesh = import_surface(filepath)
@@ -29,7 +29,7 @@ using Unitful: m, °, @u_str
     end
 end
 
-@testset "export_cloud" begin
+@testitem "export_cloud" begin
     # Create a simple point cloud
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     cloud = PointCloud(boundary)
@@ -44,7 +44,7 @@ end
     end
 end
 
-@testset "FileIO.save" begin
+@testitem "FileIO.save" begin
     # Create a simple point cloud
     points = rand(Point, 10)
     boundary = PointBoundary(points)
@@ -66,7 +66,7 @@ end
     end
 end
 
-@testset "Round-trip: import -> create -> export -> verify" begin
+@testitem "Round-trip: import -> create -> export -> verify" begin
     mktempdir() do tmpdir
         # Import surface from STL
         stl_path = joinpath(@__DIR__, "data", "box.stl")

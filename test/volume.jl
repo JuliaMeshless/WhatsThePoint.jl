@@ -5,7 +5,7 @@ using Unitful
 
 N = 10
 
-@testset "PointVolume Constructors" begin
+@testitem "PointVolume Constructors" begin
     @testset "Empty constructor" begin
         vol = PointVolume{🌐,Cartesian{NoDatum}}()
         @test vol isa PointVolume
@@ -30,7 +30,7 @@ N = 10
     end
 end
 
-@testset "Base Methods" begin
+@testitem "Base Methods" begin
     @testset "length and size" begin
         points = rand(Point, N)
         vol = PointVolume(points)
@@ -84,7 +84,7 @@ end
     end
 end
 
-@testset "Coordinate and Geometry Methods" begin
+@testitem "Coordinate and Geometry Methods" begin
     @testset "to" begin
         points = rand(Point, N)
         vol = PointVolume(points)
@@ -113,7 +113,7 @@ end
     end
 end
 
-@testset "Meshes.pointify" begin
+@testitem "Meshes.pointify" begin
     @testset "pointify returns points" begin
         points = rand(Point, N)
         vol = PointVolume(points)
@@ -129,7 +129,7 @@ end
     end
 end
 
-@testset "Pretty Printing" begin
+@testitem "Pretty Printing" begin
     points = rand(Point, N)
     vol = PointVolume(points)
 

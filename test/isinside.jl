@@ -2,14 +2,14 @@ using WhatsThePoint
 using Meshes
 using Unitful: m
 
-@testset "2D PointSet" begin
+@testitem "2D PointSet" begin
     points = PointSet(Point.([(0, 0), (1, 0), (1, 1), (0, 1)]))
     @test isinside(Point(0.5, 0.5), points)
     @test !isinside(Point(0.5, 1.5), points)
     @test !isinside(Point(0.5, 1 + eps()), points)
 end
 
-@testset "2D AbstractVector{Point}" begin
+@testitem "2D AbstractVector{Point}" begin
     # Test isinside(testpoint, points::AbstractVector{Point{𝔼{2}}})
     points = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
 
@@ -18,7 +18,7 @@ end
     @test !isinside(Point(0.5, -0.5), points)
 end
 
-@testset "2D PointSurface" begin
+@testitem "2D PointSurface" begin
     # Test isinside(testpoint, surf::PointSurface{𝔼{2}})
     points = Point.([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
     normals = [[0.0, -1.0] * m for _ in 1:4]
@@ -30,7 +30,7 @@ end
     @test !isinside(Point(1.0, -1.0), surf)
 end
 
-@testset "2D PointCloud" begin
+@testitem "2D PointCloud" begin
     # Test isinside(testpoint, cloud::PointCloud{𝔼{2}})
     points = Point.([(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0)])
     normals = [[0.0, -1.0] * m for _ in 1:4]
@@ -43,7 +43,7 @@ end
     @test !isinside(Point(1.5, -1.0), cloud)
 end
 
-@testset "2D testpoint as AbstractVector" begin
+@testitem "2D testpoint as AbstractVector" begin
     # Test isinside(testpoint::AbstractVector, surf::PointSurface{𝔼{2}})
     # Note: The implementation requires proper Point construction, which needs units.
     # Testing with points that have the same CRS as the surface
@@ -61,14 +61,14 @@ end
     @test_throws MethodError isinside([0.5, 0.5], surf)  # Will fail without proper CRS
 end
 
-@testset "3D PointBoundary" begin
+@testitem "3D PointBoundary" begin
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     @test isinside(Point(0.5, 0.5, 0.5), boundary)
     @test !isinside(Point(0.5, 0.5, -0.5), boundary)
     @test !isinside(Point(0.5, 0.5, -0.001), boundary)
 end
 
-@testset "3D PointCloud" begin
+@testitem "3D PointCloud" begin
     # Test isinside(testpoint, cloud::PointCloud{𝔼{3}})
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     cloud = PointCloud(boundary)
@@ -79,7 +79,7 @@ end
     @test !isinside(Point(30.0, 12.5, 12.5), cloud)  # Outside X
 end
 
-@testset "3D PointSurface" begin
+@testitem "3D PointSurface" begin
     # NOTE: There is currently NO isinside(Point{𝔼{3}}, PointSurface{𝔼{3}}) method
     # The implementation only provides:
     # - isinside(Point{𝔼{2}}, PointSurface{𝔼{2}}) via winding number
@@ -93,7 +93,7 @@ end
     @test_throws MethodError isinside(Point(12.5, 12.5, 12.5), surf)
 end
 
-@testset "3D testpoint as AbstractVector" begin
+@testitem "3D testpoint as AbstractVector" begin
     # Test isinside(testpoint::AbstractVector, surf::PointSurface{𝔼{3}})
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     surf = boundary[:surface1]

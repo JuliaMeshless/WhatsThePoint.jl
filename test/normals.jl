@@ -3,7 +3,7 @@ using Meshes
 using StaticArrays
 using LinearAlgebra
 
-@testset "2D" begin
+@testitem "2D" begin
     circle2D = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
     n = SVector(0.0, 1.0)
     e = SVector(1.0, 0.0)
@@ -28,7 +28,7 @@ using LinearAlgebra
     @test all(computed_normals .≈ correct_normals)
 end
 
-@testset "3D" begin
+@testitem "3D" begin
     tri3d = Point.([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
     n = ones(SVector{3}) * sqrt(3) / 3
     computed_normal = WhatsThePoint._compute_normal(tri3d)
@@ -61,7 +61,7 @@ end
     @test all(WhatsThePoint._angle.(computed_normals, correct_normals) .< 10 * π / 180)
 end
 
-@testset "update_normals!" begin
+@testitem "update_normals!" begin
     # Test that update_normals! correctly recomputes normals (issue #47)
     # Use the same 2D circle from the 2D test
     circle2D = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])

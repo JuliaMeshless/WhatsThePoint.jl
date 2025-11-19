@@ -6,26 +6,26 @@ using OrderedCollections: LittleDict
 
 N = 10
 
-@testset "PointCloud with PointBoundary" begin
+@testitem "PointCloud with PointBoundary" begin
     b = PointBoundary(rand(Point, N))
     cloud = PointCloud(b)
     @test cloud.volume isa PointVolume
     @test WhatsThePoint.boundary(cloud)[:surface1] == b[:surface1]
 end
 
-@testset "PointCloud from file" begin
+@testitem "PointCloud from file" begin
     cloud = PointCloud(joinpath(@__DIR__, "data", "bifurcation.stl"))
     @test length(cloud) == 24780
     @test hassurface(cloud, :surface1)
 end
 
-@testset "PointCloud from PointBoundary" begin
+@testitem "PointCloud from PointBoundary" begin
     cloud = PointCloud(PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl")))
     @test length(cloud) == 24780
     @test hassurface(cloud, :surface1)
 end
 
-@testset "Base Methods" begin
+@testitem "Base Methods" begin
     b = PointBoundary(rand(Point, N))
     cloud = PointCloud(b)
     @test length(cloud) == N
@@ -48,7 +48,7 @@ end
     end
 end
 
-@testset "generate_shadows" begin
+@testitem "generate_shadows" begin
     # Test that generate_shadows generates correct shadow positions (issue #50)
     # Use a 2D circle with known normals and radius for verification
 
@@ -93,7 +93,7 @@ end
     end
 end
 
-@testset "normal and area functions" begin
+@testitem "normal and area functions" begin
     # Test that normal(cloud) and area(cloud) work correctly (issue #49)
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
@@ -103,7 +103,7 @@ end
     @test length(area(cloud)) == N
 end
 
-@testset "to functions" begin
+@testitem "to functions" begin
     # Test to(cloud::PointCloud)
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
@@ -121,7 +121,7 @@ end
     @test length(coords_from_dict) == 12  # 5 + 7
 end
 
-@testset "accessor functions" begin
+@testitem "accessor functions" begin
     # Test boundary(cloud), volume(cloud), surfaces(cloud)
     points = rand(Point, N)
     b = PointBoundary(points)
@@ -137,7 +137,7 @@ end
     @test :surface1 in keys(surfaces(cloud))
 end
 
-@testset "hassurface function" begin
+@testitem "hassurface function" begin
     points = rand(Point, N)
     b = PointBoundary(points)
     cloud = PointCloud(b)
@@ -153,7 +153,7 @@ end
     @test hassurface(cloud, :newsurface) == true
 end
 
-@testset "Meshes interface functions" begin
+@testitem "Meshes interface functions" begin
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
 
@@ -188,7 +188,7 @@ end
     @test bbox_total isa Box
 end
 
-@testset "names function" begin
+@testitem "names function" begin
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
 
@@ -202,7 +202,7 @@ end
     @test length(surface_names) == 2
 end
 
-@testset "Pretty Printing" begin
+@testitem "Pretty Printing" begin
     # Test boundary-only cloud
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))

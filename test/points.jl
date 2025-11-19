@@ -2,7 +2,7 @@ using WhatsThePoint
 using Meshes
 using Unitful: m
 
-@testset "Points" begin
+@testitem "Points" begin
     square2D = Point.([(0, 0), (1, 1), (0, 1), (1, 0)])
     square3D =
         Point.([
