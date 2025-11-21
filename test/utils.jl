@@ -4,7 +4,7 @@ using StaticArrays
 using Unitful: m, rad, °
 using Test
 
-@testitem "findmin_turbo" begin
+@testset "findmin_turbo" begin
     @test WhatsThePoint.findmin_turbo([3.0, 1.0, 4.0, 1.0, 5.0]) == (1.0, 2)
     @test WhatsThePoint.findmin_turbo([5.0, 4.0, 3.0, 2.0, 1.0]) == (1.0, 5)
     @test WhatsThePoint.findmin_turbo([1.0]) == (1.0, 1)
@@ -12,7 +12,7 @@ using Test
     @test WhatsThePoint.findmin_turbo([-1.0, -5.0, 3.0]) == (-5.0, 2)
 end
 
-@testitem "_angle SVector{2}" begin
+@testset "_angle SVector{2}" begin
     u = SVector(1.0, 0.0)
     v = SVector(0.0, 1.0)
     @test WhatsThePoint._angle(u, v) ≈ 90° atol = 1e-10
@@ -34,7 +34,7 @@ end
     @test WhatsThePoint._angle(u, v) ≈ 90° atol = 1e-10
 end
 
-@testitem "_angle SVector{3}" begin
+@testset "_angle SVector{3}" begin
     u = SVector(1.0, 0.0, 0.0)
     v = SVector(0.0, 1.0, 0.0)
     @test WhatsThePoint._angle(u, v) ≈ 90° atol = 1e-10
@@ -56,7 +56,7 @@ end
     @test WhatsThePoint._angle(u, v) ≈ 90° atol = 1e-10
 end
 
-@testitem "_angle Vec" begin
+@testset "_angle Vec" begin
     u = Vec(1.0, 0.0)
     v = Vec(0.0, 1.0)
     @test WhatsThePoint._angle(u, v) ≈ 90° atol = 1e-10
@@ -74,7 +74,7 @@ end
     @test WhatsThePoint._angle(u, v) ≈ 0° atol = 1e-10
 end
 
-@testitem "ranges_from_permutation" begin
+@testset "ranges_from_permutation" begin
     permutations = [[1, 2, 3], [4, 5], [6]]
     ranges = WhatsThePoint.ranges_from_permutation(permutations)
     @test ranges == [1:3, 4:5, 6:6]
@@ -92,7 +92,7 @@ end
     @test ranges == [1:2, 3:4, 5:6]
 end
 
-@testitem "many_permute! Array" begin
+@testset "many_permute! Array" begin
     arr = [1, 2, 3, 4, 5, 6]
     permutations = [[3, 2, 1], [5, 4], [6]]
     ranges = WhatsThePoint.ranges_from_permutation(permutations)
@@ -112,7 +112,7 @@ end
     @test arr == [1.0, 2.0, 3.0]
 end
 
-@testitem "many_permute! PointSet" begin
+@testset "many_permute! PointSet" begin
     points = Point.([(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)])
     permutations = [[2, 1], [4, 3]]
     ranges = WhatsThePoint.ranges_from_permutation(permutations)

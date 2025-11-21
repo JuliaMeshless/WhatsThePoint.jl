@@ -2,7 +2,7 @@ using WhatsThePoint
 using Meshes
 using Unitful: m
 
-@testitem "Spacing Types" begin
+@testset "Spacing Types" begin
     @testset "ConstantSpacing" begin
         s = ConstantSpacing(1.0m)
         @test s.Δx == 1.0m
@@ -55,7 +55,7 @@ using Unitful: m
     end
 end
 
-@testitem "calculate_ninit" begin
+@testset "calculate_ninit" begin
     @testset "3D ConstantSpacing" begin
         # Create simple 3D boundary
         points =
@@ -81,7 +81,7 @@ end
     end
 end
 
-@testitem "discretize with SlakKosec (3D)" begin
+@testset "discretize with SlakKosec (3D)" begin
     # Create a small 3D tetrahedral boundary
     points = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.5, 1.0, 0.0), (0.5, 0.5, 1.0)])
     boundary = PointBoundary(points)
@@ -101,7 +101,7 @@ end
     @test length(volume(cloud2)) > 0
 end
 
-@testitem "discretize with VanDerSandeFornberg (3D)" begin
+@testset "discretize with VanDerSandeFornberg (3D)" begin
     # Create a small 3D box boundary
     points =
         Point.([
@@ -126,7 +126,7 @@ end
     @test length(volume(cloud2)) > 0
 end
 
-@testitem "discretize with FornbergFlyer (2D)" begin
+@testset "discretize with FornbergFlyer (2D)" begin
     # Create a simple 2D square boundary
     points = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     boundary = PointBoundary(points)
@@ -145,7 +145,7 @@ end
     @test length(volume(cloud2)) <= 100
 end
 
-@testitem "discretize default algorithms" begin
+@testset "discretize default algorithms" begin
     @testset "3D default (SlakKosec)" begin
         points =
             Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
@@ -173,7 +173,7 @@ end
     end
 end
 
-@testitem "Algorithm constructors" begin
+@testset "Algorithm constructors" begin
     # Test SlakKosec constructors
     alg1 = SlakKosec()
     @test alg1.n == 10  # default value
@@ -190,7 +190,7 @@ end
     @test alg4 isa FornbergFlyer
 end
 
-@testitem "max_points limit" begin
+@testset "max_points limit" begin
     # Test that discretization respects max_points limit
     points = Point.([(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 2.0, 0.0), (0.0, 0.0, 2.0)])
     boundary = PointBoundary(points)

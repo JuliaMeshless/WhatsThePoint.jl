@@ -6,9 +6,9 @@ using Unitful: m, °
 points = rand(Point, 10)
 normals = [Vec(rand(3)...) for _ in 1:10]
 areas = rand(10) * m^2
-shadow = ShadowPoints(2m)
+shadow = ShadowPoints(2m, 2)
 
-@testitem "PointSurface Constructors" begin
+@testset "PointSurface Constructors" begin
     # Test default constructor
     geoms = StructArray{SurfaceElement}((points, normals, areas))
     surf = PointSurface(geoms, nothing)
@@ -49,7 +49,7 @@ shadow = ShadowPoints(2m)
     @test surf_with_shadow.shadow == shadow
 end
 
-@testitem "SurfaceElement Constructors" begin
+@testset "SurfaceElement Constructors" begin
     elem = SurfaceElement(points[1], normals[1], areas[1])
     @test elem isa SurfaceElement
     @test typeof(elem) <: Geometry
@@ -58,7 +58,7 @@ end
     @test elem.area == areas[1]
 end
 
-@testitem "Properties" begin
+@testset "Properties" begin
     surf = PointSurface(points, normals, areas)
     @test to(surf) == to.(surf.geoms.point)
     @test point(surf) == surf.geoms.point
@@ -67,7 +67,7 @@ end
     @test parent(surf) == surf.geoms
 end
 
-@testitem "Base Methods" begin
+@testset "Base Methods" begin
     surf = PointSurface(points, normals, areas)
     @test length(surf) == 10
     @test firstindex(surf) == 1
@@ -78,7 +78,7 @@ end
     @test view(surf, 1:2:5) == view(surf.geoms, 1:2:5)
 end
 
-@testitem "Meshes.jl Interface" begin
+@testset "Meshes.jl Interface" begin
     surf = PointSurface(points, normals, areas)
 
     # Test pointify
@@ -101,7 +101,7 @@ end
     @test bbox isa Box
 end
 
-@testitem "Shadow Generation" begin
+@testset "Shadow Generation" begin
     # Create a proper surface with normals computed from geometry
     # Using the bifurcation test file ensures normals are properly computed
     surf_file = PointSurface(joinpath(@__DIR__, "data", "bifurcation.stl"))
@@ -113,13 +113,13 @@ end
     @test all(p -> p isa Point, shadow_points)
 end
 
-@testitem "Surface Operations" begin
+@testset "Surface Operations" begin
     boundary = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
     split_surface!(boundary, 80°)
     @test length(surfaces(boundary)) == 4
 end
 
-@testitem "Pretty Printing" begin
+@testset "Pretty Printing" begin
     surf = PointSurface(points, normals, areas)
     io = IOBuffer()
     show(io, MIME("text/plain"), surf)

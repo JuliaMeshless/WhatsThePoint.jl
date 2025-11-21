@@ -5,7 +5,7 @@ using LinearAlgebra
 
 N = 20
 
-@testitem "KNearestSearch Constructor" begin
+@testset "KNearestSearch Constructor" begin
     # Test with PointCloud
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
@@ -38,7 +38,7 @@ N = 20
     end
 end
 
-@testitem "search with PointCloud" begin
+@testset "search with PointCloud" begin
     # Create a simple 2D circle for predictable neighbor relationships
     circle_points = Point.([(cos(θ), sin(θ)) for θ in range(0, 2π, length=N+1)[1:end-1]])
     cloud = PointCloud(PointBoundary(circle_points))
@@ -64,7 +64,7 @@ end
     end
 end
 
-@testitem "search with PointBoundary" begin
+@testset "search with PointBoundary" begin
     points = rand(Point, N)
     boundary = PointBoundary(points)
 
@@ -77,7 +77,7 @@ end
     @test all(length(n) == k for n in neighbors)
 end
 
-@testitem "search with PointSurface" begin
+@testset "search with PointSurface" begin
     points = rand(Point, N)
     surf = PointSurface(points)
 
@@ -90,7 +90,7 @@ end
     @test all(length(n) == k for n in neighbors)
 end
 
-@testitem "searchdists with PointCloud" begin
+@testset "searchdists with PointCloud" begin
     circle_points = Point.([(cos(θ), sin(θ)) for θ in range(0, 2π, length=N+1)[1:end-1]])
     cloud = PointCloud(PointBoundary(circle_points))
 
@@ -116,7 +116,7 @@ end
     end
 end
 
-@testitem "searchdists with PointBoundary" begin
+@testset "searchdists with PointBoundary" begin
     points = rand(Point, N)
     boundary = PointBoundary(points)
 
@@ -129,7 +129,7 @@ end
     @test all(all(d >= 0 for d in ds) for ds in dists)
 end
 
-@testitem "searchdists with PointSurface" begin
+@testset "searchdists with PointSurface" begin
     points = rand(Point, N)
     surf = PointSurface(points)
 
@@ -142,7 +142,7 @@ end
     @test all(all(d >= 0 for d in ds) for ds in dists)
 end
 
-@testitem "searchdists with Vec point" begin
+@testset "searchdists with Vec point" begin
     # Create a simple point cloud
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
@@ -168,7 +168,7 @@ end
     end
 end
 
-@testitem "Integration with real geometry" begin
+@testset "Integration with real geometry" begin
     # Load a real geometry from test data
     cloud = PointCloud(joinpath(@__DIR__, "data", "box.stl"))
 
@@ -189,7 +189,7 @@ end
     end
 end
 
-@testitem "Edge cases" begin
+@testset "Edge cases" begin
     @testset "k equals number of points" begin
         points = rand(Point, 5)
         cloud = PointCloud(PointBoundary(points))
@@ -217,7 +217,7 @@ end
     end
 end
 
-@testitem "Units support" begin
+@testset "Units support" begin
     # Test with unitful points
     points_with_units = [Point(rand() * m, rand() * m) for _ in 1:N]
     cloud = PointCloud(PointBoundary(points_with_units))

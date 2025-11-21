@@ -4,7 +4,7 @@ using Unitful: m, °
 
 N = 10
 
-@testitem "add_surface!" begin
+@testset "add_surface!" begin
     # Test adding a surface to an existing boundary
     points1 = rand(Point, N)
     b = PointBoundary(points1)
@@ -22,7 +22,7 @@ N = 10
     @test point(b[:surface1]) == points1
 end
 
-@testitem "combine_surfaces!" begin
+@testset "combine_surfaces!" begin
     # Create boundary with multiple surfaces
     points1 = rand(Point, N)
     points2 = rand(Point, N)
@@ -51,7 +51,7 @@ end
     @test length(b[:surface2]) == 2 * N
 end
 
-@testitem "combine_surfaces! - multiple surfaces" begin
+@testset "combine_surfaces! - multiple surfaces" begin
     # Test combining more than 2 surfaces
     b = PointBoundary(rand(Point, N))
     add_surface!(b, rand(Point, N), :surface2)
@@ -71,7 +71,7 @@ end
     @test length(b) == original_total
 end
 
-@testitem "combine_surfaces! - nonexistent surface" begin
+@testset "combine_surfaces! - nonexistent surface" begin
     b = PointBoundary(rand(Point, N))
     add_surface!(b, rand(Point, N), :surface2)
 
@@ -79,7 +79,7 @@ end
     @test_throws AssertionError combine_surfaces!(b, :surface1, :nonexistent)
 end
 
-@testitem "split_surface! - single surface" begin
+@testset "split_surface! - single surface" begin
     # Test splitting when there's only one surface
     boundary = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
     @test length(surfaces(boundary)) == 1
@@ -93,7 +93,7 @@ end
     @test length(boundary) == 24780
 end
 
-@testitem "split_surface! - by target surface name" begin
+@testset "split_surface! - by target surface name" begin
     # Test splitting a specific surface by name
     boundary = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
 
@@ -110,7 +110,7 @@ end
     @test length(boundary) == 24780
 end
 
-@testitem "split_surface! - by PointSurface object" begin
+@testset "split_surface! - by PointSurface object" begin
     # Test splitting by passing PointSurface directly
     boundary = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
     surf = boundary[:surface1]
@@ -128,7 +128,7 @@ end
     @test length(boundary) == 24780
 end
 
-@testitem "split_surface! - with PointCloud" begin
+@testset "split_surface! - with PointCloud" begin
     # Test that split_surface! works with PointCloud
     cloud = PointCloud(joinpath(@__DIR__, "data", "bifurcation.stl"))
     @test length(surfaces(cloud)) == 1
@@ -142,7 +142,7 @@ end
     @test length(boundary(cloud)) == 24780
 end
 
-@testitem "split_surface! - multiple surfaces error" begin
+@testset "split_surface! - multiple surfaces error" begin
     # Test that splitting without specifying target fails when multiple surfaces exist
     boundary = PointBoundary(rand(Point, N))
     add_surface!(boundary, rand(Point, N), :surface2)
@@ -151,14 +151,14 @@ end
     @test_throws AssertionError split_surface!(boundary, 80°)
 end
 
-@testitem "split_surface! - nonexistent surface error" begin
+@testset "split_surface! - nonexistent surface error" begin
     boundary = PointBoundary(rand(Point, N))
 
     # Try to split a surface that doesn't exist
     @test_throws AssertionError split_surface!(boundary, :nonexistent, 80°)
 end
 
-@testitem "split_surface! - different angles" begin
+@testset "split_surface! - different angles" begin
     # Test that different angles produce different splits
     boundary1 = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
     boundary2 = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
@@ -176,7 +176,7 @@ end
     @test n_surfaces_90 > 1
 end
 
-@testitem "split_surface! - custom k parameter" begin
+@testset "split_surface! - custom k parameter" begin
     # Test that custom k parameter works
     boundary = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
 
@@ -185,7 +185,7 @@ end
     @test length(surfaces(boundary)) > 1
 end
 
-@testitem "surface operations integration" begin
+@testset "surface operations integration" begin
     # Test a realistic workflow: split then combine
     boundary = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
     original_length = length(boundary)

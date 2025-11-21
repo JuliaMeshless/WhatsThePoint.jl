@@ -14,7 +14,7 @@ function capture_stdout(f)
     return output, result
 end
 
-@testitem "metrics function" begin
+@testset "metrics function" begin
     # Create a simple point cloud from test data
     cloud = PointCloud(joinpath(@__DIR__, "data", "box.stl"))
 

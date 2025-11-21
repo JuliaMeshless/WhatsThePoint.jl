@@ -3,7 +3,7 @@ using Meshes
 using Unitful: m
 using LinearAlgebra
 
-@testitem "repel! with default parameters" begin
+@testset "repel! with default parameters" begin
     # Create a small cloud from box.stl with limited points
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(1.0m)
@@ -41,7 +41,7 @@ using LinearAlgebra
     end
 end
 
-@testitem "repel! with custom β parameter" begin
+@testset "repel! with custom β parameter" begin
     # Create a small cloud
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(1.0m)
@@ -61,7 +61,7 @@ end
     @test length(cloud2.volume) > 0
 end
 
-@testitem "repel! with custom max_iters" begin
+@testset "repel! with custom max_iters" begin
     # Create a small cloud
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(1.0m)
@@ -79,7 +79,7 @@ end
     @test conv2 isa Vector
 end
 
-@testitem "repel! with custom tolerance" begin
+@testset "repel! with custom tolerance" begin
     # Create a small cloud
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(1.0m)
@@ -95,7 +95,7 @@ end
     @test conv_tight isa Vector
 end
 
-@testitem "repel! point movement verification" begin
+@testset "repel! point movement verification" begin
     # Create a small cloud
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(1.0m)
@@ -130,7 +130,7 @@ end
     @test length(conv) > 0
 end
 
-@testitem "repel! filters points outside domain" begin
+@testset "repel! filters points outside domain" begin
     # Create a small cloud
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(1.0m)
@@ -150,7 +150,7 @@ end
     @test length(cloud.volume) <= original_count
 end
 
-@testitem "repel! convergence behavior" begin
+@testset "repel! convergence behavior" begin
     # Create a small cloud
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(1.0m)
@@ -167,7 +167,7 @@ end
     @test all(isfinite, conv)
 end
 
-@testitem "repel! with multiple parameter combinations" begin
+@testset "repel! with multiple parameter combinations" begin
     # Test various parameter combinations work without error
     boundary = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(1.0m)

@@ -5,20 +5,20 @@ using Unitful: m
 
 N = 10
 
-@testitem "PointCloud with PointBoundary" begin
+@testset "PointCloud with PointBoundary" begin
     points = rand(Point, N)
     b = PointBoundary(points)
     @test all(pointify(b) .== points)
     @test point(b[:surface1]) == points
 end
 
-@testitem "PointCloud from file" begin
+@testset "PointCloud from file" begin
     b = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
     @test length(b) == 24780
     @test hassurface(b, :surface1)
 end
 
-@testitem "Base Methods" begin
+@testset "Base Methods" begin
     b = PointBoundary(rand(Point, N))
     @test length(b) == N
     @test size(b) == (N,)
@@ -39,7 +39,7 @@ end
     end
 end
 
-@testitem "add_surface!" begin
+@testset "add_surface!" begin
     # Test that add_surface! works correctly (issue #48)
     points1 = rand(Point, N)
     b = PointBoundary(points1)
@@ -54,7 +54,7 @@ end
     @test_throws ArgumentError add_surface!(b, points2, :newsurface)
 end
 
-@testitem "to(boundary)" begin
+@testset "to(boundary)" begin
     points = rand(Point, N)
     b = PointBoundary(points)
     coords = to(b)
@@ -62,7 +62,7 @@ end
     @test all(coords .== to.(points))
 end
 
-@testitem "centroid(boundary)" begin
+@testset "centroid(boundary)" begin
     points = rand(Point, N)
     b = PointBoundary(points)
     c = centroid(b)
@@ -71,7 +71,7 @@ end
     @test c == expected_centroid
 end
 
-@testitem "boundingbox(boundary)" begin
+@testset "boundingbox(boundary)" begin
     points = rand(Point, N)
     b = PointBoundary(points)
     bbox = boundingbox(b)
@@ -80,7 +80,7 @@ end
     @test bbox == expected_bbox
 end
 
-@testitem "normal(boundary) and area(boundary)" begin
+@testset "normal(boundary) and area(boundary)" begin
     points = rand(Point, N)
     normals = [rand(3) .* m for _ in 1:N]
     areas = rand(N) * m^2
@@ -106,7 +106,7 @@ end
     @test all_areas == vcat(areas, areas2)
 end
 
-@testitem "Meshes.pointify(boundary)" begin
+@testset "Meshes.pointify(boundary)" begin
     points = rand(Point, N)
     b = PointBoundary(points)
     pointified = Meshes.pointify(b)
@@ -122,7 +122,7 @@ end
     @test all(pointified .== vcat(points, points2))
 end
 
-@testitem "Meshes.nelements(boundary)" begin
+@testset "Meshes.nelements(boundary)" begin
     points = rand(Point, N)
     b = PointBoundary(points)
     @test Meshes.nelements(b) == N
@@ -134,7 +134,7 @@ end
     @test Meshes.nelements(b) == N + N ÷ 2
 end
 
-@testitem "delete!(boundary, name)" begin
+@testset "delete!(boundary, name)" begin
     points1 = rand(Point, N)
     b = PointBoundary(points1)
 
@@ -161,7 +161,7 @@ end
     @test hassurface(b, :surface1)
 end
 
-@testitem "names(boundary)" begin
+@testset "names(boundary)" begin
     points = rand(Point, N)
     b = PointBoundary(points)
 
@@ -180,7 +180,7 @@ end
     @test :mysurface in surface_names
 end
 
-@testitem "surfaces(boundary)" begin
+@testset "surfaces(boundary)" begin
     points1 = rand(Point, N)
     b = PointBoundary(points1)
 
@@ -206,7 +206,7 @@ end
     @test total_points == N + N ÷ 2 + N * 2
 end
 
-@testitem "Pretty Printing" begin
+@testset "Pretty Printing" begin
     points = rand(Point, N)
     b = PointBoundary(points)
     io = IOBuffer()
