@@ -1,7 +1,9 @@
 using WhatsThePoint
 using Meshes
+using CoordRefSystems
 using Random
 using Unitful
+using Unitful: m
 
 N = 10
 
@@ -14,7 +16,7 @@ N = 10
     end
 
     @testset "PointSet constructor" begin
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(PointSet(points))
         @test vol isa PointVolume
         @test length(vol) == N
@@ -22,7 +24,7 @@ N = 10
     end
 
     @testset "Vector constructor" begin
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         @test vol isa PointVolume
         @test length(vol) == N
@@ -32,14 +34,14 @@ end
 
 @testset "Base Methods" begin
     @testset "length and size" begin
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         @test length(vol) == N
         @test size(vol) == (N,)
     end
 
     @testset "getindex" begin
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         @test vol[1] == points[1]
         @test vol[end] == points[end]
@@ -47,7 +49,7 @@ end
     end
 
     @testset "iterate" begin
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         collected = collect(vol)
         @test collected == points
@@ -61,13 +63,13 @@ end
         vol_empty = PointVolume{🌐,Cartesian{NoDatum}}()
         @test isempty(vol_empty)
 
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         @test !isempty(vol)
     end
 
     @testset "parent" begin
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         @test parent(vol) == PointSet(points)
         @test parent(vol) isa PointSet
@@ -76,17 +78,17 @@ end
     @testset "filter!" begin
         points = [Point(Float64(i), Float64(i)) for i in 1:10]
         vol = PointVolume(points)
-        filter!(p -> to(p)[1] > 5.0, vol)
+        filter!(p -> to(p)[1] > 5.0m, vol)
         @test length(vol) == 5
         for p in vol
-            @test to(p)[1] > 5.0
+            @test to(p)[1] > 5.0m
         end
     end
 end
 
 @testset "Coordinate and Geometry Methods" begin
     @testset "to" begin
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         coords = to(vol)
         @test coords isa Vector
@@ -115,11 +117,11 @@ end
 
 @testset "Meshes.pointify" begin
     @testset "pointify returns points" begin
-        points = rand(Point, N)
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         pointified = Meshes.pointify(vol)
-        @test pointified == PointSet(points)
-        @test collect(pointified) == points
+        @test pointified isa Vector{<:Point}
+        @test pointified == points
     end
 
     @testset "pointify empty volume" begin
@@ -130,7 +132,7 @@ end
 end
 
 @testset "Pretty Printing" begin
-    points = rand(Point, N)
+    points = [Point(Float64(i), Float64(i)) for i in 1:N]
     vol = PointVolume(points)
 
     io = IOBuffer()
