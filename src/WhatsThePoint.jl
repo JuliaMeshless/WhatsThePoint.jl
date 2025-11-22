@@ -30,6 +30,7 @@ using Makie:
     arrows!,
     DataAspect
 using Graphs, SimpleWeightedGraphs
+using Distances: Distances, Euclidean, evaluate
 
 using Unitful
 

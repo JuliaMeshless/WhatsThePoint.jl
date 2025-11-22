@@ -1,4 +1,4 @@
-struct PointVolume{M<:Manifold,C<:CRS} <: Domain{M,C}
+mutable struct PointVolume{M<:Manifold,C<:CRS} <: Domain{M,C}
     points::Domain{M,C}
 end
 PointVolume{M,C}() where {M<:Manifold,C<:CRS} = PointVolume(PointSet(Point{M,C}[]))
@@ -6,13 +6,21 @@ PointVolume(points::AbstractVector) = PointVolume(PointSet(points))
 
 Base.length(vol::PointVolume) = length(vol.points)
 Base.size(vol::PointVolume) = (length(vol),)
-Base.getindex(vol::PointVolume, index) = vol.points[index]
+Base.getindex(vol::PointVolume, index::Int) = vol.points[index]
+Base.getindex(vol::PointVolume, index::AbstractVector) = vol.points[index]
 function Base.iterate(vol::PointVolume, state=1)
     return state > length(vol) ? nothing : (vol[state], state + 1)
 end
 Base.isempty(vol::PointVolume) = isempty(vol.points)
 Base.parent(vol::PointVolume) = vol.points
-Base.filter!(f::Function, vol::PointVolume) = filter!(f, vol.points)
+function Base.filter!(f::Function, vol::PointVolume)
+    # PointSet doesn't support filter!, so convert to vector, filter, and reconstruct
+    pts = collect(vol.points)
+    filter!(f, pts)
+    vol.points = PointSet(pts)
+    return vol
+end
+Meshes.nelements(vol::PointVolume) = length(vol.points)
 
 to(vol::PointVolume) = to.(vol.points)
 centroid(vol::PointVolume) = centroid(PointSet(vol.points))
