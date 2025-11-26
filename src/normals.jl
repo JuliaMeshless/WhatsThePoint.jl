@@ -11,6 +11,7 @@ function compute_normals(surf::PointSurface; k::Int=5)
 end
 
 function compute_normals(points::AbstractVector{<:Point}; k::Int=5)
+    k = k > length(points) ? length(points) : k
     search_method = KNearestSearch(points, k)
     return compute_normals(search_method, points)
 end

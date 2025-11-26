@@ -41,17 +41,17 @@ centroid(boundary::PointBoundary) = centroid(PointSet(Meshes.pointify(boundary))
 boundingbox(boundary::PointBoundary) = boundingbox(Meshes.pointify(boundary))
 
 boundary(boundary::PointBoundary) = boundary
-surfaces(boundary::PointBoundary) = values(boundary.surfaces)
-normal(boundary::PointBoundary) = mapreduce(normal, vcat, surfaces(boundary))
-area(boundary::PointBoundary) = mapreduce(area, vcat, surfaces(boundary))
+surfaces(boundary::PointBoundary) = boundary.surfaces
+normal(boundary::PointBoundary) = mapreduce(normal, vcat, values(surfaces(boundary)))
+area(boundary::PointBoundary) = mapreduce(area, vcat, values(surfaces(boundary)))
 
 hassurface(boundary::PointBoundary, name) = haskey(boundary.surfaces, name)
 
-Meshes.pointify(boundary::PointBoundary) = mapreduce(pointify, vcat, surfaces(boundary))
+Meshes.pointify(boundary::PointBoundary) = mapreduce(pointify, vcat, values(surfaces(boundary)))
 Meshes.nelements(boundary::PointBoundary) = length(boundary)
 
-Base.length(boundary::PointBoundary) = sum(length, surfaces(boundary))
-Base.names(boundary::PointBoundary) = keys(boundary.surfaces)
+Base.length(boundary::PointBoundary) = sum(length, values(surfaces(boundary)))
+Base.names(boundary::PointBoundary) = collect(keys(boundary.surfaces))
 Base.size(boundary::PointBoundary) = (length(boundary),)
 Base.getindex(boundary::PointBoundary, name::Symbol) = boundary.surfaces[name]
 function Base.getindex(boundary::PointBoundary, index::Int)
@@ -63,7 +63,7 @@ function Base.getindex(boundary::PointBoundary, index::Int)
         )
     end
     offset = 0
-    for surf in surfaces(boundary)
+    for surf in values(surfaces(boundary))
         index <= (length(surf) + offset) && return surf[index - offset]
         offset += length(surf)
     end
