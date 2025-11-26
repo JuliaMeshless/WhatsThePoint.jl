@@ -185,7 +185,7 @@ end
     b = PointBoundary(points1)
 
     # Single surface
-    surfs = collect(surfaces(b))
+    surfs = collect(values(surfaces(b)))
     @test length(surfs) == 1
     @test surfs[1] isa PointSurface
     @test length(surfs[1]) == N
@@ -199,7 +199,7 @@ end
     surf3 = PointSurface(points3)
     b[:surface3] = surf3
 
-    surfs = collect(surfaces(b))
+    surfs = collect(values(surfaces(b)))
     @test length(surfs) == 3
     @test all(s -> s isa PointSurface, surfs)
     total_points = sum(length, surfs)

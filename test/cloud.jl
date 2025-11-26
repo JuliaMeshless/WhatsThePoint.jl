@@ -1,5 +1,7 @@
 using WhatsThePoint
+using WhatsThePoint: boundary, volume, surfaces
 using Meshes
+using Meshes: Box, Point
 using Random
 using Unitful: @u_str, m
 using OrderedCollections: LittleDict
@@ -110,7 +112,7 @@ end
     coords = to(cloud)
     @test coords isa Vector
     @test length(coords) == N
-    @test all(c -> c isa Vector, coords)
+    @test all(c -> c isa AbstractVector, coords)
 
     # Test to(surfaces::LittleDict)
     surf1 = PointSurface(rand(Point, 5))
