@@ -1,4 +1,5 @@
 using WhatsThePoint
+using WhatsThePoint: volume, boundary
 using Meshes
 using Unitful: m
 
