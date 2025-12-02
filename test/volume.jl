@@ -1,13 +1,6 @@
-using WhatsThePoint
-using Meshes
-using CoordRefSystems
-using Random
-using Unitful
-using Unitful: m
+@testitem "PointVolume Constructors" setup=[TestData, CommonImports] begin
+    N = 10
 
-N = 10
-
-@testset "PointVolume Constructors" begin
     @testset "Empty constructor" begin
         vol = PointVolume{🌐,Cartesian{NoDatum}}()
         @test vol isa PointVolume
@@ -32,7 +25,9 @@ N = 10
     end
 end
 
-@testset "Base Methods" begin
+@testitem "PointVolume Base Methods" setup=[TestData, CommonImports] begin
+    N = 10
+
     @testset "length and size" begin
         points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
@@ -86,7 +81,9 @@ end
     end
 end
 
-@testset "Coordinate and Geometry Methods" begin
+@testitem "PointVolume Coordinate and Geometry Methods" setup=[TestData, CommonImports] begin
+    N = 10
+
     @testset "to" begin
         points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
@@ -115,7 +112,9 @@ end
     end
 end
 
-@testset "Meshes.pointify" begin
+@testitem "PointVolume Meshes.pointify" setup=[TestData, CommonImports] begin
+    N = 10
+
     @testset "pointify returns points" begin
         points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
@@ -131,7 +130,8 @@ end
     end
 end
 
-@testset "Pretty Printing" begin
+@testitem "PointVolume Pretty Printing" setup=[TestData, CommonImports] begin
+    N = 10
     points = [Point(Float64(i), Float64(i)) for i in 1:N]
     vol = PointVolume(points)
 

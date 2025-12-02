@@ -1,19 +1,10 @@
-using WhatsThePoint
-using Meshes
-using Meshes: Euclidean
-using Unitful
-using Unitful: m
-using LinearAlgebra
-
-N = 20
-
-@testset "KNearestSearch Constructor" begin
-    # Test with PointCloud
+@testitem "KNearestSearch Constructor" setup = [TestData, CommonImports] begin
+    N = 20
     points = rand(Point, N)
-    cloud = PointCloud(PointBoundary(points))
     k = 5
 
     @testset "PointCloud" begin
+        cloud = PointCloud(PointBoundary(points))
         method = KNearestSearch(cloud, k)
         @test method isa KNearestSearch
         @test method.k == k
@@ -40,9 +31,10 @@ N = 20
     end
 end
 
-@testset "search with PointCloud" begin
-    # Create a simple 2D circle for predictable neighbor relationships
-    circle_points = Point.([(cos(θ), sin(θ)) for θ in range(0, 2π, length=N+1)[1:end-1]])
+@testitem "search with PointCloud" setup = [TestData, CommonImports] begin
+    N = 20
+    circle_points =
+        Point.([(cos(θ), sin(θ)) for θ in range(0, 2π; length=N + 1)[1:(end - 1)]])
     cloud = PointCloud(PointBoundary(circle_points))
 
     k = 3
@@ -56,17 +48,16 @@ end
     end
 
     @testset "Neighbor indices validity" begin
-        # All indices should be valid (within 1:N)
         @test all(all(1 <= idx <= N for idx in n) for n in neighbors)
     end
 
     @testset "Self as nearest neighbor" begin
-        # Each point should be its own nearest neighbor (index 1)
         @test all(neighbors[i][1] == i for i in 1:N)
     end
 end
 
-@testset "search with PointBoundary" begin
+@testitem "search with PointBoundary" setup = [TestData, CommonImports] begin
+    N = 20
     points = rand(Point, N)
     boundary = PointBoundary(points)
 
@@ -79,7 +70,8 @@ end
     @test all(length(n) == k for n in neighbors)
 end
 
-@testset "search with PointSurface" begin
+@testitem "search with PointSurface" setup = [TestData, CommonImports] begin
+    N = 20
     points = rand(Point, N)
     surf = PointSurface(points)
 
@@ -92,8 +84,10 @@ end
     @test all(length(n) == k for n in neighbors)
 end
 
-@testset "searchdists with PointCloud" begin
-    circle_points = Point.([(cos(θ), sin(θ)) for θ in range(0, 2π, length=N+1)[1:end-1]])
+@testitem "searchdists with PointCloud" setup = [TestData, CommonImports] begin
+    N = 20
+    circle_points =
+        Point.([(cos(θ), sin(θ)) for θ in range(0, 2π; length=N + 1)[1:(end - 1)]])
     cloud = PointCloud(PointBoundary(circle_points))
 
     k = 3
@@ -107,18 +101,14 @@ end
     end
 
     @testset "Distance properties" begin
-        # All distances should be non-negative
         @test all(all(d >= 0.0m for d in ds) for (_, ds) in results)
-
-        # Distance to self should be zero (first element)
         @test all(isapprox(ds[1], 0.0m; atol=1e-10m) for (_, ds) in results)
-
-        # Distances should be sorted (nearest to farthest)
         @test all(issorted(ds) for (_, ds) in results)
     end
 end
 
-@testset "searchdists with PointBoundary" begin
+@testitem "searchdists with PointBoundary" setup = [TestData, CommonImports] begin
+    N = 20
     points = rand(Point, N)
     boundary = PointBoundary(points)
 
@@ -131,7 +121,8 @@ end
     @test all(all(d >= 0.0m for d in ds) for (_, ds) in results)
 end
 
-@testset "searchdists with PointSurface" begin
+@testitem "searchdists with PointSurface" setup = [TestData, CommonImports] begin
+    N = 20
     points = rand(Point, N)
     surf = PointSurface(points)
 
@@ -144,15 +135,14 @@ end
     @test all(all(d >= 0.0m for d in ds) for (_, ds) in results)
 end
 
-@testset "searchdists with Vec point" begin
-    # Create a simple 3D point cloud (rand(Point, N) returns 3D points with units)
+@testitem "searchdists with Vec point" setup = [TestData, CommonImports] begin
+    N = 20
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
 
     k = 3
     method = KNearestSearch(cloud, k)
 
-    # Test with a 3D Vec point (must match cloud dimensionality)
     test_point = Vec(0.5m, 0.5m, 0.5m)
     idxs, dists = searchdists(test_point, method)
 
@@ -164,28 +154,22 @@ end
     end
 
     @testset "Distance properties" begin
-        # All distances should be non-negative
         @test all(d >= 0.0m for d in dists)
-
-        # Distances should be sorted (nearest to farthest)
         @test issorted(dists)
     end
 end
 
-@testset "Integration with real geometry" begin
-    # Load a real geometry from test data
-    cloud = PointCloud(joinpath(@__DIR__, "data", "box.stl"))
+@testitem "KNearestSearch with real geometry" setup = [TestData, CommonImports] begin
+    cloud = PointCloud(TestData.BOX_PATH)
 
     @testset "Search on imported geometry" begin
         k = 10
         method = KNearestSearch(cloud, k)
 
-        # Test search
         neighbors = search(cloud, method)
         @test length(neighbors) == length(cloud)
         @test all(length(n) == k for n in neighbors)
 
-        # Test searchdists
         results = searchdists(cloud, method)
         @test length(results) == length(cloud)
         @test all(length(ds) == k for (_, ds) in results)
@@ -193,7 +177,8 @@ end
     end
 end
 
-@testset "Edge cases" begin
+@testitem "KNearestSearch edge cases" setup = [TestData, CommonImports] begin
+    N = 20
     @testset "k equals number of points" begin
         points = rand(Point, 5)
         cloud = PointCloud(PointBoundary(points))
@@ -221,8 +206,8 @@ end
     end
 end
 
-@testset "Units support" begin
-    # Test with unitful points
+@testitem "KNearestSearch units support" setup = [TestData, CommonImports] begin
+    N = 20
     points_with_units = [Point(rand() * m, rand() * m) for _ in 1:N]
     cloud = PointCloud(PointBoundary(points_with_units))
 
@@ -239,7 +224,6 @@ end
         results = searchdists(cloud, method)
         @test length(results) == N
         @test all(length(ds) == k for (_, ds) in results)
-        # Distances should have units
         @test all(all(d isa Unitful.Length for d in ds) for (_, ds) in results)
     end
 end

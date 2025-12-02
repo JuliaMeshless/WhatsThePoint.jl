@@ -1,24 +1,19 @@
-using WhatsThePoint
-using Meshes
-using Random
-using Unitful: m
-
-N = 10
-
-@testset "PointCloud with PointBoundary" begin
+@testitem "PointBoundary with Points" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
     @test all(pointify(b) .== points)
     @test point(b[:surface1]) == points
 end
 
-@testset "PointCloud from file" begin
-    b = PointBoundary(joinpath(@__DIR__, "data", "bifurcation.stl"))
+@testitem "PointBoundary from file" setup=[TestData, CommonImports] begin
+    b = PointBoundary(TestData.BIFURCATION_PATH)
     @test length(b) == 24780
     @test hassurface(b, :surface1)
 end
 
-@testset "Base Methods" begin
+@testitem "PointBoundary Base Methods" setup=[TestData, CommonImports] begin
+    N = 10
     b = PointBoundary(rand(Point, N))
     @test length(b) == N
     @test size(b) == (N,)
@@ -29,7 +24,6 @@ end
     b[:surface2] = surf
     @test b[:surface2] == surf
 
-    # Test the iterate method
     @testset "iterate" begin
         points = rand(Point, N)
         b = PointBoundary(points)
@@ -39,22 +33,21 @@ end
     end
 end
 
-@testset "add_surface!" begin
-    # Test that add_surface! works correctly (issue #48)
+@testitem "PointBoundary add_surface!" setup=[TestData, CommonImports] begin
+    N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
 
-    # Add a new surface with a different name - should succeed
     points2 = rand(Point, N)
     @test_nowarn add_surface!(b, points2, :newsurface)
     @test hassurface(b, :newsurface)
     @test point(b[:newsurface]) == points2
 
-    # Try to add a surface with existing name - should throw error
     @test_throws ArgumentError add_surface!(b, points2, :newsurface)
 end
 
-@testset "to(boundary)" begin
+@testitem "PointBoundary to()" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
     coords = to(b)
@@ -62,7 +55,8 @@ end
     @test all(coords .== to.(points))
 end
 
-@testset "centroid(boundary)" begin
+@testitem "PointBoundary centroid()" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
     c = centroid(b)
@@ -71,7 +65,8 @@ end
     @test c == expected_centroid
 end
 
-@testset "boundingbox(boundary)" begin
+@testitem "PointBoundary boundingbox()" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
     bbox = boundingbox(b)
@@ -80,18 +75,17 @@ end
     @test bbox == expected_bbox
 end
 
-@testset "normal(boundary) and area(boundary)" begin
+@testitem "PointBoundary normal() and area()" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     normals = [rand(3) .* m for _ in 1:N]
     areas = rand(N) * m^2
     surf = PointSurface(points, normals, areas)
 
-    # Create boundary with single surface
     b = PointBoundary(points, normals, areas)
     @test normal(b) == normals
     @test area(b) == areas
 
-    # Create boundary with multiple surfaces
     points2 = rand(Point, N)
     normals2 = [rand(3) .* m for _ in 1:N]
     areas2 = rand(N) * m^2
@@ -106,14 +100,14 @@ end
     @test all_areas == vcat(areas, areas2)
 end
 
-@testset "Meshes.pointify(boundary)" begin
+@testitem "PointBoundary Meshes.pointify()" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
     pointified = Meshes.pointify(b)
     @test length(pointified) == N
     @test all(pointified .== points)
 
-    # Test with multiple surfaces
     points2 = rand(Point, N)
     surf2 = PointSurface(points2)
     b[:surface2] = surf2
@@ -122,23 +116,23 @@ end
     @test all(pointified .== vcat(points, points2))
 end
 
-@testset "Meshes.nelements(boundary)" begin
+@testitem "PointBoundary Meshes.nelements()" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
     @test Meshes.nelements(b) == N
 
-    # Test with multiple surfaces
     points2 = rand(Point, N ÷ 2)
     surf2 = PointSurface(points2)
     b[:surface2] = surf2
     @test Meshes.nelements(b) == N + N ÷ 2
 end
 
-@testset "delete!(boundary, name)" begin
+@testitem "PointBoundary delete!()" setup=[TestData, CommonImports] begin
+    N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
 
-    # Add additional surfaces
     points2 = rand(Point, N)
     b[:surface2] = PointSurface(points2)
     points3 = rand(Point, N)
@@ -147,30 +141,27 @@ end
     @test length(b) == 3 * N
     @test hassurface(b, :surface2)
 
-    # Delete surface2
     delete!(b, :surface2)
     @test length(b) == 2 * N
     @test !hassurface(b, :surface2)
     @test hassurface(b, :surface1)
     @test hassurface(b, :surface3)
 
-    # Delete surface3
     delete!(b, :surface3)
     @test length(b) == N
     @test !hassurface(b, :surface3)
     @test hassurface(b, :surface1)
 end
 
-@testset "names(boundary)" begin
+@testitem "PointBoundary names()" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
 
-    # Single surface
     surface_names = collect(names(b))
     @test length(surface_names) == 1
     @test :surface1 in surface_names
 
-    # Multiple surfaces
     b[:surface2] = PointSurface(rand(Point, N))
     b[:mysurface] = PointSurface(rand(Point, N))
     surface_names = collect(names(b))
@@ -180,17 +171,16 @@ end
     @test :mysurface in surface_names
 end
 
-@testset "surfaces(boundary)" begin
+@testitem "PointBoundary surfaces()" setup=[TestData, CommonImports] begin
+    N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
 
-    # Single surface
     surfs = collect(values(surfaces(b)))
     @test length(surfs) == 1
     @test surfs[1] isa PointSurface
     @test length(surfs[1]) == N
 
-    # Multiple surfaces
     points2 = rand(Point, N ÷ 2)
     surf2 = PointSurface(points2)
     b[:surface2] = surf2
@@ -206,7 +196,8 @@ end
     @test total_points == N + N ÷ 2 + N * 2
 end
 
-@testset "Pretty Printing" begin
+@testitem "PointBoundary Pretty Printing" setup=[TestData, CommonImports] begin
+    N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
     io = IOBuffer()
@@ -217,7 +208,6 @@ end
     @test contains(output, "Surfaces")
     @test contains(output, "surface1")
 
-    # Test with multiple surfaces
     points2 = rand(Point, N)
     b[:surface2] = PointSurface(points2)
     b[:mysurface] = PointSurface(rand(Point, N))
