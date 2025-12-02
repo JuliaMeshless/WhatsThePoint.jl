@@ -83,19 +83,19 @@ end
 end
 
 @testset "discretize with SlakKosec (3D)" begin
-    # Create a small 3D tetrahedral boundary
-    points = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.5, 1.0, 0.0), (0.5, 0.5, 1.0)])
-    boundary = PointBoundary(points)
+    # Use STL file to get proper areas for isinside to work correctly
+    # SlakKosec requires spacing < distance to nearest boundary point, so use small spacing
+    bnd = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
     spacing = ConstantSpacing(0.5m)
 
     # Test discretize (creates new cloud)
-    cloud = discretize(boundary, spacing; alg=SlakKosec(), max_points=50)
+    cloud = discretize(bnd, spacing; alg=SlakKosec(), max_points=50)
     @test cloud isa PointCloud
     @test length(volume(cloud)) <= 50
-    @test length(boundary(cloud)) == length(points)
+    @test length(boundary(cloud)) == length(bnd)
 
     # Test discretize! (modifies existing cloud)
-    cloud2 = PointCloud(boundary)
+    cloud2 = PointCloud(bnd)
     @test length(volume(cloud2)) == 0
     discretize!(cloud2, spacing; alg=SlakKosec(), max_points=50)
     @test length(volume(cloud2)) <= 50
@@ -103,25 +103,17 @@ end
 end
 
 @testset "discretize with VanDerSandeFornberg (3D)" begin
-    # Create a small 3D box boundary
-    points =
-        Point.([
-            (0.0, 0.0, 0.0),
-            (1.0, 0.0, 0.0),
-            (1.0, 1.0, 0.0),
-            (0.0, 1.0, 0.0),
-            (0.5, 0.5, 1.0),
-        ])
-    boundary = PointBoundary(points)
-    spacing = ConstantSpacing(0.5m)
+    # Use STL file to get proper areas for isinside to work correctly
+    bnd = PointBoundary(joinpath(@__DIR__, "data", "box.stl"))
+    spacing = ConstantSpacing(5.0m)
 
     # Test discretize
-    cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100)
+    cloud = discretize(bnd, spacing; alg=VanDerSandeFornberg(), max_points=100)
     @test cloud isa PointCloud
     @test length(volume(cloud)) <= 100
 
     # Test discretize!
-    cloud2 = PointCloud(boundary)
+    cloud2 = PointCloud(bnd)
     discretize!(cloud2, spacing; alg=VanDerSandeFornberg(), max_points=100)
     @test length(volume(cloud2)) <= 100
     @test length(volume(cloud2)) > 0

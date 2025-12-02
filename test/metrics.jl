@@ -75,7 +75,7 @@ end
 
     @testset "metrics with minimal cloud" begin
         # Test with a small manually created cloud
-        points = [Point(i * 1.0m, 0.0m, 0.0m) for i in 1:25]
+        points = Point.([(i * 1.0, 0.0, 0.0) for i in 1:25])
         small_cloud = PointCloud(PointBoundary(points))
 
         # Should work with k smaller than total points

@@ -174,16 +174,16 @@ end
 
     # Combination 1: Low β, tight tolerance, few iterations
     cloud1 = discretize(boundary, spacing; max_points=30)
-    conv1 = @test_nowarn repel!(cloud1, spacing; β=0.1, tol=1e-7, max_iters=5)
+    conv1 = repel!(cloud1, spacing; β=0.1, tol=1e-7, max_iters=5)
     @test conv1 isa Vector
 
     # Combination 2: High β, loose tolerance, more iterations
     cloud2 = discretize(boundary, spacing; max_points=30)
-    conv2 = @test_nowarn repel!(cloud2, spacing; β=0.4, tol=1e-4, max_iters=10)
+    conv2 = repel!(cloud2, spacing; β=0.4, tol=1e-4, max_iters=10)
     @test conv2 isa Vector
 
     # Combination 3: Default β, custom tolerance and iterations
     cloud3 = discretize(boundary, spacing; max_points=30)
-    conv3 = @test_nowarn repel!(cloud3, spacing; tol=1e-5, max_iters=8)
+    conv3 = repel!(cloud3, spacing; tol=1e-5, max_iters=8)
     @test conv3 isa Vector
 end

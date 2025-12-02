@@ -1,5 +1,7 @@
 using WhatsThePoint
 using Meshes
+using Meshes: Euclidean
+using Unitful
 using Unitful: m
 using LinearAlgebra
 
@@ -96,23 +98,23 @@ end
 
     k = 3
     method = KNearestSearch(cloud, k)
-    dists = searchdists(cloud, method)
+    results = searchdists(cloud, method)
 
     @testset "Return type and structure" begin
-        @test dists isa Vector
-        @test length(dists) == N
-        @test all(length(d) == k for d in dists)
+        @test results isa Vector
+        @test length(results) == N
+        @test all(length(idxs) == k && length(ds) == k for (idxs, ds) in results)
     end
 
     @testset "Distance properties" begin
         # All distances should be non-negative
-        @test all(all(d >= 0 for d in ds) for ds in dists)
+        @test all(all(d >= 0.0m for d in ds) for (_, ds) in results)
 
         # Distance to self should be zero (first element)
-        @test all(dists[i][1] ≈ 0 atol=1e-10 for i in 1:N)
+        @test all(isapprox(ds[1], 0.0m; atol=1e-10m) for (_, ds) in results)
 
         # Distances should be sorted (nearest to farthest)
-        @test all(issorted(d) for d in dists)
+        @test all(issorted(ds) for (_, ds) in results)
     end
 end
 
@@ -122,11 +124,11 @@ end
 
     k = 4
     method = KNearestSearch(boundary, k)
-    dists = searchdists(boundary, method)
+    results = searchdists(boundary, method)
 
-    @test dists isa Vector
-    @test length(dists) == N
-    @test all(all(d >= 0 for d in ds) for ds in dists)
+    @test results isa Vector
+    @test length(results) == N
+    @test all(all(d >= 0.0m for d in ds) for (_, ds) in results)
 end
 
 @testset "searchdists with PointSurface" begin
@@ -135,33 +137,35 @@ end
 
     k = 5
     method = KNearestSearch(surf, k)
-    dists = searchdists(surf, method)
+    results = searchdists(surf, method)
 
-    @test dists isa Vector
-    @test length(dists) == N
-    @test all(all(d >= 0 for d in ds) for ds in dists)
+    @test results isa Vector
+    @test length(results) == N
+    @test all(all(d >= 0.0m for d in ds) for (_, ds) in results)
 end
 
 @testset "searchdists with Vec point" begin
-    # Create a simple point cloud
+    # Create a simple 3D point cloud (rand(Point, N) returns 3D points with units)
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
 
     k = 3
     method = KNearestSearch(cloud, k)
 
-    # Test with a Vec point (this uses Meshes.Vec which is a StaticArray)
-    test_point = Vec(0.5, 0.5)
-    dists = searchdists(test_point, method)
+    # Test with a 3D Vec point (must match cloud dimensionality)
+    test_point = Vec(0.5m, 0.5m, 0.5m)
+    idxs, dists = searchdists(test_point, method)
 
     @testset "Return type and structure" begin
-        @test dists isa Vector
+        @test idxs isa AbstractVector{Int}
+        @test dists isa AbstractVector
+        @test length(idxs) == k
         @test length(dists) == k
     end
 
     @testset "Distance properties" begin
         # All distances should be non-negative
-        @test all(d >= 0 for d in dists)
+        @test all(d >= 0.0m for d in dists)
 
         # Distances should be sorted (nearest to farthest)
         @test issorted(dists)
@@ -182,10 +186,10 @@ end
         @test all(length(n) == k for n in neighbors)
 
         # Test searchdists
-        dists = searchdists(cloud, method)
-        @test length(dists) == length(cloud)
-        @test all(length(d) == k for d in dists)
-        @test all(all(d >= 0 for d in ds) for ds in dists)
+        results = searchdists(cloud, method)
+        @test length(results) == length(cloud)
+        @test all(length(ds) == k for (_, ds) in results)
+        @test all(all(d >= 0.0m for d in ds) for (_, ds) in results)
     end
 end
 
@@ -212,8 +216,8 @@ end
         @test all(length(n) == 1 for n in neighbors)
         @test all(neighbors[i][1] == i for i in 1:N)
 
-        dists = searchdists(cloud, method)
-        @test all(dists[i][1] ≈ 0 atol=1e-10 for i in 1:N)
+        results = searchdists(cloud, method)
+        @test all(isapprox(ds[1], 0.0m; atol=1e-10m) for (_, ds) in results)
     end
 end
 
@@ -232,10 +236,10 @@ end
     end
 
     @testset "searchdists with units" begin
-        dists = searchdists(cloud, method)
-        @test length(dists) == N
-        @test all(length(d) == k for d in dists)
+        results = searchdists(cloud, method)
+        @test length(results) == N
+        @test all(length(ds) == k for (_, ds) in results)
         # Distances should have units
-        @test all(all(d isa Unitful.Length for d in ds) for ds in dists)
+        @test all(all(d isa Unitful.Length for d in ds) for (_, ds) in results)
     end
 end
