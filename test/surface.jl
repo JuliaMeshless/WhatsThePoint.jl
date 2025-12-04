@@ -111,7 +111,7 @@ end
 @testitem "PointSurface Surface Operations" setup=[TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
     split_surface!(boundary, 80°)
-    @test length(surfaces(boundary)) == 4
+    @test length(namedsurfaces(boundary)) == 4
 end
 
 @testitem "PointSurface Pretty Printing" setup=[TestData, CommonImports] begin

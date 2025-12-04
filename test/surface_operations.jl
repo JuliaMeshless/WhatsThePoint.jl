@@ -23,12 +23,12 @@ end
     add_surface!(b, points2, :surface2)
     add_surface!(b, points3, :surface3)
 
-    @test length(surfaces(b)) == 3
+    @test length(namedsurfaces(b)) == 3
     original_total = length(b)
 
     combine_surfaces!(b, :surface2, :surface3)
 
-    @test length(surfaces(b)) == 2
+    @test length(namedsurfaces(b)) == 2
     @test hassurface(b, :surface1)
     @test hassurface(b, :surface2)
     @test !hassurface(b, :surface3)
@@ -49,7 +49,7 @@ end
 
     combine_surfaces!(b, :surface2, :surface3, :surface4)
 
-    @test length(surfaces(b)) == 2
+    @test length(namedsurfaces(b)) == 2
     @test hassurface(b, :surface1)
     @test hassurface(b, :surface2)
     @test !hassurface(b, :surface3)
@@ -67,11 +67,11 @@ end
 
 @testitem "split_surface! - single surface" setup=[TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
-    @test length(surfaces(boundary)) == 1
+    @test length(namedsurfaces(boundary)) == 1
 
     split_surface!(boundary, 80°)
 
-    @test length(surfaces(boundary)) > 1
+    @test length(namedsurfaces(boundary)) > 1
 
     @test length(boundary) == 24780
 end
@@ -81,7 +81,7 @@ end
 
     split_surface!(boundary, :surface1, 80°)
 
-    @test length(surfaces(boundary)) > 1
+    @test length(namedsurfaces(boundary)) > 1
 
     @test length(boundary) == 24780
 end
@@ -95,7 +95,7 @@ end
 
     split_surface!(boundary, surf, 80°)
 
-    @test length(surfaces(boundary)) > 1
+    @test length(namedsurfaces(boundary)) > 1
 
     @test length(boundary) == original_length
 end
@@ -103,11 +103,11 @@ end
 @testitem "split_surface! - with PointCloud" setup=[TestData, CommonImports] begin
     using WhatsThePoint: boundary
     cloud = PointCloud(TestData.BIFURCATION_PATH)
-    @test length(surfaces(cloud)) == 1
+    @test length(namedsurfaces(cloud)) == 1
 
     split_surface!(cloud, 80°)
 
-    @test length(surfaces(cloud)) > 1
+    @test length(namedsurfaces(cloud)) > 1
 
     @test length(boundary(cloud)) == 24780
 end
@@ -117,7 +117,7 @@ end
     boundary = PointBoundary(rand(Point, N))
     add_surface!(boundary, rand(Point, N), :surface2)
 
-    @test length(surfaces(boundary)) == 2
+    @test length(namedsurfaces(boundary)) == 2
     @test_throws AssertionError split_surface!(boundary, 80°)
 end
 
@@ -135,8 +135,8 @@ end
     split_surface!(boundary1, 45°)
     split_surface!(boundary2, 60°)
 
-    n_surfaces_45 = length(surfaces(boundary1))
-    n_surfaces_60 = length(surfaces(boundary2))
+    n_surfaces_45 = length(namedsurfaces(boundary1))
+    n_surfaces_60 = length(namedsurfaces(boundary2))
 
     @test n_surfaces_45 >= n_surfaces_60
     @test n_surfaces_45 > 1
@@ -146,7 +146,7 @@ end
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
 
     @test_nowarn split_surface!(boundary, 80°; k=15)
-    @test length(surfaces(boundary)) > 1
+    @test length(namedsurfaces(boundary)) > 1
 end
 
 @testitem "surface operations integration" setup=[TestData, CommonImports] begin
@@ -154,7 +154,7 @@ end
     original_length = length(boundary)
 
     split_surface!(boundary, 80°)
-    num_surfaces_after_split = length(surfaces(boundary))
+    num_surfaces_after_split = length(namedsurfaces(boundary))
     @test num_surfaces_after_split > 1
 
     surface_names = collect(names(boundary))
@@ -162,7 +162,7 @@ end
 
     if length(surface_names) >= 2
         combine_surfaces!(boundary, surface_names[1], surface_names[2])
-        @test length(surfaces(boundary)) == num_surfaces_after_split - 1
+        @test length(namedsurfaces(boundary)) == num_surfaces_after_split - 1
     end
 
     @test length(boundary) == original_length

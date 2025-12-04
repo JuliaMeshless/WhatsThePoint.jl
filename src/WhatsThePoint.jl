@@ -61,7 +61,7 @@ include("volume.jl")
 export PointVolume
 
 include("boundary.jl")
-export PointBoundary, surfaces, names, normals, areas, hassurface
+export PointBoundary, surfaces, namedsurfaces, names, normals, areas, hassurface
 
 include("cloud.jl")
 export PointCloud, boundary, volume

@@ -41,7 +41,7 @@ end
 function isinside(
     testpoint::Point{M}, cloud::Union{PointCloud{M},PointBoundary{M}}
 ) where {M<:Manifold}
-    g = mapreduce(s -> _greens(testpoint, s), +, values(surfaces(cloud)))
+    g = mapreduce(s -> _greens(testpoint, s), +, surfaces(cloud))
     # include the -4π missing from _greens in the inequality here
     return g < -2π ? true : false
 end

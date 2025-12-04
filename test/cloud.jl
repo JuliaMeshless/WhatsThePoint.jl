@@ -114,8 +114,8 @@ end
     @test volume(cloud) isa PointVolume
     @test volume(cloud) === cloud.volume
 
-    @test surfaces(cloud) isa LittleDict
-    @test :surface1 in keys(surfaces(cloud))
+    @test namedsurfaces(cloud) isa LittleDict
+    @test :surface1 in keys(namedsurfaces(cloud))
 end
 
 @testitem "PointCloud hassurface()" setup = [TestData, CommonImports] begin
