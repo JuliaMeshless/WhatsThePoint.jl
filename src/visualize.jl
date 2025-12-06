@@ -21,7 +21,7 @@ function visualize(
         z = zeros(T, N)
         prev = 0
         # plot surfaces
-        for (i, (n, s)) in enumerate(zip(names(cloud), surfs))
+        for (i, (n, s)) in enumerate(zip(names(cloud), values(surfs)))
             next = length(s)
             ids = (1:next) .+ (prev)
             prev = last(ids)
@@ -133,7 +133,7 @@ function visualize(
         z = zeros(T, N)
         prev = 0
         # plot surfaces
-        for (i, (n, s)) in enumerate(zip(names(cloud), surfs))
+        for (i, (n, s)) in enumerate(zip(names(cloud), values(surfs)))
             next = length(s)
             ids = (1:next) .+ (prev)
             prev = last(ids)
@@ -343,7 +343,7 @@ function visualize(cloud::PointBoundary{𝔼{2},C}; size=(1000, 1000), kwargs...
         y = zeros(T, N)
         prev = 0
         # plot surfaces
-        for (i, (n, s)) in enumerate(zip(names(cloud), surfs))
+        for (i, (n, s)) in enumerate(zip(names(cloud), values(surfs)))
             next = length(s)
             ids = (1:next) .+ (prev)
             prev = last(ids)
@@ -421,7 +421,7 @@ function visualize(cloud::PointCloud{𝔼{2},C}; size=(1000, 1000), kwargs...) w
         y = zeros(T, N)
         prev = 0
         # plot surfaces
-        for (i, (n, s)) in enumerate(zip(names(cloud), surfs))
+        for (i, (n, s)) in enumerate(zip(names(cloud), values(surfs)))
             next = length(s)
             ids = (1:next) .+ (prev)
             prev = last(ids)

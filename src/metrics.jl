@@ -1,7 +1,7 @@
 function metrics(cloud::PointCloud; k=20)
     method = KNearestSearch(cloud, k)
-    _, r = searchdists(cloud, method)
-    r = map(x -> x[2:end], r) # strip the first element, which is the point itself
+    results = searchdists(cloud, method)
+    r = map(x -> x[2][2:end], results) # x[2] = distances, [2:end] skips self
     println("Cloud Metrics")
     println("-------------")
     println("avg. distance to $k nearest neighbors: $(mean(mean.(r)))")

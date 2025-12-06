@@ -17,5 +17,5 @@ function Meshes.searchdists(
 end
 
 function Meshes.searchdists(p::Vec, method::KNearestSearch)
-    return searchdists(p, method)
+    return searchdists(Point(Tuple(p)), method)
 end
