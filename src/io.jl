@@ -92,11 +92,12 @@ end
 
 function addfieldvtk!(vtkfile, scalarname::String, data)
     # Convert vector of SVectors to matrix for WriteVTK
-    if eltype(data) <: AbstractVector
-        data = reduce(hcat, data)
-    end
+    data = _hcat_data(data)
     return vtkfile[scalarname, VTKPointData()] = data
 end
+
+_hcat_data(data) = data
+_hcat_data(data::AbstractVector) = reduce(hcat, data)
 
 function savevtk!(vtkfile)
     return vtk_save(vtkfile)
