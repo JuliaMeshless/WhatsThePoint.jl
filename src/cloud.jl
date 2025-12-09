@@ -42,14 +42,15 @@ end
 Base.names(cloud::PointCloud) = names(boundary(cloud))
 
 to(cloud::PointCloud) = to.(pointify(cloud))
-function to(surfaces::LittleDict{Symbol,<:AbstractSurface})
-    return mapreduce(to, vcat, values(surfaces))
+function to(namedsurfaces::LittleDict{Symbol,<:AbstractSurface})
+    return mapreduce(to, vcat, values(namedsurfaces))
 end
 boundary(cloud::PointCloud) = cloud.boundary
 volume(cloud::PointCloud) = cloud.volume
+namedsurfaces(cloud::PointCloud) = namedsurfaces(boundary(cloud))
 surfaces(cloud::PointCloud) = surfaces(boundary(cloud))
-normal(cloud::PointCloud) = mapreduce(normal, vcat, values(surfaces(cloud)))
-area(cloud::PointCloud) = mapreduce(area, vcat, values(surfaces(cloud)))
+normal(cloud::PointCloud) = mapreduce(normal, vcat, surfaces(cloud))
+area(cloud::PointCloud) = mapreduce(area, vcat, surfaces(cloud))
 
 hassurface(cloud::PointCloud, name) = hassurface(boundary(cloud), name)
 
@@ -73,10 +74,10 @@ function Base.show(io::IO, ::MIME"text/plain", cloud::PointCloud{Dim,T}) where {
     println(io, "├─$(length(cloud)) points")
     has_vol = !iszero(length(cloud.volume))
     vert = has_vol ? "│ " : "  "
-    if !isnothing(surfaces(cloud))
+    if !isnothing(namedsurfaces(cloud))
         char = has_vol ? "├" : "└"
         println(io, char * "─Boundary: $(length(boundary(cloud))) points")
-        N = length(surfaces(cloud))
+        N = length(namedsurfaces(cloud))
         for (i, name) in enumerate(names(boundary(cloud)))
             char = i < N ? "├" : "└"
             println(io, vert * char * "─$(name)")

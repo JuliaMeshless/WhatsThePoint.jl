@@ -41,19 +41,20 @@ centroid(boundary::PointBoundary) = centroid(PointSet(Meshes.pointify(boundary))
 boundingbox(boundary::PointBoundary) = boundingbox(Meshes.pointify(boundary))
 
 boundary(boundary::PointBoundary) = boundary
+namedsurfaces(boundary::PointBoundary) = boundary.surfaces
 surfaces(boundary::PointBoundary) = values(boundary.surfaces)
 normal(boundary::PointBoundary) = mapreduce(normal, vcat, surfaces(boundary))
 area(boundary::PointBoundary) = mapreduce(area, vcat, surfaces(boundary))
 
-hassurface(boundary::PointBoundary, name) = haskey(boundary.surfaces, name)
+hassurface(boundary::PointBoundary, name) = haskey(namedsurfaces(boundary), name)
 
 Meshes.pointify(boundary::PointBoundary) = mapreduce(pointify, vcat, surfaces(boundary))
 Meshes.nelements(boundary::PointBoundary) = length(boundary)
 
 Base.length(boundary::PointBoundary) = sum(length, surfaces(boundary))
-Base.names(boundary::PointBoundary) = keys(boundary.surfaces)
+Base.names(boundary::PointBoundary) = collect(keys(namedsurfaces(boundary)))
 Base.size(boundary::PointBoundary) = (length(boundary),)
-Base.getindex(boundary::PointBoundary, name::Symbol) = boundary.surfaces[name]
+Base.getindex(boundary::PointBoundary, name::Symbol) = namedsurfaces(boundary)[name]
 function Base.getindex(boundary::PointBoundary, index::Int)
     if index > length(boundary)
         throw(
@@ -70,7 +71,7 @@ function Base.getindex(boundary::PointBoundary, index::Int)
 end
 function Base.setindex!(boundary::PointBoundary, surf::PointSurface, name::Symbol)
     hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))
-    boundary.surfaces[name] = surf
+    namedsurfaces(boundary)[name] = surf
     return nothing
 end
 
@@ -78,15 +79,15 @@ function Base.iterate(boundary::PointBoundary, state=1)
     return state > length(boundary) ? nothing : (boundary[state], state + 1)
 end
 
-Base.delete!(boundary::PointBoundary, name::Symbol) = delete!(boundary.surfaces, name)
+Base.delete!(boundary::PointBoundary, name::Symbol) = delete!(namedsurfaces(boundary), name)
 
 # pretty printing
 function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim,T}) where {Dim,T}
     println(io, "PointBoundary{$Dim, $T}")
     println(io, "├─$(length(boundary)) points")
-    if !isnothing(surfaces(boundary))
+    if !isnothing(namedsurfaces(boundary))
         println(io, "└─Surfaces")
-        N = length(surfaces(boundary))
+        N = length(namedsurfaces(boundary))
         for (i, name) in enumerate(names(boundary))
             i < N ? println(io, "  ├─$(name)") : println(io, "  └─$(name)")
         end

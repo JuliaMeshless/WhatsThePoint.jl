@@ -30,6 +30,7 @@ using Makie:
     arrows!,
     DataAspect
 using Graphs, SimpleWeightedGraphs
+using Distances: Distances, Euclidean, evaluate
 
 using Unitful
 
@@ -60,7 +61,7 @@ include("volume.jl")
 export PointVolume
 
 include("boundary.jl")
-export PointBoundary, surfaces, names, normals, areas, hassurface
+export PointBoundary, surfaces, namedsurfaces, names, normals, areas, hassurface
 
 include("cloud.jl")
 export PointCloud, boundary, volume
@@ -71,7 +72,7 @@ export compute_normals, orient_normals!, update_normals!, compute_edge, compute_
 include("neighbors.jl")
 
 include("surface_operations.jl")
-export generate_shadows, add_surface!, combine_surfaces!, split_surface!, rename!
+export generate_shadows, combine_surfaces!, split_surface!, rename!
 
 include("isinside.jl")
 export isinside

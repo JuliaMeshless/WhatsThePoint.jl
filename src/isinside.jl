@@ -54,6 +54,6 @@ function _greens(testpoint::Point, surf::PointSurface)
             return area * dist ⋅ normal / norm(dist)^3
         end
     end
-    g = tmapreduce(_greens_kernel, +, surf)
+    g = tmapreduce(_greens_kernel, +, surf; init=0.0)
     return g # true ∇G⋅n eval should be divided by -4π here
 end

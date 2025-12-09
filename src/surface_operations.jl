@@ -1,18 +1,3 @@
-"""
-    add_surface!(boundary::PointBoundary, points::Vector{<:Point}
-
-Add a surface to an existing boundary. Creates a new surface, unless a name of an existing
-surface is given and it is added to that.
-
-"""
-function add_surface!(boundary::PointBoundary, points::Vector{<:Point}, name::Symbol)
-    hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))
-    normals = compute_normals(points)
-    areas = zeros(length(points)) * Unitful.m^2
-    boundary[name] = PointSurface(points, normals, areas)
-    return nothing
-end
-
 function combine_surfaces!(boundary::PointBoundary, surfs...)
     for surf in surfs
         @assert hassurface(boundary, surf) "Surface does not exist. Check spelling."
@@ -34,7 +19,7 @@ function combine_surfaces!(boundary::PointBoundary, surfs...)
 end
 
 function split_surface!(cloud::Union{PointCloud,PointBoundary}, angle::Angle; k::Int=10)
-    @assert length(surfaces(cloud)) == 1 "More than 1 surface in this cloud. Please specify a target surface."
+    @assert length(namedsurfaces(cloud)) == 1 "More than 1 surface in this cloud. Please specify a target surface."
     target_surf = only(names(boundary(cloud)))
     return split_surface!(cloud, target_surf, angle; k=k)
 end
@@ -44,7 +29,7 @@ function split_surface!(
 )
     @assert hassurface(cloud, target_surf) "Target surface not found in cloud."
     surf = cloud[target_surf]
-    delete!(boundary(cloud).surfaces, target_surf)
+    delete!(namedsurfaces(boundary(cloud)), target_surf)
     return split_surface!(cloud, surf, angle; k=k)
 end
 

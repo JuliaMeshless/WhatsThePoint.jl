@@ -30,7 +30,8 @@ function exportvtk(
     names::Vector;
     triangulate=false,
 ) where {V<:AbstractVector}
-    p = reduce(hcat, points)
+    # Strip units from points for VTK compatibility
+    p = reduce(hcat, ustrip.(points))
     cells = createvtkcells(p, triangulate)
     vtkfile = createvtkfile(filename, p, cells)
     for (name, field) in zip(names, data)
@@ -90,8 +91,13 @@ function addgrid!(vtmfile, grid)
 end
 
 function addfieldvtk!(vtkfile, scalarname::String, data)
+    # Convert vector of SVectors to matrix for WriteVTK
+    data = _hcat_data(data)
     return vtkfile[scalarname, VTKPointData()] = data
 end
+
+_hcat_data(data) = data
+_hcat_data(data::AbstractVector) = reduce(hcat, data)
 
 function savevtk!(vtkfile)
     return vtk_save(vtkfile)
