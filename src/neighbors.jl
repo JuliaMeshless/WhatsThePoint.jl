@@ -15,7 +15,3 @@ function Meshes.searchdists(
 )
     return searchdists.(pointify(cloud), Ref(method))
 end
-
-function Meshes.searchdists(p::Vec, method::KNearestSearch)
-    return searchdists(Point(Tuple(p)), method)
-end

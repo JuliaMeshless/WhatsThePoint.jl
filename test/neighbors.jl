@@ -135,30 +135,6 @@ end
     @test all(all(d >= 0.0m for d in ds) for (_, ds) in results)
 end
 
-@testitem "searchdists with Vec point" setup = [TestData, CommonImports] begin
-    N = 20
-    points = rand(Point, N)
-    cloud = PointCloud(PointBoundary(points))
-
-    k = 3
-    method = KNearestSearch(cloud, k)
-
-    test_point = Vec(0.5m, 0.5m, 0.5m)
-    idxs, dists = searchdists(test_point, method)
-
-    @testset "Return type and structure" begin
-        @test idxs isa AbstractVector{Int}
-        @test dists isa AbstractVector
-        @test length(idxs) == k
-        @test length(dists) == k
-    end
-
-    @testset "Distance properties" begin
-        @test all(d >= 0.0m for d in dists)
-        @test issorted(dists)
-    end
-end
-
 @testitem "KNearestSearch with real geometry" setup = [TestData, CommonImports] begin
     cloud = PointCloud(TestData.BOX_PATH)
 
