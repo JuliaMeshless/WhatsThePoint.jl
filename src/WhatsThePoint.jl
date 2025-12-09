@@ -72,7 +72,7 @@ export compute_normals, orient_normals!, update_normals!, compute_edge, compute_
 include("neighbors.jl")
 
 include("surface_operations.jl")
-export generate_shadows, add_surface!, combine_surfaces!, split_surface!, rename!
+export generate_shadows, combine_surfaces!, split_surface!, rename!
 
 include("isinside.jl")
 export isinside

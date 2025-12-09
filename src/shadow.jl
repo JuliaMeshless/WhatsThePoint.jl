@@ -6,15 +6,15 @@ struct ShadowPoints{O,T}
 end
 
 ShadowPoints(Δ::T, order) where {T<:Number} = ShadowPoints(_ -> Δ, order)
+(s::ShadowPoints)(p) = s.Δ(p)
 
 function generate_shadows(points, normals, shadow::ShadowPoints)
-    Δ = shadow.Δ
     return map(points, normals) do p, n
         # Handle both Point objects and raw coordinate vectors
         coords = p isa Point ? to(p) : p
         # For Δ function evaluation, convert coords back to Point if needed
         p_for_func = p isa Point ? p : Point(p...)
-        Δ_val = Δ(p_for_func)
+        Δ_val = shadow(p_for_func)
         shadow_coords = coords - Δ_val * n
         return Point(shadow_coords...)
     end

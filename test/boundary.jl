@@ -33,17 +33,18 @@ end
     end
 end
 
-@testitem "PointBoundary add_surface!" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary setindex!" setup=[TestData, CommonImports] begin
     N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
 
     points2 = rand(Point, N)
-    @test_nowarn add_surface!(b, points2, :newsurface)
+    surf2 = PointSurface(points2)
+    @test_nowarn b[:newsurface] = surf2
     @test hassurface(b, :newsurface)
     @test point(b[:newsurface]) == points2
 
-    @test_throws ArgumentError add_surface!(b, points2, :newsurface)
+    @test_throws ArgumentError b[:newsurface] = surf2
 end
 
 @testitem "PointBoundary to()" setup=[TestData, CommonImports] begin

@@ -1,14 +1,15 @@
-@testitem "add_surface!" setup=[TestData, CommonImports] begin
+@testitem "setindex!" setup=[TestData, CommonImports] begin
     N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
 
     points2 = rand(Point, N)
-    @test_nowarn add_surface!(b, points2, :newsurface)
+    surf2 = PointSurface(points2)
+    @test_nowarn b[:newsurface] = surf2
     @test hassurface(b, :newsurface)
     @test point(b[:newsurface]) == points2
 
-    @test_throws ArgumentError add_surface!(b, points2, :newsurface)
+    @test_throws ArgumentError b[:newsurface] = surf2
 
     @test point(b[:surface1]) == points1
 end
@@ -20,8 +21,8 @@ end
     points3 = rand(Point, N)
 
     b = PointBoundary(points1)
-    add_surface!(b, points2, :surface2)
-    add_surface!(b, points3, :surface3)
+    b[:surface2] = PointSurface(points2)
+    b[:surface3] = PointSurface(points3)
 
     @test length(namedsurfaces(b)) == 3
     original_total = length(b)
@@ -41,9 +42,9 @@ end
 @testitem "combine_surfaces! - multiple surfaces" setup=[TestData, CommonImports] begin
     N = 10
     b = PointBoundary(rand(Point, N))
-    add_surface!(b, rand(Point, N), :surface2)
-    add_surface!(b, rand(Point, N), :surface3)
-    add_surface!(b, rand(Point, N), :surface4)
+    b[:surface2] = PointSurface(rand(Point, N))
+    b[:surface3] = PointSurface(rand(Point, N))
+    b[:surface4] = PointSurface(rand(Point, N))
 
     original_total = length(b)
 
@@ -60,7 +61,7 @@ end
 @testitem "combine_surfaces! - nonexistent surface" setup=[TestData, CommonImports] begin
     N = 10
     b = PointBoundary(rand(Point, N))
-    add_surface!(b, rand(Point, N), :surface2)
+    b[:surface2] = PointSurface(rand(Point, N))
 
     @test_throws AssertionError combine_surfaces!(b, :surface1, :nonexistent)
 end
@@ -115,7 +116,7 @@ end
 @testitem "split_surface! - multiple surfaces error" setup=[TestData, CommonImports] begin
     N = 10
     boundary = PointBoundary(rand(Point, N))
-    add_surface!(boundary, rand(Point, N), :surface2)
+    boundary[:surface2] = PointSurface(rand(Point, N))
 
     @test length(namedsurfaces(boundary)) == 2
     @test_throws AssertionError split_surface!(boundary, 80°)

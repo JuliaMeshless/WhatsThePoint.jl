@@ -33,13 +33,31 @@ end
     @test s.base_size == base_size
     @test s.growth_rate == growth_rate
 
+    # Test specific value at center of unit cube
+    # Formula: base_size * x / (base_size * inv_growth + x)
+    # where inv_growth = 1 - (growth_rate - 1) = 0.5
+    # and x = distance to nearest boundary = sqrt(0.75)m for center point
     test_point = Point(0.5, 0.5, 0.5)
     spacing_value = s(test_point)
-    @test spacing_value > 0m
+    x_center = sqrt(0.75)m
+    inv_growth = 1 - (growth_rate - 1)
+    expected_center = base_size * x_center / (base_size * inv_growth + x_center)
+    @test spacing_value ≈ expected_center
     @test spacing_value isa typeof(base_size)
 
+    # Test close point - distance to (0,0,0) is 0.01m
     close_point = Point(0.01, 0.0, 0.0)
+    x_close = 0.01m
+    expected_close = base_size * x_close / (base_size * inv_growth + x_close)
+    @test s(close_point) ≈ expected_close
+
+    # Test far point - distance to nearest corner (1,1,1) is sqrt(48)m
     far_point = Point(5.0, 5.0, 5.0)
+    x_far = sqrt((5 - 1)^2 + (5 - 1)^2 + (5 - 1)^2)m
+    expected_far = base_size * x_far / (base_size * inv_growth + x_far)
+    @test s(far_point) ≈ expected_far
+
+    # Verify ordering still holds
     @test s(close_point) < s(far_point)
 end
 
@@ -49,10 +67,12 @@ end
     cloud = PointCloud(PointBoundary(points))
     spacing = ConstantSpacing(0.1m)
 
+    # Formula: (ceil(Int, extent[1] * 10 / Δx), ceil(Int, extent[2] * 10 / Δx))
+    # For unit tetrahedron: extent = (1m, 1m, 1m), Δx = 0.1m
+    # Expected: (ceil(1m * 10 / 0.1m), ceil(1m * 10 / 0.1m)) = (100, 100)
     ninit = WhatsThePoint.calculate_ninit(cloud, spacing)
     @test ninit isa Tuple{Int,Int}
-    @test ninit[1] > 0
-    @test ninit[2] > 0
+    @test ninit == (100, 100)
 end
 
 @testitem "calculate_ninit 2D" setup=[TestData, CommonImports] begin
@@ -60,9 +80,12 @@ end
     cloud = PointCloud(PointBoundary(points))
     spacing = ConstantSpacing(0.1m)
 
+    # Formula: ceil(Int, extent[1] * 10 / Δx)
+    # For unit square: extent[1] = 1m, Δx = 0.1m
+    # Expected: ceil(1m * 10 / 0.1m) = 100
     ninit = WhatsThePoint.calculate_ninit(cloud, spacing)
     @test ninit isa Int
-    @test ninit > 0
+    @test ninit == 100
 end
 
 @testitem "discretize with SlakKosec (3D)" setup=[TestData, CommonImports] begin

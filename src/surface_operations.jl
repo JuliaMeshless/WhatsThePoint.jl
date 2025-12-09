@@ -1,18 +1,3 @@
-"""
-    add_surface!(boundary::PointBoundary, points::Vector{<:Point}
-
-Add a surface to an existing boundary. Creates a new surface, unless a name of an existing
-surface is given and it is added to that.
-
-"""
-function add_surface!(boundary::PointBoundary, points::Vector{<:Point}, name::Symbol)
-    hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))
-    normals = compute_normals(points)
-    areas = zeros(length(points)) * Unitful.m^2
-    boundary[name] = PointSurface(points, normals, areas)
-    return nothing
-end
-
 function combine_surfaces!(boundary::PointBoundary, surfs...)
     for surf in surfs
         @assert hassurface(boundary, surf) "Surface does not exist. Check spelling."

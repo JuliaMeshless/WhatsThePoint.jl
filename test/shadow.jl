@@ -6,15 +6,15 @@
 
     shadow0 = ShadowPoints(0.1u"m", 0)
     @test shadow0 isa ShadowPoints{0}
-    @test shadow0.Δ == 0.1u"m"
+    @test shadow0(Point(0.0u"m", 0.0u"m")) == 0.1u"m"
 
     shadow1 = ShadowPoints(0.2u"m", 1)
     @test shadow1 isa ShadowPoints{1}
-    @test shadow1.Δ == 0.2u"m"
+    @test shadow1(Point(0.0u"m", 0.0u"m")) == 0.2u"m"
 
     shadow2 = ShadowPoints(0.3u"m", 2)
     @test shadow2 isa ShadowPoints{2}
-    @test shadow2.Δ == 0.3u"m"
+    @test shadow2(Point(0.0u"m", 0.0u"m")) == 0.3u"m"
 
     Δ_func = p -> 0.5u"m"
     shadow_func = ShadowPoints(Δ_func)
