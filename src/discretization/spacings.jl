@@ -3,7 +3,9 @@ abstract type VariableSpacing <: AbstractSpacing end
 
 # Helper function for computing Euclidean distance between points
 # Used by variable spacing implementations
-distance(p1::Union{Point,Vec}, p2::Union{Point,Vec}) = evaluate(Euclidean(), p1, p2)
+# Requires Euclidean manifold - uses flat space distance metric
+distance(p1::Point{𝔼{N}}, p2::Point{𝔼{N}}) where {N} = evaluate(Euclidean(), p1, p2)
+distance(p1::Vec{N}, p2::Vec{N}) where {N} = evaluate(Euclidean(), p1, p2)
 
 """
     ConstantSpacing{L<:Unitful.Length} <: AbstractSpacing

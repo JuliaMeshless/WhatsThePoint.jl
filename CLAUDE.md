@@ -75,6 +75,21 @@ Spacing types in `spacings.jl`: ConstantSpacing, LogLike, Power
 
 ## Important Technical Details
 
+### Geometric Assumptions (Euclidean Manifolds Only)
+
+WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and `𝔼{3}`). The following functions have explicit Euclidean type constraints:
+
+- `compute_normals` / `orient_normals!` - Uses PCA and Euclidean dot products
+- `discretize` algorithms - Euclidean point generation
+- `repel!` - Euclidean distance-based repulsion
+- `isinside` (Green's function) - Euclidean norms
+- `distance` - Explicitly uses Euclidean metric
+- `generate_shadows` - Euclidean vector arithmetic
+
+**Coordinate Systems:** Any CRS is supported on Euclidean manifolds (Cartesian, Cylindrical, Polar, etc.). The Euclidean requirement is about geometric structure (flat space), not coordinate representation.
+
+**Future Extensions:** The type system is designed to support non-Euclidean geometries through multiple dispatch. To add spherical/hyperbolic manifolds, implement manifold-specific methods with appropriate geodesic operations.
+
 ### 2D vs 3D Algorithm Differences
 The discretization algorithms are dimension-specific:
 - 2D geometries: Must use `FornbergFlyer()`

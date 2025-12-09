@@ -1,16 +1,18 @@
 """
-    compute_normals(surf::PointSurface; k::Int=5)
+    compute_normals(surf::PointSurface{𝔼{N},C}; k::Int=5) where {N,C<:CRS}
 
 Estimate the normals of a set of points that form a surface. Uses the PCA approach from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
 
+Requires Euclidean manifold (`𝔼{2}` or `𝔼{3}`). This function assumes flat space geometry.
+
 """
-function compute_normals(surf::PointSurface; k::Int=5)
+function compute_normals(surf::PointSurface{𝔼{N},C}; k::Int=5) where {N,C<:CRS}
     k = k > length(surf) ? length(surf) : k
     points = point(surf)
     return compute_normals(points; k=k)
 end
 
-function compute_normals(points::AbstractVector{<:Point}; k::Int=5)
+function compute_normals(points::AbstractVector{<:Point{𝔼{N}}}; k::Int=5) where {N}
     k = k > length(points) ? length(points) : k
     search_method = KNearestSearch(points, k)
     return compute_normals(search_method, points)
@@ -18,28 +20,32 @@ end
 
 # TODO do not include points near edge.
 """
-    compute_normals(search_method::KNearestSearch, surf::PointSurface)
+    compute_normals(search_method::KNearestSearch, surf::PointSurface{𝔼{N},C}) where {N,C<:CRS}
 
 Estimate the normals of a set of points that form a surface. Uses the PCA approach from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
 
+Requires Euclidean manifold (`𝔼{2}` or `𝔼{3}`). This function assumes flat space geometry.
+
 """
-function compute_normals(search_method::KNearestSearch, surf::PointSurface)
+function compute_normals(search_method::KNearestSearch, surf::PointSurface{𝔼{N},C}) where {N,C<:CRS}
     return compute_normals(search_method, point(surf))
 end
 
-function compute_normals(search_method::KNearestSearch, points::AbstractVector{<:Point})
+function compute_normals(search_method::KNearestSearch, points::AbstractVector{<:Point{𝔼{N}}}) where {N}
     neighbors = search.(points, Ref(search_method))
     normals = tmap(n -> _compute_normal(points[n]), neighbors)
     return normals
 end
 
 """
-    update_normals!(surf::PointCloud; k::Int=5)
+    update_normals!(surf::PointSurface{𝔼{N},C}; k::Int=5) where {N,C<:CRS}
 
 Update the normals of the boundary of a surf. This is necessary whenever the points change for any reason.
 
+Requires Euclidean manifold (`𝔼{2}` or `𝔼{3}`). This function assumes flat space geometry.
+
 """
-function update_normals!(surf::PointSurface; k::Int=5)
+function update_normals!(surf::PointSurface{𝔼{N},C}; k::Int=5) where {N,C<:CRS}
     k = k > length(surf) ? length(surf) : k
     neighbors = search(surf, KNearestSearch(surf, k))
     normals = normal(surf)
@@ -47,7 +53,7 @@ function update_normals!(surf::PointSurface; k::Int=5)
     return tmap!(n -> _compute_normal(points[n]), normals, neighbors)
 end
 
-function _compute_normal(points::AbstractVector{<:Point})
+function _compute_normal(points::AbstractVector{<:Point{𝔼{N}}}) where {N}
     # from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
     v = ustrip.(to.(points))
     _, Q = eigen(Symmetric(cov(v)))
@@ -99,24 +105,26 @@ function orient_normals!(
 end
 
 """
-    orient_normals!(normals::Vector{<:AbstractVector}, points; k::Int=5)
+    orient_normals!(normals::AbstractVector{<:AbstractVector}, points::AbstractVector{<:Point{𝔼{N}}}; k::Int=5) where {N}
 
 Correct the orientation of normals on a surface as the [compute_normals](@ref) function does not guarantee if the normal is inward or outward facing. Uses the approach from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
 
+Requires Euclidean manifold (`𝔼{2}` or `𝔼{3}`). This function uses Euclidean dot products for orientation consistency.
+
 """
-function orient_normals!(normals::AbstractVector{<:AbstractVector}, points; k::Int=5)
+function orient_normals!(normals::AbstractVector{<:AbstractVector}, points::AbstractVector{<:Point{𝔼{N}}}; k::Int=5) where {N}
     k = k > length(points) ? length(points) : k
     # build minimum spanning tree based on angle between normals
     search_method = KNearestSearch(points, k)
     return orient_normals!(search_method, normals, points)
 end
 
-function orient_normals!(surf::PointSurface; k::Int=5)
+function orient_normals!(surf::PointSurface{𝔼{N},C}; k::Int=5) where {N,C<:CRS}
     k = k > length(surf) ? length(surf) : k
     return orient_normals!(normal(surf), point(surf); k=k)
 end
 
-function orient_normals!(cloud::PointCloud; k::Int=5)
+function orient_normals!(cloud::PointCloud{𝔼{N},C}; k::Int=5) where {N,C<:CRS}
     for surf in cloud
         orient_normals!(surf; k=k)
     end

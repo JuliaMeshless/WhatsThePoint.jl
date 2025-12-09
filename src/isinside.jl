@@ -39,14 +39,14 @@ function isinside(testpoint::AbstractVector, surf::PointSurface{𝔼{Dim}}) wher
 end
 
 function isinside(
-    testpoint::Point{M}, cloud::Union{PointCloud{M},PointBoundary{M}}
-) where {M<:Manifold}
+    testpoint::Point{𝔼{N}}, cloud::Union{PointCloud{𝔼{N}},PointBoundary{𝔼{N}}}
+) where {N}
     g = mapreduce(s -> _greens(testpoint, s), +, surfaces(cloud))
     # include the -4π missing from _greens in the inequality here
     return g < -2π ? true : false
 end
 
-function _greens(testpoint::Point, surf::PointSurface)
+function _greens(testpoint::Point{𝔼{N}}, surf::PointSurface{𝔼{N},C}) where {N,C<:CRS}
     _greens_kernel = let testpoint = testpoint
         geom -> begin
             (; point, normal, area) = geom

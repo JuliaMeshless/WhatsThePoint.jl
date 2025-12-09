@@ -1,17 +1,17 @@
 function repel!(
-    cloud::PointCloud,
+    cloud::PointCloud{𝔼{N},C},
     spacing;
     β=0.2,
     α=minimum(spacing(to(cloud))) * 0.05,
     k=21,
     max_iters=1e3,
     tol=1e-6,
-)
+) where {N,C<:CRS}
     # Miotti 2023
     α = ustrip(α)
     p = collect(cloud.volume.points)
     p_old = deepcopy(p)
-    N = length(p)
+    npoints = length(p)
     all_p = pointify(cloud)
     method = KNearestSearch(all_p, k)
 
@@ -27,7 +27,7 @@ function repel!(
     end
     while i < max_iters
         p_old .= p
-        tmap!(p, 1:N) do id
+        tmap!(p, 1:npoints) do id
             xi = p_old[id]
             ids, dists = searchdists(xi, method)
             ids = @view ids[2:end]
