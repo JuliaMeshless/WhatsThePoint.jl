@@ -31,23 +31,29 @@ To be the meshless equivalent of a "mesh", PointCloud should include topology - 
 
 ```julia
 # Abstract base - extensible for future connectivity types
-abstract type AbstractTopology end
+abstract type AbstractTopology{S} end
 
 # Distance-based: all points within radius r
-struct RadiusTopology{R} <: AbstractTopology
-    neighbors::Vector{Vector{Int}}  # adjacency list
+struct RadiusTopology{S,R} <: AbstractTopology{S}
+    neighbors::S                     # storage (adjl, sparse matrix, etc.)
     radius::R                        # search radius (can be function of position)
 end
 
 # k-nearest neighbors
-struct KNNTopology <: AbstractTopology
-    neighbors::Vector{Vector{Int}}  # adjacency list
+struct KNNTopology{S} <: AbstractTopology{S}
+    neighbors::S                     # storage (adjl, sparse matrix, etc.)
     k::Int                          # number of neighbors
 end
 
 # No topology (current behavior)
-struct NoTopology <: AbstractTopology end
+struct NoTopology <: AbstractTopology{Nothing} end
 ```
+
+The storage type parameter `S` allows flexibility in how neighbors are stored:
+- `Vector{Vector{Int}}` - adjacency list (default, variable neighborhood sizes)
+- `SparseMatrixCSC{Bool,Int}` - sparse adjacency matrix (efficient for graph operations)
+- `Matrix{Int}` - dense matrix (fixed k neighbors, cache-friendly iteration)
+- Custom types as needed
 
 ### Updated PointCloud
 
@@ -59,15 +65,17 @@ mutable struct PointCloud{M<:Manifold,C<:CRS,T<:AbstractTopology} <: Domain{M,C}
 end
 ```
 
-### Adjacency List Storage
+### Storage Format Options
 
-Using `Vector{Vector{Int}}` for adjacency lists because:
-- Variable neighborhood sizes (especially for radius-based)
-- Natural for meshless stencils (small, variable neighborhoods)
-- Memory efficient for sparse connectivity
-- Simple iteration pattern
+The type parameter `S` enables multiple storage formats. Default is adjacency list:
 
-Alternative considered: CSR format (compressed sparse row) - better for large fixed-size neighborhoods but more complex API.
+| Format | Type | Best For |
+|--------|------|----------|
+| Adjacency list | `Vector{Vector{Int}}` | Variable neighborhood sizes, radius-based |
+| Sparse matrix | `SparseMatrixCSC{Bool,Int}` | Graph algorithms, symmetric queries |
+| Dense matrix | `Matrix{Int}` | Fixed k neighbors, SIMD-friendly iteration |
+
+Default to adjacency list (`Vector{Vector{Int}}`) for initial implementation - most flexible for meshless stencils with variable neighborhood sizes.
 
 ### Constructor Patterns
 
@@ -129,19 +137,20 @@ neighbors(cloud::PointCloud, i::Int) = neighbors(topology(cloud))[i]
 
 ### Phase 1: Core Types (src/topology.jl)
 
-1. Define `AbstractTopology` abstract type
-2. Define `NoTopology` singleton (default, no connectivity)
-3. Define `KNNTopology` struct with:
-   - `neighbors::Vector{Vector{Int}}` - adjacency list
+1. Define `AbstractTopology{S}` abstract type (S = storage type parameter)
+2. Define `NoTopology <: AbstractTopology{Nothing}` singleton (default, no connectivity)
+3. Define `KNNTopology{S}` struct with:
+   - `neighbors::S` - storage (parameterized, default `Vector{Vector{Int}}`)
    - `k::Int` - number of neighbors
    - `valid::Bool` - staleness flag
-4. Define `RadiusTopology` struct with:
-   - `neighbors::Vector{Vector{Int}}` - adjacency list
-   - `radius` - search radius (can be scalar or function)
+4. Define `RadiusTopology{S,R}` struct with:
+   - `neighbors::S` - storage (parameterized, default `Vector{Vector{Int}}`)
+   - `radius::R` - search radius (can be scalar or function)
    - `valid::Bool` - staleness flag
 5. Implement `neighbors(t::AbstractTopology)` and `neighbors(t, i::Int)`
 6. Implement `isvalid(t::AbstractTopology)` and `invalidate!(t::AbstractTopology)`
 7. Implement internal `_build_neighbors()` using `KNearestSearch`/`BallSearch`
+8. Type alias for convenience: `const AdjListTopology{T} = T{Vector{Vector{Int}}} where T<:AbstractTopology`
 
 ### Phase 2: PointCloud Integration (src/cloud.jl)
 
