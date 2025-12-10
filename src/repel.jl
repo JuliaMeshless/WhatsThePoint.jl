@@ -53,5 +53,7 @@ function repel!(
         @warn "Node repel reached maximum number of iterations ($max_iters), Convergence = ($(conv[end]))\n"
     end
     cloud.volume = PointVolume(filter!(x -> isinside(x, cloud), p))
+    # Invalidate topology since points have moved
+    hastopology(cloud) && invalidate_topology!(cloud)
     return conv
 end

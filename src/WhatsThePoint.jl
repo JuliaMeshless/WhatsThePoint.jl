@@ -39,7 +39,7 @@ import Meshes: centroid, boundingbox, discretize, to
 import Meshes: elements, nelements, lentype, normal, area, pointify
 # re-export from Meshes.jl
 export Point, coords, isinside, centroid, boundingbox, pointify
-export KNearestSearch, BallSearch, search, searchdists
+export KNearestSearch, BallSearch, MetricBall, search, searchdists
 
 const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 const Angle{T} = Union{Quantity{T,NoDims,typeof(u"rad")},Quantity{T,NoDims,typeof(u"°")}}
@@ -63,8 +63,12 @@ export PointVolume
 include("boundary.jl")
 export PointBoundary, surfaces, namedsurfaces, names, normals, areas, hassurface
 
+include("topology.jl")
+export AbstractTopology, NoTopology, KNNTopology, RadiusTopology
+export neighbors, hastopology, set_topology!, rebuild_topology!, invalidate_topology!
+
 include("cloud.jl")
-export PointCloud, boundary, volume
+export PointCloud, boundary, volume, topology
 
 include("normals.jl")
 export compute_normals, orient_normals!, update_normals!, compute_edge, compute_edges
