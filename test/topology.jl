@@ -16,7 +16,7 @@ end
     cloud = PointCloud(PointBoundary(points))
 
     k = 5
-    set_topology!(cloud, KNNTopology, k)
+    cloud = set_topology(cloud, KNNTopology, k)
 
     @test hastopology(cloud) == true
     @test topology(cloud) isa KNNTopology
@@ -53,7 +53,7 @@ end
 
     # Radius that should capture adjacent points
     radius = 0.15u"m"
-    set_topology!(cloud, RadiusTopology, radius)
+    cloud = set_topology(cloud, RadiusTopology, radius)
 
     @test hastopology(cloud) == true
     @test topology(cloud) isa RadiusTopology
@@ -71,24 +71,6 @@ end
     end
 end
 
-@testitem "Topology invalidation" setup = [TestData, CommonImports] begin
-    using WhatsThePoint: topology
-    N = 10
-    points = rand(Point, N)
-    cloud = PointCloud(PointBoundary(points))
-
-    set_topology!(cloud, KNNTopology, 3)
-    @test isvalid(topology(cloud)) == true
-
-    # Invalidate
-    invalidate_topology!(cloud)
-    @test isvalid(topology(cloud)) == false
-
-    # Accessing invalid topology should throw
-    @test_throws WhatsThePoint.InvalidTopologyError neighbors(cloud)
-    @test_throws WhatsThePoint.InvalidTopologyError neighbors(cloud, 1)
-end
-
 @testitem "Topology rebuild" setup = [TestData, CommonImports] begin
     using WhatsThePoint: topology
     N = 10
@@ -96,13 +78,10 @@ end
     cloud = PointCloud(PointBoundary(points))
 
     k = 3
-    set_topology!(cloud, KNNTopology, k)
+    cloud = set_topology(cloud, KNNTopology, k)
 
-    # Invalidate then rebuild
-    invalidate_topology!(cloud)
-    @test isvalid(topology(cloud)) == false
-
-    rebuild_topology!(cloud)
+    # Rebuild should return new cloud with same topology params
+    cloud = rebuild_topology(cloud)
     @test isvalid(topology(cloud)) == true
 
     # Should still have correct parameters
@@ -115,7 +94,7 @@ end
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
 
-    @test_throws ArgumentError rebuild_topology!(cloud)
+    @test_throws ArgumentError rebuild_topology(cloud)
 end
 
 @testitem "NoTopology has no neighbors" setup = [TestData, CommonImports] begin
@@ -134,20 +113,12 @@ end
     cloud = PointCloud(PointBoundary(points))
 
     # KNNTopology
-    set_topology!(cloud, KNNTopology, 3)
+    cloud = set_topology(cloud, KNNTopology, 3)
     io = IOBuffer()
     show(io, MIME("text/plain"), topology(cloud))
     output = String(take!(io))
     @test contains(output, "KNNTopology")
     @test contains(output, "k: 3")
-    @test contains(output, "valid")
-
-    # Invalid topology
-    invalidate_topology!(cloud)
-    io = IOBuffer()
-    show(io, MIME("text/plain"), topology(cloud))
-    output = String(take!(io))
-    @test contains(output, "INVALID")
 
     # NoTopology
     io = IOBuffer()
@@ -169,12 +140,11 @@ end
     @test !contains(output, "Topology")
 
     # With topology
-    set_topology!(cloud, KNNTopology, 3)
+    cloud = set_topology(cloud, KNNTopology, 3)
     io = IOBuffer()
     show(io, MIME("text/plain"), cloud)
     output = String(take!(io))
     @test contains(output, "Topology")
-    @test contains(output, "valid")
 end
 
 @testitem "Backwards compatibility - PointCloud without topology" setup = [TestData, CommonImports] begin
@@ -192,4 +162,54 @@ end
     @test volume(cloud) isa PointVolume
     @test pointify(cloud) isa Vector{<:Point}
     @test Meshes.nelements(cloud) == N
+end
+
+@testitem "Surface-level topology" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: topology
+    N = 20
+    points = rand(Point, N)
+    normals = [Point(0.0, 0.0, 1.0) for _ in 1:N]
+    areas = zeros(N) * u"m^2"
+    surf = PointSurface(points, normals, areas)
+
+    # Default is NoTopology
+    @test topology(surf) isa NoTopology
+    @test hastopology(surf) == false
+
+    # Add topology
+    k = 5
+    surf = set_topology(surf, KNNTopology, k)
+
+    @test hastopology(surf) == true
+    @test topology(surf) isa KNNTopology
+    @test topology(surf).k == k
+
+    # Check neighbors
+    nbrs = neighbors(surf)
+    @test length(nbrs) == N
+    @test length(neighbors(surf, 1)) == k
+end
+
+@testitem "Volume-level topology" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: topology
+    N = 20
+    points = rand(Point, N)
+    vol = PointVolume(points)
+
+    # Default is NoTopology
+    @test topology(vol) isa NoTopology
+    @test hastopology(vol) == false
+
+    # Add topology
+    k = 5
+    vol = set_topology(vol, KNNTopology, k)
+
+    @test hastopology(vol) == true
+    @test topology(vol) isa KNNTopology
+    @test topology(vol).k == k
+
+    # Check neighbors
+    nbrs = neighbors(vol)
+    @test length(nbrs) == N
+    @test length(neighbors(vol, 1)) == k
 end

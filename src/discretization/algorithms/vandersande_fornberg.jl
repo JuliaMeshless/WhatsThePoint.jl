@@ -1,6 +1,6 @@
 struct VanDerSandeFornberg <: AbstractNodeGenerationAlgorithm end
 
-function discretize!(
+function _discretize_volume(
     cloud::PointCloud{𝔼{3},C},
     spacing::ConstantSpacing,
     ::VanDerSandeFornberg;
@@ -55,6 +55,5 @@ function discretize!(
     points = filter(x -> isinside(x, cloud), points[1:dotnr])
     ProgressMeter.finish!(prog)
 
-    cloud.volume = PointVolume(points)
-    return nothing
+    return PointVolume(points)
 end

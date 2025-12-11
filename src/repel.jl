@@ -1,4 +1,12 @@
-function repel!(
+"""
+    repel(cloud::PointCloud, spacing; β=0.2, α=auto, k=21, max_iters=1000, tol=1e-6)
+
+Optimize point distribution via node repulsion (Miotti 2023).
+Returns `(new_cloud, convergence_vector)` tuple.
+
+The returned cloud has `NoTopology` since points have moved.
+"""
+function repel(
     cloud::PointCloud{𝔼{N},C},
     spacing;
     β=0.2,
@@ -9,7 +17,7 @@ function repel!(
 ) where {N,C<:CRS}
     # Miotti 2023
     α = ustrip(α)
-    p = collect(cloud.volume.points)
+    p = collect(volume(cloud).points)
     p_old = deepcopy(p)
     npoints = length(p)
     all_p = pointify(cloud)
@@ -35,12 +43,12 @@ function repel!(
             rij = norm.(@view dists[2:end])
             s = spacing(xi)
 
-            repel = sum(zip(neighborhood, rij)) do z
+            repel_force = sum(zip(neighborhood, rij)) do z
                 xj, r = z
                 F(r / s) * (xi - xj) / r
             end
 
-            return xi + Vec(s * α * repel)
+            return xi + Vec(s * α * repel_force)
         end
         push!(conv, convergence(p, p_old))
         if all(x -> norm(x, Inf) < tol, conv[end])
@@ -52,8 +60,7 @@ function repel!(
     if i == max_iters
         @warn "Node repel reached maximum number of iterations ($max_iters), Convergence = ($(conv[end]))\n"
     end
-    cloud.volume = PointVolume(filter!(x -> isinside(x, cloud), p))
-    # Invalidate topology since points have moved
-    hastopology(cloud) && invalidate_topology!(cloud)
-    return conv
+    new_volume = PointVolume(filter(x -> isinside(x, cloud), p))
+    new_cloud = PointCloud(boundary(cloud), new_volume, NoTopology())
+    return (new_cloud, conv)
 end

@@ -5,7 +5,7 @@
     shadow = ShadowPoints(2m, 2)
 
     geoms = StructArray{SurfaceElement}((points, normals, areas))
-    surf = PointSurface(geoms, nothing)
+    surf = PointSurface(geoms, nothing, NoTopology())
 
     surf = PointSurface(points, normals, areas)
     @test length(surf) == 10

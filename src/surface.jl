@@ -17,59 +17,73 @@ struct SurfaceElement{M,C,N,A} <: Geometry{M,C}
 end
 
 """
-    struct PointSurface{M,C} <: AbstractSurface{M,C}
+    struct PointSurface{M,C,S,T} <: AbstractSurface{M,C}
 
 This is a typical representation of a surface via points.
+
+# Type Parameters
+- `M<:Manifold` - manifold type
+- `C<:CRS` - coordinate reference system
+- `S` - shadow type
+- `T<:AbstractTopology` - topology type for surface-local connectivity
 """
-struct PointSurface{M<:Manifold,C<:CRS,S} <: AbstractSurface{M,C}
+struct PointSurface{M<:Manifold,C<:CRS,S,T<:AbstractTopology} <: AbstractSurface{M,C}
     geoms::StructVector{SurfaceElement}
     shadow::S
-    function PointSurface(geoms::StructVector{SurfaceElement}, shadow::S) where {S}
+    topology::T
+    function PointSurface(
+        geoms::StructVector{SurfaceElement}, shadow::S, topology::T
+    ) where {S,T<:AbstractTopology}
         p = first(geoms.point)
         M = manifold(p)
         C = crs(p)
-        return new{M,C,S}(geoms, shadow)
+        return new{M,C,S,T}(geoms, shadow, topology)
     end
 end
 
 function PointSurface(
-    points::AbstractVector{Point{M,C}}, normals::N, areas::A; shadow::S=nothing
-) where {M<:Manifold,C<:CRS,N,A,S}
+    points::AbstractVector{Point{M,C}},
+    normals::N,
+    areas::A;
+    shadow::S=nothing,
+    topology::T=NoTopology(),
+) where {M<:Manifold,C<:CRS,N,A,S,T<:AbstractTopology}
     @assert length(points) == length(normals) == length(areas) "All inputs must be same length. Got $(length(points)), $(length(normals)), $(length(areas))."
     geoms = StructArray{SurfaceElement}((points, normals, areas))
-    return PointSurface(geoms, shadow)
+    return PointSurface(geoms, shadow, topology)
 end
 
-function PointSurface(points::Domain, normals, areas; shadow=nothing)
+function PointSurface(points::Domain, normals, areas; shadow=nothing, topology=NoTopology())
     p = _get_underlying_vector(points)
-    return PointSurface(p, normals, areas; shadow=shadow)
+    return PointSurface(p, normals, areas; shadow=shadow, topology=topology)
 end
 _get_underlying_vector(points::PointSet) = parent(points)
 _get_underlying_vector(points::SubDomain) = points.domain[points.inds]
 
-function PointSurface(points::AbstractVector{P}, normals) where {P}
+function PointSurface(points::AbstractVector{P}, normals; topology=NoTopology()) where {P}
     T = CoordRefSystems.mactype(crs(P))
     # TODO estimate areas
     areas = zeros(T, length(normals))
-    return PointSurface(points, normals, areas)
+    return PointSurface(points, normals, areas; topology=topology)
 end
 
-function PointSurface(points::AbstractVector{P}; k::Int=5) where {P}
+function PointSurface(points::AbstractVector{P}; k::Int=5, topology=NoTopology()) where {P}
     normals = compute_normals(points; k=k)
     T = CoordRefSystems.mactype(crs(P))
     # TODO estimate areas
     areas = zeros(T, length(normals))
-    surf = PointSurface(points, normals, areas)
+    surf = PointSurface(points, normals, areas; topology=topology)
     orient_normals!(surf; k=k)
     return surf
 end
 
-function PointSurface(filepath::String)
+function PointSurface(filepath::String; topology=NoTopology())
     points, normals, areas, _ = import_surface(filepath)
-    return PointSurface(points, normals, areas)
+    return PointSurface(points, normals, areas; topology=topology)
 end
 
 function (s::PointSurface)(shadow::ShadowPoints)
+    # Shadow creation strips topology (shadows have no inherited connectivity)
     return PointSurface(point(s), normal(s), area(s); shadow=shadow)
 end
 
@@ -98,6 +112,78 @@ point(surf::PointSurface) = parent(surf).point
 normal(surf::PointSurface) = parent(surf).normal
 area(surf::PointSurface) = parent(surf).area
 
+# Topology accessors
+"""
+    topology(surf::PointSurface)
+
+Return the topology of the surface.
+"""
+topology(surf::PointSurface) = surf.topology
+
+"""
+    hastopology(surf::PointSurface)
+
+Check if surface has a topology (not NoTopology).
+"""
+hastopology(surf::PointSurface) = !isa(topology(surf), NoTopology)
+
+"""
+    neighbors(surf::PointSurface)
+
+Return all neighbor lists from the surface topology. Throws error if no topology.
+"""
+neighbors(surf::PointSurface) = neighbors(topology(surf))
+
+"""
+    neighbors(surf::PointSurface, i::Int)
+
+Return neighbors of point `i` in surface-local indices. Throws error if no topology.
+"""
+neighbors(surf::PointSurface, i::Int) = neighbors(topology(surf), i)
+
+"""
+    set_topology(surf::PointSurface, ::Type{KNNTopology}, k::Int)
+
+Build and return new surface with k-nearest neighbor topology.
+"""
+function set_topology(surf::PointSurface, ::Type{KNNTopology}, k::Int)
+    points = pointify(surf)
+    adj = _build_knn_neighbors(points, k)
+    topo = KNNTopology(adj, k)
+    return PointSurface(point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=topo)
+end
+
+"""
+    set_topology(surf::PointSurface, ::Type{RadiusTopology}, radius)
+
+Build and return new surface with radius-based topology.
+"""
+function set_topology(surf::PointSurface, ::Type{RadiusTopology}, radius)
+    points = pointify(surf)
+    adj = _build_radius_neighbors(points, radius)
+    topo = RadiusTopology(adj, radius)
+    return PointSurface(point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=topo)
+end
+
+"""
+    rebuild_topology(surf::PointSurface)
+
+Rebuild topology using same parameters. Returns new surface.
+"""
+function rebuild_topology(surf::PointSurface)
+    topo = topology(surf)
+    topo isa NoTopology && throw(ArgumentError("Cannot rebuild NoTopology"))
+    points = pointify(surf)
+    if topo isa KNNTopology
+        new_adj = _build_knn_neighbors(points, topo.k)
+        new_topo = KNNTopology(new_adj, topo.k)
+    elseif topo isa RadiusTopology
+        new_adj = _build_radius_neighbors(points, topo.radius)
+        new_topo = RadiusTopology(new_adj, topo.radius)
+    end
+    return PointSurface(point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=new_topo)
+end
+
 function generate_shadows(surf::PointSurface, shadow::ShadowPoints)
     return generate_shadows(to(surf), normal(surf), shadow)
 end
@@ -115,12 +201,19 @@ function Base.show(io::IO, ::MIME"text/plain", surf::PointSurface{M,C}) where {M
     end
 
     s = surf.shadow
+    has_topo = hastopology(surf)
     _shadow_order(::ShadowPoints{O}) where {O} = O
-    shadow_str = "└─Shadow:"
+    shadow_str = has_topo ? "├─Shadow:" : "└─Shadow:"
     if isnothing(s)
         println(io, "$shadow_str none")
     else
         println(io, "$shadow_str $(_shadow_order(s))")
+    end
+
+    if has_topo
+        topo = topology(surf)
+        topo_name = nameof(typeof(topo))
+        println(io, "└─Topology: $topo_name")
     end
     return nothing
 end

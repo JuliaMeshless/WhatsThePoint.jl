@@ -81,6 +81,18 @@ end
 
 Base.delete!(boundary::PointBoundary, name::Symbol) = delete!(namedsurfaces(boundary), name)
 
+"""
+    add_surface(boundary::PointBoundary, surf::PointSurface, name::Symbol)
+
+Return new PointBoundary with an additional named surface.
+"""
+function add_surface(boundary::PointBoundary{M,C}, surf::PointSurface, name::Symbol) where {M,C}
+    hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))
+    new_surfaces = LittleDict{Symbol,AbstractSurface{M,C}}(pairs(namedsurfaces(boundary))...)
+    new_surfaces[name] = surf
+    return PointBoundary(new_surfaces)
+end
+
 # pretty printing
 function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim,T}) where {Dim,T}
     println(io, "PointBoundary{$Dim, $T}")

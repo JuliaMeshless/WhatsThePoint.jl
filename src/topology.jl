@@ -21,12 +21,10 @@ k-nearest neighbors topology.
 # Fields
 - `neighbors::S` - neighbor indices storage
 - `k::Int` - number of neighbors per point
-- `valid::Base.RefValue{Bool}` - staleness flag
 """
-mutable struct KNNTopology{S} <: AbstractTopology{S}
+struct KNNTopology{S} <: AbstractTopology{S}
     neighbors::S
     k::Int
-    valid::Bool
 end
 
 """
@@ -37,12 +35,10 @@ Radius-based topology where neighbors are all points within a given radius.
 # Fields
 - `neighbors::S` - neighbor indices storage
 - `radius::R` - search radius (scalar or function of position)
-- `valid::Base.RefValue{Bool}` - staleness flag
 """
-mutable struct RadiusTopology{S,R} <: AbstractTopology{S}
+struct RadiusTopology{S,R} <: AbstractTopology{S}
     neighbors::S
     radius::R
-    valid::Bool
 end
 
 # Adjacency list type alias
@@ -51,22 +47,16 @@ const AdjacencyList = Vector{Vector{Int}}
 """
     neighbors(t::AbstractTopology)
 
-Return the neighbor storage from a topology. Throws error if topology is invalid.
+Return the neighbor storage from a topology.
 """
-function neighbors(t::AbstractTopology)
-    isvalid(t) || throw(InvalidTopologyError())
-    return t.neighbors
-end
+neighbors(t::AbstractTopology) = t.neighbors
 
 """
     neighbors(t::AbstractTopology, i::Int)
 
-Return neighbors of point `i`. Throws error if topology is invalid.
+Return neighbors of point `i`.
 """
-function neighbors(t::AbstractTopology, i::Int)
-    isvalid(t) || throw(InvalidTopologyError())
-    return t.neighbors[i]
-end
+neighbors(t::AbstractTopology, i::Int) = t.neighbors[i]
 
 neighbors(::NoTopology) = throw(ArgumentError("NoTopology has no neighbors"))
 neighbors(::NoTopology, ::Int) = throw(ArgumentError("NoTopology has no neighbors"))
@@ -74,43 +64,10 @@ neighbors(::NoTopology, ::Int) = throw(ArgumentError("NoTopology has no neighbor
 """
     isvalid(t::AbstractTopology)
 
-Check if topology is valid (not stale).
+Check if topology is valid. With immutable design, topology is always valid if it exists.
 """
-Base.isvalid(t::Union{KNNTopology,RadiusTopology}) = t.valid
+Base.isvalid(::Union{KNNTopology,RadiusTopology}) = true
 Base.isvalid(::NoTopology) = true
-
-"""
-    invalidate!(t::AbstractTopology)
-
-Mark topology as invalid/stale.
-"""
-function invalidate!(t::Union{KNNTopology,RadiusTopology})
-    t.valid = false
-    return t
-end
-invalidate!(t::NoTopology) = t
-
-"""
-    validate!(t::AbstractTopology)
-
-Mark topology as valid.
-"""
-function validate!(t::Union{KNNTopology,RadiusTopology})
-    t.valid = true
-    return t
-end
-validate!(t::NoTopology) = t
-
-"""
-    InvalidTopologyError
-
-Error thrown when accessing an invalid (stale) topology.
-"""
-struct InvalidTopologyError <: Exception end
-
-function Base.showerror(io::IO, ::InvalidTopologyError)
-    print(io, "InvalidTopologyError: topology is stale. Call rebuild_topology! to rebuild.")
-end
 
 # Build functions for creating topology from points
 
@@ -143,22 +100,18 @@ _get_radius(r::Number, ::Any) = r
 _get_radius(f::Function, points) = f(points)
 
 # Pretty printing
-function Base.show(io::IO, ::MIME"text/plain", t::KNNTopology{S}) where {S}
-    status = isvalid(t) ? "valid" : "INVALID"
+function Base.show(io::IO, ::MIME"text/plain", t::KNNTopology)
     n = length(t.neighbors)
-    println(io, "KNNTopology{$S}")
+    println(io, "KNNTopology")
     println(io, "├─k: $(t.k)")
-    println(io, "├─points: $n")
-    println(io, "└─status: $status")
+    println(io, "└─points: $n")
 end
 
-function Base.show(io::IO, ::MIME"text/plain", t::RadiusTopology{S,R}) where {S,R}
-    status = isvalid(t) ? "valid" : "INVALID"
+function Base.show(io::IO, ::MIME"text/plain", t::RadiusTopology)
     n = length(t.neighbors)
-    println(io, "RadiusTopology{$S,$R}")
+    println(io, "RadiusTopology")
     println(io, "├─radius: $(t.radius)")
-    println(io, "├─points: $n")
-    println(io, "└─status: $status")
+    println(io, "└─points: $n")
 end
 
 Base.show(io::IO, ::NoTopology) = print(io, "NoTopology()")

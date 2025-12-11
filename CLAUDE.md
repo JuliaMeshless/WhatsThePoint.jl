@@ -113,35 +113,48 @@ When importing meshes (e.g., STL files), the package uses **face centers** as bo
 
 ### Topology (Point Connectivity)
 
-PointCloud supports optional topology storing point neighborhoods for meshless stencils:
+PointCloud, PointSurface, and PointVolume all support optional topology storing point neighborhoods for meshless stencils. All types use **immutable structs** with functional API (operations return new objects).
 
 ```julia
-# Add k-nearest neighbor topology
-set_topology!(cloud, KNNTopology, 21)
+# Add k-nearest neighbor topology (returns new cloud)
+cloud = set_topology(cloud, KNNTopology, 21)
 
 # Or radius-based topology
-set_topology!(cloud, RadiusTopology, 2mm)
+cloud = set_topology(cloud, RadiusTopology, 2mm)
 
-# Access neighbors
-neighbors(cloud)      # all neighbor lists
-neighbors(cloud, i)   # neighbors of point i
+# Surface-level topology (local indices)
+surf = set_topology(surf, KNNTopology, 10)
+neighbors(surf, i)  # Local indices: 1..length(surf)
+
+# Volume-level topology (local indices)
+vol = set_topology(vol, KNNTopology, 15)
+neighbors(vol, i)   # Local indices: 1..length(vol)
+
+# Cloud-level topology (global indices)
+neighbors(cloud, i) # Global indices: 1..length(cloud)
 
 # Check state
-hastopology(cloud)           # true if topology exists
-isvalid(topology(cloud))     # false if stale
+hastopology(cloud)  # true if topology exists
 ```
 
 **Key behaviors:**
 - `NoTopology` is the default (backwards compatible)
-- Topology is built eagerly when `set_topology!` is called
-- `repel!` invalidates topology (points moved); call `rebuild_topology!` to restore
-- Storage type is parameterized (`AbstractTopology{S}`) for flexibility
+- Topology is built eagerly when `set_topology` is called
+- All operations return new objects (immutable design for AD compatibility)
+- `repel` returns new cloud with `NoTopology` (points moved)
+- No invalidation needed - immutable objects can't become stale
 
 **Type hierarchy:**
 - `AbstractTopology{S}` - abstract base with storage type parameter
 - `NoTopology` - singleton, no connectivity
 - `KNNTopology{S}` - k-nearest neighbors
 - `RadiusTopology{S,R}` - radius-based neighbors
+
+**Multi-level topology:**
+- PointSurface has `topology::T` field for surface-local connectivity
+- PointVolume has `topology::T` field for volume-local connectivity
+- PointCloud has `topology::T` field for global connectivity
+- Component topologies use local indices; cloud topology uses global indices
 
 ## Common Workflows
 
@@ -175,11 +188,12 @@ split_surface!(boundary, 75°)
 ### Node Repulsion Optimization
 
 ```julia
-# Optimize point distribution
-repel!(cloud, spacing; β=0.2, max_iters=1000)
+# Optimize point distribution (returns tuple)
+cloud, convergence = repel(cloud, spacing; β=0.2, max_iters=1000)
 
 # β controls repulsion strength
-# This improves point distribution quality iteratively
+# Returns (new_cloud, convergence_vector) tuple
+# New cloud has NoTopology since points moved
 ```
 
 ### Visualization
@@ -196,18 +210,19 @@ visualize_normals(boundary)
 
 ## Key Functions Reference
 
-- `discretize` / `discretize!` - Generate volume points from boundary
+- `discretize` - Generate volume points from boundary (returns new cloud)
 - `split_surface!` - Split boundary surfaces by normal angle threshold
 - `combine_surfaces!` - Merge multiple surfaces into one
 - `compute_normals` / `orient_normals!` - Normal vector handling
-- `repel!` - Optimize point distribution via node repulsion (invalidates topology)
+- `repel` - Optimize point distribution via node repulsion (returns new cloud, convergence)
 - `isinside` - Test if point is inside domain
 - `import_surface` - Load from STL/mesh files (via GeoIO.jl)
 - `export_cloud` - Save to VTK format
 - `visualize` - Makie-based visualization
-- `set_topology!` - Build and set point connectivity (KNNTopology or RadiusTopology)
-- `rebuild_topology!` - Rebuild stale topology
+- `set_topology` - Build point connectivity and return new object
+- `rebuild_topology` - Rebuild topology with same parameters (returns new object)
 - `neighbors` - Access point neighborhoods from topology
+- `add_surface` - Add named surface to cloud/boundary (returns new object)
 
 ## Testing Structure
 

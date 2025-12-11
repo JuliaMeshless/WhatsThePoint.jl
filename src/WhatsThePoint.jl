@@ -53,6 +53,11 @@ export emptyspace
 include("shadow.jl")
 export ShadowPoints
 
+# Topology must come before surface/volume/cloud since they use topology types
+include("topology.jl")
+export AbstractTopology, NoTopology, KNNTopology, RadiusTopology
+export neighbors, hastopology, set_topology, rebuild_topology
+
 include("surface.jl")
 export AbstractSurface, PointSurface, SurfaceElement
 export point, normal, area
@@ -63,12 +68,8 @@ export PointVolume
 include("boundary.jl")
 export PointBoundary, surfaces, namedsurfaces, names, normals, areas, hassurface
 
-include("topology.jl")
-export AbstractTopology, NoTopology, KNNTopology, RadiusTopology
-export neighbors, hastopology, set_topology!, rebuild_topology!, invalidate_topology!
-
 include("cloud.jl")
-export PointCloud, boundary, volume, topology
+export PointCloud, boundary, volume, topology, add_surface
 
 include("normals.jl")
 export compute_normals, orient_normals!, update_normals!, compute_edge, compute_edges
@@ -86,10 +87,10 @@ export AbstractSpacing, ConstantSpacing, LogLike, Power
 
 include("discretization/discretization.jl")
 export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer
-export discretize!, discretize
+export discretize
 
 include("repel.jl")
-export repel!
+export repel
 
 include("metrics.jl")
 

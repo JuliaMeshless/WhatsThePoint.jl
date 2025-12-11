@@ -1,16 +1,17 @@
 """
-    struct PointCloud{M,C} <: Domain{M,C}
+    struct PointCloud{M,C,T} <: Domain{M,C}
 
 A point cloud with optional topology (connectivity).
 
 # Type Parameters
 - `M<:Manifold` - manifold type
 - `C<:CRS` - coordinate reference system
+- `T<:AbstractTopology` - topology type for cloud-level connectivity
 """
-mutable struct PointCloud{M<:Manifold,C<:CRS} <: Domain{M,C}
+struct PointCloud{M<:Manifold,C<:CRS,T<:AbstractTopology} <: Domain{M,C}
     boundary::PointBoundary{M,C}
     volume::PointVolume{M,C}
-    topology::AbstractTopology
+    topology::T
 end
 
 function PointCloud(boundary::PointBoundary{M,C}, volume::PointVolume{M,C}) where {M,C}
@@ -39,11 +40,16 @@ function Base.getindex(cloud::PointCloud, index::Int)
     end
     return index <= length(b) ? b[index] : v[index - length(b)]
 end
-function Base.setindex!(cloud::PointCloud, surf::PointSurface, name::Symbol)
+"""
+    add_surface(cloud::PointCloud, surf::PointSurface, name::Symbol)
+
+Return new PointCloud with an additional named surface. Topology is stripped.
+"""
+function add_surface(cloud::PointCloud, surf::PointSurface, name::Symbol)
     hassurface(boundary(cloud), name) &&
         throw(ArgumentError("surface name already exists."))
-    boundary(cloud)[name] = surf
-    return nothing
+    new_boundary = add_surface(boundary(cloud), surf, name)
+    return PointCloud(new_boundary, volume(cloud), NoTopology())
 end
 function Base.iterate(cloud::PointCloud, state=1)
     return state > length(cloud) ? nothing : (cloud[state], state + 1)
@@ -92,59 +98,48 @@ Return neighbors of point `i`. Throws error if no topology or invalid.
 """
 neighbors(cloud::PointCloud, i::Int) = neighbors(topology(cloud), i)
 
-# Topology mutators
+# Topology operations (functional style - return new clouds)
 """
-    set_topology!(cloud::PointCloud, ::Type{KNNTopology}, k::Int)
+    set_topology(cloud::PointCloud, ::Type{KNNTopology}, k::Int)
 
-Build and set k-nearest neighbor topology. Builds eagerly.
+Build and return new cloud with k-nearest neighbor topology.
 """
-function set_topology!(cloud::PointCloud{M,C}, ::Type{KNNTopology}, k::Int) where {M,C}
+function set_topology(cloud::PointCloud, ::Type{KNNTopology}, k::Int)
     points = pointify(cloud)
     adj = _build_knn_neighbors(points, k)
-    topo = KNNTopology(adj, k, true)
-    cloud.topology = topo
-    return cloud
+    topo = KNNTopology(adj, k)
+    return PointCloud(boundary(cloud), volume(cloud), topo)
 end
 
 """
-    set_topology!(cloud::PointCloud, ::Type{RadiusTopology}, radius)
+    set_topology(cloud::PointCloud, ::Type{RadiusTopology}, radius)
 
-Build and set radius-based topology. Builds eagerly.
+Build and return new cloud with radius-based topology.
 """
-function set_topology!(cloud::PointCloud{M,C}, ::Type{RadiusTopology}, radius) where {M,C}
+function set_topology(cloud::PointCloud, ::Type{RadiusTopology}, radius)
     points = pointify(cloud)
     adj = _build_radius_neighbors(points, radius)
-    topo = RadiusTopology(adj, radius, true)
-    cloud.topology = topo
-    return cloud
+    topo = RadiusTopology(adj, radius)
+    return PointCloud(boundary(cloud), volume(cloud), topo)
 end
 
 """
-    rebuild_topology!(cloud::PointCloud)
+    rebuild_topology(cloud::PointCloud)
 
-Rebuild the topology using the same parameters. Only works if topology exists.
+Rebuild topology using same parameters. Returns new cloud.
 """
-function rebuild_topology!(cloud::PointCloud)
+function rebuild_topology(cloud::PointCloud)
     topo = topology(cloud)
     topo isa NoTopology && throw(ArgumentError("Cannot rebuild NoTopology"))
     points = pointify(cloud)
     if topo isa KNNTopology
-        topo.neighbors = _build_knn_neighbors(points, topo.k)
+        new_adj = _build_knn_neighbors(points, topo.k)
+        new_topo = KNNTopology(new_adj, topo.k)
     elseif topo isa RadiusTopology
-        topo.neighbors = _build_radius_neighbors(points, topo.radius)
+        new_adj = _build_radius_neighbors(points, topo.radius)
+        new_topo = RadiusTopology(new_adj, topo.radius)
     end
-    validate!(topo)
-    return cloud
-end
-
-"""
-    invalidate_topology!(cloud::PointCloud)
-
-Mark the topology as invalid/stale.
-"""
-function invalidate_topology!(cloud::PointCloud)
-    invalidate!(topology(cloud))
-    return cloud
+    return PointCloud(boundary(cloud), volume(cloud), new_topo)
 end
 
 function Meshes.pointify(cloud::PointCloud)
@@ -162,7 +157,8 @@ function generate_shadows(cloud::PointCloud, shadow::ShadowPoints)
 end
 
 # pretty printing
-function Base.show(io::IO, ::MIME"text/plain", cloud::PointCloud{M,C}) where {M,C}
+function Base.show(io::IO, ::MIME"text/plain", cloud::PointCloud)
+    M, C = manifold(cloud), crs(cloud)
     println(io, "PointCloud{$M, $C}")
     println(io, "├─$(length(cloud)) points")
     has_vol = !iszero(length(cloud.volume))
@@ -183,9 +179,8 @@ function Base.show(io::IO, ::MIME"text/plain", cloud::PointCloud{M,C}) where {M,
     end
     if has_topo
         topo = topology(cloud)
-        status = isvalid(topo) ? "valid" : "INVALID"
         topo_name = nameof(typeof(topo))
-        println(io, "└─Topology: $topo_name(status=$status)")
+        println(io, "└─Topology: $topo_name")
     end
 end
 

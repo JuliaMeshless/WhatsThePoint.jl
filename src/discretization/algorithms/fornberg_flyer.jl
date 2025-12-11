@@ -1,6 +1,6 @@
 struct FornbergFlyer <: AbstractNodeGenerationAlgorithm end
 
-function discretize!(
+function _discretize_volume(
     cloud::PointCloud{𝔼{2},C}, spacing::ConstantSpacing, ::FornbergFlyer; max_points=10_000
 ) where {C}
     ninit = calculate_ninit(cloud, spacing)
@@ -45,6 +45,5 @@ function discretize!(
     points = filter(x -> isinside(x, cloud), points[1:dotnr])
     ProgressMeter.finish!(prog)
 
-    cloud.volume = PointVolume(points)
-    return nothing
+    return PointVolume(points)
 end

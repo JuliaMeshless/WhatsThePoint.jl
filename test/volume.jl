@@ -70,14 +70,16 @@ end
         @test parent(vol) isa PointSet
     end
 
-    @testset "filter!" begin
+    @testset "filter" begin
         points = [Point(Float64(i), Float64(i)) for i in 1:10]
         vol = PointVolume(points)
-        filter!(p -> to(p)[1] > 5.0m, vol)
-        @test length(vol) == 5
-        for p in vol
+        filtered_vol = filter(p -> to(p)[1] > 5.0m, vol)
+        @test length(filtered_vol) == 5
+        for p in filtered_vol
             @test to(p)[1] > 5.0m
         end
+        # Original should be unchanged (immutable)
+        @test length(vol) == 10
     end
 end
 

@@ -4,36 +4,47 @@ include("algorithms/fornberg_flyer.jl")
 include("algorithms/vandersande_fornberg.jl")
 include("algorithms/slak_kosec.jl")
 
+"""
+    discretize(bnd::PointBoundary, spacing; alg=auto, max_points=10_000_000)
+
+Generate volume points for the given boundary and return a new PointCloud.
+"""
 function discretize(
-    boundary::PointBoundary{𝔼{3}},
+    bnd::PointBoundary{𝔼{3}},
     spacing::AbstractSpacing;
     alg::AbstractNodeGenerationAlgorithm=SlakKosec(),
     max_points=10_000_000,
 )
-    cloud = PointCloud(boundary)
-    discretize!(cloud, spacing; alg=alg, max_points=max_points)
-    return cloud
+    cloud = PointCloud(bnd)
+    new_volume = _discretize_volume(cloud, spacing, alg; max_points=max_points)
+    return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
 function discretize(
-    boundary::PointBoundary{𝔼{2}},
+    bnd::PointBoundary{𝔼{2}},
     spacing::AbstractSpacing;
     alg::AbstractNodeGenerationAlgorithm=FornbergFlyer(),
     max_points=10_000_000,
 )
     @warn "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
-    cloud = PointCloud(boundary)
-    discretize!(cloud, spacing; alg=FornbergFlyer(), max_points=max_points)
-    return cloud
+    cloud = PointCloud(bnd)
+    new_volume = _discretize_volume(cloud, spacing, FornbergFlyer(); max_points=max_points)
+    return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
-function discretize!(
+"""
+    discretize(cloud::PointCloud, spacing; alg=auto, max_points=10_000_000)
+
+Generate volume points for an existing cloud and return a new PointCloud with the volume populated.
+"""
+function discretize(
     cloud::PointCloud,
     spacing::AbstractSpacing;
     alg::AbstractNodeGenerationAlgorithm=SlakKosec(),
     max_points=10_000_000,
 )
-    return discretize!(cloud, spacing, alg; max_points=max_points)
+    new_volume = _discretize_volume(cloud, spacing, alg; max_points=max_points)
+    return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
 function calculate_ninit(cloud::PointCloud{𝔼{3}}, s::VariableSpacing)
