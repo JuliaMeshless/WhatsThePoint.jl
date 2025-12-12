@@ -28,6 +28,11 @@ PointCloud(filepath::String) = PointCloud(PointBoundary(filepath))
 Base.length(cloud::PointCloud) = length(boundary(cloud)) + length(volume(cloud))
 Base.size(cloud::PointCloud) = (length(cloud),)
 Base.getindex(cloud::PointCloud, name::Symbol) = boundary(cloud)[name]
+function Base.setindex!(cloud::PointCloud, surf::PointSurface, name::Symbol)
+    boundary(cloud)[name] = surf
+    rebuild_topology!(cloud)
+    return nothing
+end
 function Base.getindex(cloud::PointCloud, index::Int)
     b = boundary(cloud)
     v = volume(cloud)
@@ -39,17 +44,6 @@ function Base.getindex(cloud::PointCloud, index::Int)
         )
     end
     return index <= length(b) ? b[index] : v[index - length(b)]
-end
-"""
-    add_surface(cloud::PointCloud, surf::PointSurface, name::Symbol)
-
-Return new PointCloud with an additional named surface. Topology is stripped.
-"""
-function add_surface(cloud::PointCloud, surf::PointSurface, name::Symbol)
-    hassurface(boundary(cloud), name) &&
-        throw(ArgumentError("surface name already exists."))
-    new_boundary = add_surface(boundary(cloud), surf, name)
-    return PointCloud(new_boundary, volume(cloud), NoTopology())
 end
 function Base.iterate(cloud::PointCloud, state=1)
     return state > length(cloud) ? nothing : (cloud[state], state + 1)
@@ -124,22 +118,14 @@ function set_topology(cloud::PointCloud, ::Type{RadiusTopology}, radius)
 end
 
 """
-    rebuild_topology(cloud::PointCloud)
+    rebuild_topology!(cloud::PointCloud)
 
-Rebuild topology using same parameters. Returns new cloud.
+Rebuild topology in place using same parameters. No-op if NoTopology.
 """
-function rebuild_topology(cloud::PointCloud)
-    topo = topology(cloud)
-    topo isa NoTopology && throw(ArgumentError("Cannot rebuild NoTopology"))
+function rebuild_topology!(cloud::PointCloud)
     points = pointify(cloud)
-    if topo isa KNNTopology
-        new_adj = _build_knn_neighbors(points, topo.k)
-        new_topo = KNNTopology(new_adj, topo.k)
-    elseif topo isa RadiusTopology
-        new_adj = _build_radius_neighbors(points, topo.radius)
-        new_topo = RadiusTopology(new_adj, topo.radius)
-    end
-    return PointCloud(boundary(cloud), volume(cloud), new_topo)
+    rebuild_topology!(topology(cloud), points)
+    return nothing
 end
 
 function Meshes.pointify(cloud::PointCloud)

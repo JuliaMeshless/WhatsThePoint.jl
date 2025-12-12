@@ -14,7 +14,7 @@ Singleton type representing no topology. Default for PointCloud.
 struct NoTopology <: AbstractTopology{Nothing} end
 
 """
-    struct KNNTopology{S} <: AbstractTopology{S}
+    mutable struct KNNTopology{S} <: AbstractTopology{S}
 
 k-nearest neighbors topology.
 
@@ -22,13 +22,13 @@ k-nearest neighbors topology.
 - `neighbors::S` - neighbor indices storage
 - `k::Int` - number of neighbors per point
 """
-struct KNNTopology{S} <: AbstractTopology{S}
+mutable struct KNNTopology{S} <: AbstractTopology{S}
     neighbors::S
     k::Int
 end
 
 """
-    struct RadiusTopology{S,R} <: AbstractTopology{S}
+    mutable struct RadiusTopology{S,R} <: AbstractTopology{S}
 
 Radius-based topology where neighbors are all points within a given radius.
 
@@ -36,7 +36,7 @@ Radius-based topology where neighbors are all points within a given radius.
 - `neighbors::S` - neighbor indices storage
 - `radius::R` - search radius (scalar or function of position)
 """
-struct RadiusTopology{S,R} <: AbstractTopology{S}
+mutable struct RadiusTopology{S,R} <: AbstractTopology{S}
     neighbors::S
     radius::R
 end
@@ -99,19 +99,48 @@ end
 _get_radius(r::Number, ::Any) = r
 _get_radius(f::Function, points) = f(points)
 
+# In-place rebuild functions
+
+"""
+    rebuild_topology!(topo::NoTopology, points)
+
+No-op for NoTopology (nothing to rebuild).
+"""
+rebuild_topology!(::NoTopology, points) = nothing
+
+"""
+    rebuild_topology!(topo::KNNTopology, points)
+
+Rebuild k-nearest neighbor topology in place.
+"""
+function rebuild_topology!(topo::KNNTopology, points)
+    topo.neighbors = _build_knn_neighbors(points, topo.k)
+    return nothing
+end
+
+"""
+    rebuild_topology!(topo::RadiusTopology, points)
+
+Rebuild radius-based topology in place.
+"""
+function rebuild_topology!(topo::RadiusTopology, points)
+    topo.neighbors = _build_radius_neighbors(points, topo.radius)
+    return nothing
+end
+
 # Pretty printing
 function Base.show(io::IO, ::MIME"text/plain", t::KNNTopology)
     n = length(t.neighbors)
     println(io, "KNNTopology")
     println(io, "├─k: $(t.k)")
-    println(io, "└─points: $n")
+    return println(io, "└─points: $n")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", t::RadiusTopology)
     n = length(t.neighbors)
     println(io, "RadiusTopology")
     println(io, "├─radius: $(t.radius)")
-    println(io, "└─points: $n")
+    return println(io, "└─points: $n")
 end
 
 Base.show(io::IO, ::NoTopology) = print(io, "NoTopology()")

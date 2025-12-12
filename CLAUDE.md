@@ -220,9 +220,8 @@ visualize_normals(boundary)
 - `export_cloud` - Save to VTK format
 - `visualize` - Makie-based visualization
 - `set_topology` - Build point connectivity and return new object
-- `rebuild_topology` - Rebuild topology with same parameters (returns new object)
+- `rebuild_topology!` - Rebuild topology in place with same parameters
 - `neighbors` - Access point neighborhoods from topology
-- `add_surface` - Add named surface to cloud/boundary (returns new object)
 
 ## Testing Structure
 

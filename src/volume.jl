@@ -13,7 +13,9 @@ struct PointVolume{M<:Manifold,C<:CRS,T<:AbstractTopology} <: Domain{M,C}
     topology::T
 end
 
-function PointVolume{M,C}(; topology::T=NoTopology()) where {M<:Manifold,C<:CRS,T<:AbstractTopology}
+function PointVolume{M,C}(;
+    topology::T=NoTopology()
+) where {M<:Manifold,C<:CRS,T<:AbstractTopology}
     return PointVolume(PointSet(Point{M,C}[]), topology)
 end
 
@@ -105,22 +107,14 @@ function set_topology(vol::PointVolume, ::Type{RadiusTopology}, radius)
 end
 
 """
-    rebuild_topology(vol::PointVolume)
+    rebuild_topology!(vol::PointVolume)
 
-Rebuild topology using same parameters. Returns new volume.
+Rebuild topology in place using same parameters. No-op if NoTopology.
 """
-function rebuild_topology(vol::PointVolume)
-    topo = topology(vol)
-    topo isa NoTopology && throw(ArgumentError("Cannot rebuild NoTopology"))
+function rebuild_topology!(vol::PointVolume)
     points = pointify(vol)
-    if topo isa KNNTopology
-        new_adj = _build_knn_neighbors(points, topo.k)
-        new_topo = KNNTopology(new_adj, topo.k)
-    elseif topo isa RadiusTopology
-        new_adj = _build_radius_neighbors(points, topo.radius)
-        new_topo = RadiusTopology(new_adj, topo.radius)
-    end
-    return PointVolume(collect(vol.points); topology=new_topo)
+    rebuild_topology!(topology(vol), points)
+    return nothing
 end
 
 # pretty printing

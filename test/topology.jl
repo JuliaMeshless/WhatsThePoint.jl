@@ -80,8 +80,8 @@ end
     k = 3
     cloud = set_topology(cloud, KNNTopology, k)
 
-    # Rebuild should return new cloud with same topology params
-    cloud = rebuild_topology(cloud)
+    # Rebuild modifies topology in place
+    rebuild_topology!(cloud)
     @test isvalid(topology(cloud)) == true
 
     # Should still have correct parameters
@@ -89,12 +89,15 @@ end
     @test length(neighbors(cloud, 1)) == k
 end
 
-@testitem "NoTopology cannot be rebuilt" setup = [TestData, CommonImports] begin
+@testitem "NoTopology rebuild is no-op" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: topology
     N = 10
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
 
-    @test_throws ArgumentError rebuild_topology(cloud)
+    # Should be a no-op, no error
+    rebuild_topology!(cloud)
+    @test topology(cloud) isa NoTopology
 end
 
 @testitem "NoTopology has no neighbors" setup = [TestData, CommonImports] begin
@@ -147,7 +150,9 @@ end
     @test contains(output, "Topology")
 end
 
-@testitem "Backwards compatibility - PointCloud without topology" setup = [TestData, CommonImports] begin
+@testitem "Backwards compatibility - PointCloud without topology" setup = [
+    TestData, CommonImports
+] begin
     using WhatsThePoint: boundary
     # Ensure old code patterns still work
     N = 10

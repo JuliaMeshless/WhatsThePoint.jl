@@ -35,7 +35,7 @@ using Distances: Distances, Euclidean, evaluate
 using Unitful
 
 import Meshes: Manifold, Domain
-import Meshes: centroid, boundingbox, discretize, to
+import Meshes: centroid, boundingbox, discretize, to, crs
 import Meshes: elements, nelements, lentype, normal, area, pointify
 # re-export from Meshes.jl
 export Point, coords, isinside, centroid, boundingbox, pointify
@@ -56,7 +56,7 @@ export ShadowPoints
 # Topology must come before surface/volume/cloud since they use topology types
 include("topology.jl")
 export AbstractTopology, NoTopology, KNNTopology, RadiusTopology
-export neighbors, hastopology, set_topology, rebuild_topology
+export neighbors, hastopology, set_topology, rebuild_topology!
 
 include("surface.jl")
 export AbstractSurface, PointSurface, SurfaceElement
@@ -69,7 +69,7 @@ include("boundary.jl")
 export PointBoundary, surfaces, namedsurfaces, names, normals, areas, hassurface
 
 include("cloud.jl")
-export PointCloud, boundary, volume, topology, add_surface
+export PointCloud, boundary, volume, topology
 
 include("normals.jl")
 export compute_normals, orient_normals!, update_normals!, compute_edge, compute_edges

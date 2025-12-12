@@ -148,8 +148,7 @@ end
     @test bbox isa Box
 
     vol_points = rand(Point, 5)
-    cloud_with_vol = PointCloud(PointBoundary(points))
-    cloud_with_vol.volume = PointVolume(vol_points)
+    cloud_with_vol = PointCloud(PointBoundary(points), PointVolume(vol_points))
 
     pts_total = Meshes.pointify(cloud_with_vol)
     @test length(pts_total) == N + 5
@@ -188,8 +187,7 @@ end
     @test contains(output, "surface1")
 
     vol_points = rand(Point, 5)
-    cloud_with_vol = PointCloud(PointBoundary(points))
-    cloud_with_vol.volume = PointVolume(vol_points)
+    cloud_with_vol = PointCloud(PointBoundary(points), PointVolume(vol_points))
     io = IOBuffer()
     show(io, MIME("text/plain"), cloud_with_vol)
     output = String(take!(io))

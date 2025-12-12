@@ -16,6 +16,9 @@ struct SurfaceElement{M,C,N,A} <: Geometry{M,C}
     area::A
 end
 
+Meshes.crs(::Type{<:SurfaceElement{M,C}}) where {M,C} = C
+Meshes.crs(se::SurfaceElement) = crs(se.point)
+
 """
     struct PointSurface{M,C,S,T} <: AbstractSurface{M,C}
 
@@ -32,7 +35,7 @@ struct PointSurface{M<:Manifold,C<:CRS,S,T<:AbstractTopology} <: AbstractSurface
     shadow::S
     topology::T
     function PointSurface(
-        geoms::StructVector{SurfaceElement}, shadow::S, topology::T
+        geoms::StructVector{SurfaceElement}, shadow::S=nothing, topology::T=NoTopology()
     ) where {S,T<:AbstractTopology}
         p = first(geoms.point)
         M = manifold(p)
@@ -60,16 +63,16 @@ end
 _get_underlying_vector(points::PointSet) = parent(points)
 _get_underlying_vector(points::SubDomain) = points.domain[points.inds]
 
-function PointSurface(points::AbstractVector{P}, normals; topology=NoTopology()) where {P}
-    T = CoordRefSystems.mactype(crs(P))
+function PointSurface(points::AbstractVector, normals; topology=NoTopology())
+    T = CoordRefSystems.mactype(crs(first(points)))
     # TODO estimate areas
-    areas = zeros(T, length(normals))
+    areas = zeros(T, length(points))
     return PointSurface(points, normals, areas; topology=topology)
 end
 
-function PointSurface(points::AbstractVector{P}; k::Int=5, topology=NoTopology()) where {P}
+function PointSurface(points::AbstractVector; k::Int=5, topology=NoTopology())
     normals = compute_normals(points; k=k)
-    T = CoordRefSystems.mactype(crs(P))
+    T = CoordRefSystems.mactype(crs(first(points)))
     # TODO estimate areas
     areas = zeros(T, length(normals))
     surf = PointSurface(points, normals, areas; topology=topology)
@@ -150,7 +153,9 @@ function set_topology(surf::PointSurface, ::Type{KNNTopology}, k::Int)
     points = pointify(surf)
     adj = _build_knn_neighbors(points, k)
     topo = KNNTopology(adj, k)
-    return PointSurface(point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=topo)
+    return PointSurface(
+        point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=topo
+    )
 end
 
 """
@@ -162,26 +167,20 @@ function set_topology(surf::PointSurface, ::Type{RadiusTopology}, radius)
     points = pointify(surf)
     adj = _build_radius_neighbors(points, radius)
     topo = RadiusTopology(adj, radius)
-    return PointSurface(point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=topo)
+    return PointSurface(
+        point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=topo
+    )
 end
 
 """
-    rebuild_topology(surf::PointSurface)
+    rebuild_topology!(surf::PointSurface)
 
-Rebuild topology using same parameters. Returns new surface.
+Rebuild topology in place using same parameters. No-op if NoTopology.
 """
-function rebuild_topology(surf::PointSurface)
-    topo = topology(surf)
-    topo isa NoTopology && throw(ArgumentError("Cannot rebuild NoTopology"))
+function rebuild_topology!(surf::PointSurface)
     points = pointify(surf)
-    if topo isa KNNTopology
-        new_adj = _build_knn_neighbors(points, topo.k)
-        new_topo = KNNTopology(new_adj, topo.k)
-    elseif topo isa RadiusTopology
-        new_adj = _build_radius_neighbors(points, topo.radius)
-        new_topo = RadiusTopology(new_adj, topo.radius)
-    end
-    return PointSurface(point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=new_topo)
+    rebuild_topology!(topology(surf), points)
+    return nothing
 end
 
 function generate_shadows(surf::PointSurface, shadow::ShadowPoints)
