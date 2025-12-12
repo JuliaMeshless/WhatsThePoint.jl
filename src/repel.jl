@@ -20,7 +20,7 @@ function repel(
     p = collect(volume(cloud).points)
     p_old = deepcopy(p)
     npoints = length(p)
-    all_p = pointify(cloud)
+    all_p = points(cloud)
     method = KNearestSearch(all_p, k)
 
     all_spacings = spacing(all_p)

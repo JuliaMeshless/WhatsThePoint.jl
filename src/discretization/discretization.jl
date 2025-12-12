@@ -48,7 +48,7 @@ function discretize(
 end
 
 function calculate_ninit(cloud::PointCloud{𝔼{3}}, s::VariableSpacing)
-    min_s = s(first(pointify(cloud)))
+    min_s = s(first(points(cloud)))
     bbox = boundingbox(cloud)
     extent = bbox.max - bbox.min
     return (ceil(Int, extent[1] * 10 / min_s), ceil(Int, extent[2] * 10 / min_s))

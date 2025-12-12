@@ -56,12 +56,12 @@ function PointSurface(
     return PointSurface(geoms, shadow, topology)
 end
 
-function PointSurface(points::Domain, normals, areas; shadow=nothing, topology=NoTopology())
-    p = _get_underlying_vector(points)
+function PointSurface(pts::Domain, normals, areas; shadow=nothing, topology=NoTopology())
+    p = _get_underlying_vector(pts)
     return PointSurface(p, normals, areas; shadow=shadow, topology=topology)
 end
-_get_underlying_vector(points::PointSet) = parent(points)
-_get_underlying_vector(points::SubDomain) = points.domain[points.inds]
+_get_underlying_vector(pts::SubDomain) = pts.domain[pts.inds]
+_get_underlying_vector(pts::AbstractVector) = pts
 
 function PointSurface(points::AbstractVector, normals; topology=NoTopology())
     T = CoordRefSystems.mactype(crs(first(points)))
@@ -99,10 +99,15 @@ function Base.iterate(surf::PointSurface, state=1)
     return (surf[state], state + 1)
 end
 
-Meshes.pointify(surf::PointSurface) = point(surf)
+"""
+    points(surf::PointSurface)
+
+Return vector of points from surface. Alias for `point(surf)`.
+"""
+points(surf::PointSurface) = point(surf)
 Meshes.elements(surf::PointSurface) = (elem for elem in parent(surf))
 Meshes.nelements(surf::PointSurface) = length(parent(surf))
-Meshes.centroid(surf::PointSurface) = centroid(PointSet(point(surf)))
+Meshes.centroid(surf::PointSurface) = centroid(point(surf))
 Meshes.boundingbox(surf::PointSurface) = boundingbox(point(surf))
 
 ChunkSplitters.is_chunkable(::PointSurface) = true
@@ -150,8 +155,8 @@ neighbors(surf::PointSurface, i::Int) = neighbors(topology(surf), i)
 Build and return new surface with k-nearest neighbor topology.
 """
 function set_topology(surf::PointSurface, ::Type{KNNTopology}, k::Int)
-    points = pointify(surf)
-    adj = _build_knn_neighbors(points, k)
+    pts = points(surf)
+    adj = _build_knn_neighbors(pts, k)
     topo = KNNTopology(adj, k)
     return PointSurface(
         point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=topo
@@ -164,8 +169,8 @@ end
 Build and return new surface with radius-based topology.
 """
 function set_topology(surf::PointSurface, ::Type{RadiusTopology}, radius)
-    points = pointify(surf)
-    adj = _build_radius_neighbors(points, radius)
+    pts = points(surf)
+    adj = _build_radius_neighbors(pts, radius)
     topo = RadiusTopology(adj, radius)
     return PointSurface(
         point(surf), normal(surf), area(surf); shadow=surf.shadow, topology=topo
@@ -178,8 +183,8 @@ end
 Rebuild topology in place using same parameters. No-op if NoTopology.
 """
 function rebuild_topology!(surf::PointSurface)
-    points = pointify(surf)
-    rebuild_topology!(topology(surf), points)
+    pts = points(surf)
+    rebuild_topology!(topology(surf), pts)
     return nothing
 end
 

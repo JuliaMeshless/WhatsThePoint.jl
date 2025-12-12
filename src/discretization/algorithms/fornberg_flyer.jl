@@ -17,17 +17,22 @@ function _discretize_volume(
     pdp = Point.(x, heights)
     _, current_id = findmin_turbo(heights)
     p = pdp[current_id]
-    points = Vector{Point{𝔼{2},C}}(undef, max_points)
+    new_points = Vector{Point{𝔼{2},C}}(undef, max_points)
 
     dotnr = 1
-    points[dotnr] = Point(p.coords.x, heights[current_id])
-    search_method = Meshes.BallSearch(PointSet(pdp), Meshes.MetricBall(r))
+    new_points[dotnr] = Point(p.coords.x, heights[current_id])
+
+    # Build BallTree using NearestNeighbors.jl
+    pdp_matrix = reduce(hcat, [SVector(ustrip.(to(pt))...) for pt in pdp])
+    tree = BallTree(pdp_matrix)
+    r_val = ustrip(r)
 
     prog = ProgressUnknown(; desc="generating nodes", spinner=true)
-    while points[dotnr].coords.y < bbox.max.coords.y && dotnr < max_points
+    while new_points[dotnr].coords.y < bbox.max.coords.y && dotnr < max_points
         ProgressMeter.next!(prog; spinner=spinner_icons)
 
-        inside_ids = search(p, search_method)
+        p_vec = SVector(ustrip.(to(p))...)
+        inside_ids = NearestNeighbors.inrange(tree, p_vec, r_val)
 
         dist = p .- pdp[inside_ids]
         new_heights = sqrt.(r^2 .- (getindex.(dist, 1)) .^ 2) .- getindex.(dist, 2)
@@ -39,11 +44,11 @@ function _discretize_volume(
 
         p = pdp[current_id]
         dotnr += 1
-        points[dotnr] = Point(p.coords.x, heights[current_id])
+        new_points[dotnr] = Point(p.coords.x, heights[current_id])
     end
 
-    points = filter(x -> isinside(x, cloud), points[1:dotnr])
+    new_points = filter(x -> isinside(x, cloud), new_points[1:dotnr])
     ProgressMeter.finish!(prog)
 
-    return PointVolume(points)
+    return PointVolume(new_points)
 end

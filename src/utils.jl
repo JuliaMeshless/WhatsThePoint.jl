@@ -26,12 +26,6 @@ function many_permute!(arr, permutations::AbstractVector, ranges::AbstractVector
     return nothing
 end
 
-function many_permute!(
-    points::PointSet, permutations::AbstractVector, ranges::AbstractVector
-)
-    return many_permute!(parent(points), permutations, ranges)
-end
-
 function _angle(u::SVector{2}, v::SVector{2}) # preserve sign
     θ = atan(u × v, u ⋅ v) * u"rad"
     return θ == oftype(θ, -π) ? -θ : θ

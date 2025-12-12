@@ -50,7 +50,7 @@ function Base.iterate(cloud::PointCloud, state=1)
 end
 Base.names(cloud::PointCloud) = names(boundary(cloud))
 
-to(cloud::PointCloud) = to.(pointify(cloud))
+to(cloud::PointCloud) = to.(points(cloud))
 function to(namedsurfaces::LittleDict{Symbol,<:AbstractSurface})
     return mapreduce(to, vcat, values(namedsurfaces))
 end
@@ -99,8 +99,8 @@ neighbors(cloud::PointCloud, i::Int) = neighbors(topology(cloud), i)
 Build and return new cloud with k-nearest neighbor topology.
 """
 function set_topology(cloud::PointCloud, ::Type{KNNTopology}, k::Int)
-    points = pointify(cloud)
-    adj = _build_knn_neighbors(points, k)
+    pts = points(cloud)
+    adj = _build_knn_neighbors(pts, k)
     topo = KNNTopology(adj, k)
     return PointCloud(boundary(cloud), volume(cloud), topo)
 end
@@ -111,8 +111,8 @@ end
 Build and return new cloud with radius-based topology.
 """
 function set_topology(cloud::PointCloud, ::Type{RadiusTopology}, radius)
-    points = pointify(cloud)
-    adj = _build_radius_neighbors(points, radius)
+    pts = points(cloud)
+    adj = _build_radius_neighbors(pts, radius)
     topo = RadiusTopology(adj, radius)
     return PointCloud(boundary(cloud), volume(cloud), topo)
 end
@@ -123,19 +123,24 @@ end
 Rebuild topology in place using same parameters. No-op if NoTopology.
 """
 function rebuild_topology!(cloud::PointCloud)
-    points = pointify(cloud)
-    rebuild_topology!(topology(cloud), points)
+    pts = points(cloud)
+    rebuild_topology!(topology(cloud), pts)
     return nothing
 end
 
-function Meshes.pointify(cloud::PointCloud)
-    return vcat(Meshes.pointify(boundary(cloud)), Meshes.pointify(volume(cloud)))
+"""
+    points(cloud::PointCloud)
+
+Return vector of all points (boundary + volume).
+"""
+function points(cloud::PointCloud)
+    return vcat(points(boundary(cloud)), points(volume(cloud)))
 end
 function Meshes.nelements(cloud::PointCloud)
     return Meshes.nelements(boundary(cloud)) + Meshes.nelements(volume(cloud))
 end
 function Meshes.boundingbox(cloud::PointCloud)
-    return Meshes.boundingbox(PointSet(pointify(cloud)))
+    return boundingbox(points(cloud))
 end
 
 function generate_shadows(cloud::PointCloud, shadow::ShadowPoints)

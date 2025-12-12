@@ -1,5 +1,5 @@
 """
-    struct PointVolume{M,C,T} <: Domain{M,C}
+    struct PointVolume{M,C,T,V} <: Domain{M,C}
 
 Interior volume points with optional topology.
 
@@ -7,20 +7,21 @@ Interior volume points with optional topology.
 - `M<:Manifold` - manifold type
 - `C<:CRS` - coordinate reference system
 - `T<:AbstractTopology` - topology type for volume-local connectivity
+- `V<:AbstractVector{Point{M,C}}` - storage type (allows GPU arrays)
 """
-struct PointVolume{M<:Manifold,C<:CRS,T<:AbstractTopology} <: Domain{M,C}
-    points::Domain{M,C}
+struct PointVolume{M<:Manifold,C<:CRS,T<:AbstractTopology,V<:AbstractVector{Point{M,C}}} <: Domain{M,C}
+    points::V
     topology::T
 end
 
 function PointVolume{M,C}(;
     topology::T=NoTopology()
 ) where {M<:Manifold,C<:CRS,T<:AbstractTopology}
-    return PointVolume(PointSet(Point{M,C}[]), topology)
+    return PointVolume(Point{M,C}[], topology)
 end
 
-function PointVolume(points::AbstractVector; topology=NoTopology())
-    return PointVolume(PointSet(points), topology)
+function PointVolume(pts::AbstractVector{<:Point}; topology=NoTopology())
+    return PointVolume(pts, topology)
 end
 
 Base.length(vol::PointVolume) = length(vol.points)
@@ -48,10 +49,15 @@ end
 Meshes.nelements(vol::PointVolume) = length(vol.points)
 
 to(vol::PointVolume) = to.(vol.points)
-centroid(vol::PointVolume) = centroid(PointSet(vol.points))
+centroid(vol::PointVolume) = centroid(vol.points)
 boundingbox(vol::PointVolume) = boundingbox(vol.points)
 
-Meshes.pointify(vol::PointVolume) = Meshes.pointify(vol.points)
+"""
+    points(vol::PointVolume)
+
+Return vector of points from volume.
+"""
+points(vol::PointVolume) = vol.points
 
 # Topology accessors
 """
@@ -88,10 +94,10 @@ neighbors(vol::PointVolume, i::Int) = neighbors(topology(vol), i)
 Build and return new volume with k-nearest neighbor topology.
 """
 function set_topology(vol::PointVolume, ::Type{KNNTopology}, k::Int)
-    points = pointify(vol)
-    adj = _build_knn_neighbors(points, k)
+    pts = points(vol)
+    adj = _build_knn_neighbors(pts, k)
     topo = KNNTopology(adj, k)
-    return PointVolume(collect(vol.points); topology=topo)
+    return PointVolume(vol.points; topology=topo)
 end
 
 """
@@ -100,10 +106,10 @@ end
 Build and return new volume with radius-based topology.
 """
 function set_topology(vol::PointVolume, ::Type{RadiusTopology}, radius)
-    points = pointify(vol)
-    adj = _build_radius_neighbors(points, radius)
+    pts = points(vol)
+    adj = _build_radius_neighbors(pts, radius)
     topo = RadiusTopology(adj, radius)
-    return PointVolume(collect(vol.points); topology=topo)
+    return PointVolume(vol.points; topology=topo)
 end
 
 """
@@ -112,8 +118,8 @@ end
 Rebuild topology in place using same parameters. No-op if NoTopology.
 """
 function rebuild_topology!(vol::PointVolume)
-    points = pointify(vol)
-    rebuild_topology!(topology(vol), points)
+    pts = points(vol)
+    rebuild_topology!(topology(vol), pts)
     return nothing
 end
 
@@ -121,8 +127,8 @@ end
 function Base.show(io::IO, ::MIME"text/plain", vol::PointVolume{M,C}) where {M,C}
     println(io, "PointVolume{$M,$C}")
     has_topo = hastopology(vol)
-    points_char = has_topo ? "├" : "└"
-    println(io, "$points_char─Number of points: $(length(vol.points))")
+    prefix = has_topo ? "├" : "└"
+    println(io, "$(prefix)─Number of points: $(length(vol.points))")
     if has_topo
         topo = topology(vol)
         topo_name = nameof(typeof(topo))

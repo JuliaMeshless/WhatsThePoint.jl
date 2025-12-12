@@ -100,7 +100,7 @@ end
 
     cloud2 = PointCloud(bnd)
     @test length(volume(cloud2)) == 0
-    discretize!(cloud2, spacing; alg=SlakKosec(), max_points=50)
+    cloud2 = discretize(cloud2, spacing; alg=SlakKosec(), max_points=50)
     @test length(volume(cloud2)) <= 50
     @test length(volume(cloud2)) > 0
 end
@@ -114,7 +114,7 @@ end
     @test length(volume(cloud)) <= 100
 
     cloud2 = PointCloud(bnd)
-    discretize!(cloud2, spacing; alg=VanDerSandeFornberg(), max_points=100)
+    cloud2 = discretize(cloud2, spacing; alg=VanDerSandeFornberg(), max_points=100)
     @test length(volume(cloud2)) <= 100
     @test length(volume(cloud2)) > 0
 end
@@ -131,7 +131,7 @@ end
     @test length(volume(cloud)) <= 100
 
     cloud2 = PointCloud(boundary)
-    discretize!(cloud2, spacing; alg=FornbergFlyer(), max_points=100)
+    cloud2 = discretize(cloud2, spacing; alg=FornbergFlyer(), max_points=100)
     @test length(volume(cloud2)) <= 100
 end
 

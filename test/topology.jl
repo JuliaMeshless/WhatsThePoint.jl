@@ -156,8 +156,8 @@ end
     using WhatsThePoint: boundary
     # Ensure old code patterns still work
     N = 10
-    points = rand(Point, N)
-    b = PointBoundary(points)
+    pts = rand(Point, N)
+    b = PointBoundary(pts)
     cloud = PointCloud(b)
 
     # All existing operations should work
@@ -165,7 +165,7 @@ end
     @test size(cloud) == (N,)
     @test boundary(cloud) isa PointBoundary
     @test volume(cloud) isa PointVolume
-    @test pointify(cloud) isa Vector{<:Point}
+    @test points(cloud) isa Vector{<:Point}
     @test Meshes.nelements(cloud) == N
 end
 

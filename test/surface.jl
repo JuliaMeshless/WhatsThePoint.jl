@@ -11,12 +11,7 @@
     @test length(surf) == 10
     @test surf.geoms isa StructVector
 
-    pointset = PointSet(points)
-    surf = PointSurface(pointset, normals, areas)
-    @test length(surf) == 10
-    @test surf.geoms isa StructVector
-
-    surf = PointSurface(pointset, normals, areas; shadow=shadow)
+    surf = PointSurface(points, normals, areas; shadow=shadow)
     @test length(surf) == 10
     @test surf.shadow == shadow
 
@@ -77,14 +72,14 @@ end
     @test view(surf, 1:2:5) == view(surf.geoms, 1:2:5)
 end
 
-@testitem "PointSurface Meshes.jl Interface" setup=[TestData, CommonImports] begin
-    points = rand(Point, 10)
+@testitem "PointSurface points() and Meshes.jl Interface" setup=[TestData, CommonImports] begin
+    pts_data = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
-    surf = PointSurface(points, normals, areas)
+    surf = PointSurface(pts_data, normals, areas)
 
-    pts = Meshes.pointify(surf)
+    pts = points(surf)
     @test pts == point(surf)
     @test length(pts) == 10
 

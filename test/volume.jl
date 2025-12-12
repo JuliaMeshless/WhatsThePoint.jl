@@ -8,20 +8,13 @@
         @test length(vol) == 0
     end
 
-    @testset "PointSet constructor" begin
-        points = [Point(Float64(i), Float64(i)) for i in 1:N]
-        vol = PointVolume(PointSet(points))
+    @testset "Vector constructor" begin
+        pts = [Point(Float64(i), Float64(i)) for i in 1:N]
+        vol = PointVolume(pts)
         @test vol isa PointVolume
         @test length(vol) == N
         @test !isempty(vol)
-    end
-
-    @testset "Vector constructor" begin
-        points = [Point(Float64(i), Float64(i)) for i in 1:N]
-        vol = PointVolume(points)
-        @test vol isa PointVolume
-        @test length(vol) == N
-        @test parent(vol) == PointSet(points)
+        @test parent(vol) == pts
     end
 end
 
@@ -64,10 +57,10 @@ end
     end
 
     @testset "parent" begin
-        points = [Point(Float64(i), Float64(i)) for i in 1:N]
-        vol = PointVolume(points)
-        @test parent(vol) == PointSet(points)
-        @test parent(vol) isa PointSet
+        pts = [Point(Float64(i), Float64(i)) for i in 1:N]
+        vol = PointVolume(pts)
+        @test parent(vol) == pts
+        @test parent(vol) isa AbstractVector{<:Point}
     end
 
     @testset "filter" begin
@@ -96,39 +89,39 @@ end
     end
 
     @testset "centroid" begin
-        points = [Point(1.0, 1.0), Point(3.0, 3.0), Point(5.0, 5.0)]
-        vol = PointVolume(points)
+        pts = [Point(1.0, 1.0), Point(3.0, 3.0), Point(5.0, 5.0)]
+        vol = PointVolume(pts)
         c = centroid(vol)
         @test c isa Point
-        expected = centroid(PointSet(points))
+        expected = centroid(pts)
         @test to(c) == to(expected)
     end
 
     @testset "boundingbox" begin
-        points = [Point(1.0, 1.0), Point(3.0, 3.0), Point(5.0, 5.0)]
-        vol = PointVolume(points)
+        pts = [Point(1.0, 1.0), Point(3.0, 3.0), Point(5.0, 5.0)]
+        vol = PointVolume(pts)
         bbox = boundingbox(vol)
         @test bbox isa Box
-        expected = boundingbox(PointSet(points))
+        expected = boundingbox(pts)
         @test bbox == expected
     end
 end
 
-@testitem "PointVolume Meshes.pointify" setup=[TestData, CommonImports] begin
+@testitem "PointVolume points()" setup=[TestData, CommonImports] begin
     N = 10
 
-    @testset "pointify returns points" begin
-        points = [Point(Float64(i), Float64(i)) for i in 1:N]
-        vol = PointVolume(points)
-        pointified = Meshes.pointify(vol)
-        @test pointified isa Vector{<:Point}
-        @test pointified == points
+    @testset "points returns points" begin
+        pts = [Point(Float64(i), Float64(i)) for i in 1:N]
+        vol = PointVolume(pts)
+        result = points(vol)
+        @test result isa AbstractVector{<:Point}
+        @test result == pts
     end
 
-    @testset "pointify empty volume" begin
+    @testset "points empty volume" begin
         vol = PointVolume{🌐,Cartesian{NoDatum}}()
-        pointified = Meshes.pointify(vol)
-        @test isempty(pointified)
+        result = points(vol)
+        @test isempty(result)
     end
 end
 

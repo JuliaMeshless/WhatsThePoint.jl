@@ -1,17 +1,17 @@
 function Meshes.KNearestSearch(
     cloud::Union{PointCloud,PointBoundary,PointSurface}, k::Int; metric=Euclidean()
 )
-    return KNearestSearch(pointify(cloud), k; metric=metric)
+    return KNearestSearch(points(cloud), k; metric=metric)
 end
 
 function Meshes.search(
     cloud::Union{PointCloud,PointBoundary,PointSurface}, method::KNearestSearch
 )
-    return search.(pointify(cloud), Ref(method))
+    return search.(points(cloud), Ref(method))
 end
 
 function Meshes.searchdists(
     cloud::Union{PointCloud,PointBoundary,PointSurface}, method::KNearestSearch
 )
-    return searchdists.(pointify(cloud), Ref(method))
+    return searchdists.(points(cloud), Ref(method))
 end

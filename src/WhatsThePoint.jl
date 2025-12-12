@@ -36,9 +36,9 @@ using Unitful
 
 import Meshes: Manifold, Domain
 import Meshes: centroid, boundingbox, discretize, to, crs
-import Meshes: elements, nelements, lentype, normal, area, pointify
+import Meshes: elements, nelements, lentype, normal, area
 # re-export from Meshes.jl
-export Point, coords, isinside, centroid, boundingbox, pointify
+export Point, coords, isinside, centroid, boundingbox, points
 export KNearestSearch, BallSearch, MetricBall, search, searchdists
 
 const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -46,6 +46,8 @@ const Angle{T} = Union{Quantity{T,NoDims,typeof(u"rad")},Quantity{T,NoDims,typeo
 
 include("utils.jl")
 export metrics
+
+include("geometry.jl")
 
 include("points.jl")
 export emptyspace
@@ -98,6 +100,9 @@ include("io.jl")
 export import_surface, export_cloud, visualize, visualize_normals, save
 
 include("visualize.jl")
+
+# Backward compatibility for deprecated Meshes.jl pointify
+Base.@deprecate pointify(x) points(x)
 
 ######################################################
 using PrecompileTools

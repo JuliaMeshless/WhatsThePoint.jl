@@ -7,7 +7,7 @@ SlakKosec() = SlakKosec(10)
 function _discretize_volume(
     cloud::PointCloud{𝔼{3},C}, spacing::AbstractSpacing, alg::SlakKosec; max_points=1_000
 ) where {C}
-    seeds = copy(pointify(boundary(cloud)))
+    seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
     new_points = Point{𝔼{3},C}[]
 
