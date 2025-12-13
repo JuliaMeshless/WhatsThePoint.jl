@@ -1,9 +1,9 @@
 @testitem "PointBoundary with Points" setup=[TestData, CommonImports] begin
     N = 10
-    points = rand(Point, N)
-    b = PointBoundary(points)
-    @test all(pointify(b) .== points)
-    @test point(b[:surface1]) == points
+    pts = rand(Point, N)
+    b = PointBoundary(pts)
+    @test all(points(b) .== pts)
+    @test point(b[:surface1]) == pts
 end
 
 @testitem "PointBoundary from file" setup=[TestData, CommonImports] begin
@@ -58,21 +58,21 @@ end
 
 @testitem "PointBoundary centroid()" setup=[TestData, CommonImports] begin
     N = 10
-    points = rand(Point, N)
-    b = PointBoundary(points)
+    pts = rand(Point, N)
+    b = PointBoundary(pts)
     c = centroid(b)
     @test c isa Point
-    expected_centroid = centroid(PointSet(points))
+    expected_centroid = centroid(pts)
     @test c == expected_centroid
 end
 
 @testitem "PointBoundary boundingbox()" setup=[TestData, CommonImports] begin
     N = 10
-    points = rand(Point, N)
-    b = PointBoundary(points)
+    pts = rand(Point, N)
+    b = PointBoundary(pts)
     bbox = boundingbox(b)
     @test bbox isa Box
-    expected_bbox = boundingbox(PointSet(points))
+    expected_bbox = boundingbox(pts)
     @test bbox == expected_bbox
 end
 
@@ -101,20 +101,20 @@ end
     @test all_areas == vcat(areas, areas2)
 end
 
-@testitem "PointBoundary Meshes.pointify()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary points()" setup=[TestData, CommonImports] begin
     N = 10
-    points = rand(Point, N)
-    b = PointBoundary(points)
-    pointified = Meshes.pointify(b)
-    @test length(pointified) == N
-    @test all(pointified .== points)
+    pts = rand(Point, N)
+    b = PointBoundary(pts)
+    result = points(b)
+    @test length(result) == N
+    @test all(result .== pts)
 
-    points2 = rand(Point, N)
-    surf2 = PointSurface(points2)
+    pts2 = rand(Point, N)
+    surf2 = PointSurface(pts2)
     b[:surface2] = surf2
-    pointified = Meshes.pointify(b)
-    @test length(pointified) == 2 * N
-    @test all(pointified .== vcat(points, points2))
+    result = points(b)
+    @test length(result) == 2 * N
+    @test all(result .== vcat(pts, pts2))
 end
 
 @testitem "PointBoundary Meshes.nelements()" setup=[TestData, CommonImports] begin

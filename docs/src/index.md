@@ -53,3 +53,30 @@ cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_
 and we can visualize again with `visualize(cloud; markersize=0.15)`
 
 ![bunny discretized](assets/bunny-discretized.png)
+
+## Adding Topology (Point Connectivity)
+
+For meshless PDE solvers, you often need to know the neighbors of each point (the stencil).
+WhatsThePoint can compute and store this connectivity:
+
+```julia
+# Add k-nearest neighbor topology (21 neighbors per point)
+set_topology!(cloud, KNNTopology, 21)
+
+# Access neighbors
+all_neighbors = neighbors(cloud)        # Vector{Vector{Int}}
+point_5_neighbors = neighbors(cloud, 5) # neighbors of point 5
+
+# Check topology state
+hastopology(cloud)           # true
+isvalid(topology(cloud))     # true
+```
+
+Alternatively, use radius-based topology where all points within a given distance are neighbors:
+
+```julia
+set_topology!(cloud, RadiusTopology, 2mm)
+```
+
+Note: Operations that move points (like `repel!`) will invalidate the topology.
+Call `rebuild_topology!(cloud)` to recompute after such operations.

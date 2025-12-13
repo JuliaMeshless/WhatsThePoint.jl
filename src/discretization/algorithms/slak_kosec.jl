@@ -4,10 +4,10 @@ struct SlakKosec <: AbstractNodeGenerationAlgorithm
 end
 SlakKosec() = SlakKosec(10)
 
-function discretize!(
+function _discretize_volume(
     cloud::PointCloud{𝔼{3},C}, spacing::AbstractSpacing, alg::SlakKosec; max_points=1_000
 ) where {C}
-    seeds = copy(pointify(boundary(cloud)))
+    seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
     new_points = Point{𝔼{3},C}[]
 
@@ -33,8 +33,7 @@ function discretize!(
         end
     end
 
-    cloud.volume = PointVolume(new_points)
-    return nothing
+    return PointVolume(new_points)
 end
 
 function _get_candidates(p::Point{𝔼{3},C}, r; n=10) where {C}

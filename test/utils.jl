@@ -106,18 +106,18 @@ end
     @test arr == [1.0, 2.0, 3.0]
 end
 
-@testitem "many_permute! PointSet" setup=[TestData, CommonImports] begin
-    points = Point.([(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)])
+@testitem "many_permute! Vector{Point}" setup=[TestData, CommonImports] begin
+    pts = Point.([(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)])
     permutations = [[2, 1], [4, 3]]
     ranges = WhatsThePoint.ranges_from_permutation(permutations)
-    WhatsThePoint.many_permute!(points, permutations, ranges)
+    WhatsThePoint.many_permute!(pts, permutations, ranges)
     expected = Point.([(2.0, 2.0), (1.0, 1.0), (4.0, 4.0), (3.0, 3.0)])
-    @test all(points .== expected)
+    @test all(pts .== expected)
 
-    points = Point.([(1.0, 1.0, 1.0), (2.0, 2.0, 2.0), (3.0, 3.0, 3.0)])
+    pts = Point.([(1.0, 1.0, 1.0), (2.0, 2.0, 2.0), (3.0, 3.0, 3.0)])
     permutations = [[3, 2, 1]]
     ranges = WhatsThePoint.ranges_from_permutation(permutations)
-    WhatsThePoint.many_permute!(points, permutations, ranges)
+    WhatsThePoint.many_permute!(pts, permutations, ranges)
     expected = Point.([(3.0, 3.0, 3.0), (2.0, 2.0, 2.0), (1.0, 1.0, 1.0)])
-    @test all(points .== expected)
+    @test all(pts .== expected)
 end
