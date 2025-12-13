@@ -1,7 +1,7 @@
 name = "WhatsThePoint"
 uuid = "5faae8f1-f507-432f-bd56-cf2f1161ab6f"
-authors = ["Kyle Beggs <beggskw@gmail.com>"]
 version = "0.1.1"
+authors = ["Kyle Beggs <beggskw@gmail.com>"]
 
 [deps]
 ChunkSplitters = "ae650224-84b6-46f8-82ea-d812ca08434e"
@@ -17,7 +17,6 @@ NearestNeighbors = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
-Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SimpleWeightedGraphs = "47aef6b3-ad0c-573a-a1e2-d07658019622"
@@ -42,7 +41,6 @@ NearestNeighbors = "0.4.8"
 OhMyThreads = "0.7, 0.8"
 OrderedCollections = "1.7.0"
 PrecompileTools = "1.2"
-Preferences = "1.3"
 ProgressMeter = "1.7"
 SimpleWeightedGraphs = "1.2.2"
 StaticArrays = "1.9"
