@@ -97,7 +97,7 @@ export repel
 include("metrics.jl")
 
 include("io.jl")
-export import_surface, export_cloud, visualize, visualize_normals, save
+export import_surface, export_cloud, visualize, save
 
 include("visualize.jl")
 

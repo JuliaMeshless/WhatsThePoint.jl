@@ -218,3 +218,130 @@ end
     @test length(nbrs) == N
     @test length(neighbors(vol, 1)) == k
 end
+
+@testitem "Surface-level RadiusTopology" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: topology
+    # Create grid pattern for predictable neighbors
+    spacing = 0.1u"m"
+    points = [Point(i * spacing, j * spacing) for i in 0:4 for j in 0:4]
+    normals = [Point(0.0, 0.0, 1.0) for _ in points]
+    areas = zeros(length(points)) * u"m^2"
+    surf = PointSurface(points, normals, areas)
+
+    # Add RadiusTopology
+    radius = 0.15u"m"
+    surf = set_topology(surf, RadiusTopology, radius)
+
+    # Validate topology
+    @test hastopology(surf) == true
+    @test topology(surf) isa RadiusTopology
+    @test topology(surf).radius == radius
+    @test isvalid(topology(surf)) == true
+
+    # Check neighbors structure
+    nbrs = neighbors(surf)
+    @test length(nbrs) == length(points)
+    # Verify self-exclusion
+    for i in 1:length(points)
+        @test i ∉ neighbors(surf, i)
+    end
+end
+
+@testitem "Volume-level RadiusTopology" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: topology
+    # Create grid pattern for predictable neighbors
+    spacing = 0.1u"m"
+    points = [Point(i * spacing, j * spacing) for i in 0:4 for j in 0:4]
+    vol = PointVolume(points)
+
+    # Add RadiusTopology
+    radius = 0.15u"m"
+    vol = set_topology(vol, RadiusTopology, radius)
+
+    # Validate topology
+    @test hastopology(vol) == true
+    @test topology(vol) isa RadiusTopology
+    @test topology(vol).radius == radius
+    @test isvalid(topology(vol)) == true
+
+    # Check neighbors structure
+    nbrs = neighbors(vol)
+    @test length(nbrs) == length(points)
+    # Verify self-exclusion
+    for i in 1:length(points)
+        @test i ∉ neighbors(vol, i)
+    end
+end
+
+@testitem "RadiusTopology rebuild" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: topology
+    # Create grid for predictable results
+    spacing = 0.1u"m"
+    points = [Point(i * spacing, j * spacing) for i in 0:3 for j in 0:3]
+    cloud = PointCloud(PointBoundary(points))
+
+    # Set RadiusTopology
+    radius = 0.15u"m"
+    cloud = set_topology(cloud, RadiusTopology, radius)
+
+    # Rebuild topology in place
+    rebuild_topology!(cloud)
+
+    # Validate topology still valid
+    @test isvalid(topology(cloud)) == true
+    @test topology(cloud) isa RadiusTopology
+    @test topology(cloud).radius == radius
+
+    # Neighbors should still work
+    nbrs = neighbors(cloud, 1)
+    @test nbrs isa Vector{Int}
+    @test 1 ∉ nbrs  # Self-exclusion
+end
+
+@testitem "Surface RadiusTopology rebuild" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: topology
+    # Create surface with RadiusTopology
+    spacing = 0.1u"m"
+    points = [Point(i * spacing, j * spacing) for i in 0:3 for j in 0:3]
+    normals = [Point(0.0, 0.0, 1.0) for _ in points]
+    areas = zeros(length(points)) * u"m^2"
+    surf = PointSurface(points, normals, areas)
+
+    radius = 0.15u"m"
+    surf = set_topology(surf, RadiusTopology, radius)
+
+    # Rebuild topology
+    rebuild_topology!(surf)
+
+    # Validate topology preserved
+    @test isvalid(topology(surf)) == true
+    @test topology(surf) isa RadiusTopology
+    @test topology(surf).radius == radius
+    @test hastopology(surf) == true
+
+    # Check neighbors still valid
+    @test length(neighbors(surf)) == length(points)
+end
+
+@testitem "Volume RadiusTopology rebuild" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: topology
+    # Create volume with RadiusTopology
+    spacing = 0.1u"m"
+    points = [Point(i * spacing, j * spacing) for i in 0:3 for j in 0:3]
+    vol = PointVolume(points)
+
+    radius = 0.15u"m"
+    vol = set_topology(vol, RadiusTopology, radius)
+
+    # Rebuild topology
+    rebuild_topology!(vol)
+
+    # Validate topology preserved
+    @test isvalid(topology(vol)) == true
+    @test topology(vol) isa RadiusTopology
+    @test topology(vol).radius == radius
+    @test hastopology(vol) == true
+
+    # Check neighbors still valid
+    @test length(neighbors(vol)) == length(points)
+end
