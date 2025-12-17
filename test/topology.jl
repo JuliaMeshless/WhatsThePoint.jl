@@ -29,9 +29,7 @@ end
     @test length(nbrs) == N
 
     # Each point should have exactly k neighbors
-    for n in nbrs
-        @test length(n) == k
-    end
+    @test all(length.(nbrs) .== k)
 
     # Check single point neighbor access
     nbrs_1 = neighbors(cloud, 1)
@@ -39,9 +37,7 @@ end
     @test length(nbrs_1) == k
 
     # Neighbors should not include self
-    for i in 1:N
-        @test i ∉ neighbors(cloud, i)
-    end
+    @test all(i -> i ∉ neighbors(cloud, i), 1:N)
 end
 
 @testitem "RadiusTopology construction" setup = [TestData, CommonImports] begin
@@ -66,9 +62,7 @@ end
     @test length(nbrs) == length(points)
 
     # Neighbors should not include self
-    for i in 1:length(points)
-        @test i ∉ neighbors(cloud, i)
-    end
+    @test all(i -> i ∉ neighbors(cloud, i), 1:length(points))
 end
 
 @testitem "Topology rebuild" setup = [TestData, CommonImports] begin
@@ -136,18 +130,18 @@ end
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
 
-    # Without topology
+    # Without topology shows NoTopology
     io = IOBuffer()
     show(io, MIME("text/plain"), cloud)
     output = String(take!(io))
-    @test !contains(output, "Topology")
+    @test contains(output, "NoTopology")
 
-    # With topology
+    # With topology shows KNNTopology
     cloud = set_topology(cloud, KNNTopology, 3)
     io = IOBuffer()
     show(io, MIME("text/plain"), cloud)
     output = String(take!(io))
-    @test contains(output, "Topology")
+    @test contains(output, "KNNTopology")
 end
 
 @testitem "Backwards compatibility - PointCloud without topology" setup = [
@@ -242,9 +236,7 @@ end
     nbrs = neighbors(surf)
     @test length(nbrs) == length(points)
     # Verify self-exclusion
-    for i in 1:length(points)
-        @test i ∉ neighbors(surf, i)
-    end
+    @test all(i -> i ∉ neighbors(surf, i), 1:length(points))
 end
 
 @testitem "Volume-level RadiusTopology" setup = [TestData, CommonImports] begin
@@ -268,9 +260,7 @@ end
     nbrs = neighbors(vol)
     @test length(nbrs) == length(points)
     # Verify self-exclusion
-    for i in 1:length(points)
-        @test i ∉ neighbors(vol, i)
-    end
+    @test all(i -> i ∉ neighbors(vol, i), 1:length(points))
 end
 
 @testitem "RadiusTopology rebuild" setup = [TestData, CommonImports] begin

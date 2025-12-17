@@ -31,7 +31,7 @@ function exportvtk(
     triangulate=false,
 ) where {V<:AbstractVector}
     # Strip units from points for VTK compatibility
-    p = reduce(hcat, ustrip.(points))
+    p = reduce(hcat, map(pt -> ustrip.(pt), points))
     cells = createvtkcells(p, triangulate)
     vtkfile = createvtkfile(filename, p, cells)
     for (name, field) in zip(names, data)
