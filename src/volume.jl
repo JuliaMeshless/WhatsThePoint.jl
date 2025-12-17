@@ -126,14 +126,10 @@ end
 # pretty printing
 function Base.show(io::IO, ::MIME"text/plain", vol::PointVolume{M,C}) where {M,C}
     println(io, "PointVolume{$M,$C}")
-    has_topo = hastopology(vol)
-    prefix = has_topo ? "├" : "└"
-    println(io, "$(prefix)─Number of points: $(length(vol.points))")
-    if has_topo
-        topo = topology(vol)
-        topo_name = nameof(typeof(topo))
-        println(io, "└─Topology: $topo_name")
-    end
+    println(io, "├─Number of points: $(length(vol.points))")
+    topo = topology(vol)
+    topo_name = nameof(typeof(topo))
+    println(io, "└─Topology: $topo_name")
     return nothing
 end
 

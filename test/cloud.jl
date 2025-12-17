@@ -185,6 +185,7 @@ end
     @test contains(output, "$(N) points")
     @test contains(output, "Boundary: $(N) points")
     @test contains(output, "surface1")
+    @test contains(output, "Topology: NoTopology")
 
     vol_points = rand(Point, 5)
     cloud_with_vol = PointCloud(PointBoundary(points), PointVolume(vol_points))

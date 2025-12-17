@@ -205,20 +205,16 @@ function Base.show(io::IO, ::MIME"text/plain", surf::PointSurface{M,C}) where {M
     end
 
     s = surf.shadow
-    has_topo = hastopology(surf)
     _shadow_order(::ShadowPoints{O}) where {O} = O
-    shadow_str = has_topo ? "├─Shadow:" : "└─Shadow:"
     if isnothing(s)
-        println(io, "$shadow_str none")
+        println(io, "├─Shadow: none")
     else
-        println(io, "$shadow_str $(_shadow_order(s))")
+        println(io, "├─Shadow: $(_shadow_order(s))")
     end
 
-    if has_topo
-        topo = topology(surf)
-        topo_name = nameof(typeof(topo))
-        println(io, "└─Topology: $topo_name")
-    end
+    topo = topology(surf)
+    topo_name = nameof(typeof(topo))
+    println(io, "└─Topology: $topo_name")
     return nothing
 end
 

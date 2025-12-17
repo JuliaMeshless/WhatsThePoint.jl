@@ -153,26 +153,21 @@ function Base.show(io::IO, ::MIME"text/plain", cloud::PointCloud)
     println(io, "PointCloud{$M, $C}")
     println(io, "├─$(length(cloud)) points")
     has_vol = !iszero(length(cloud.volume))
-    has_topo = hastopology(cloud)
-    vert = (has_vol || has_topo) ? "│ " : "  "
     if !isnothing(namedsurfaces(cloud))
-        char = (has_vol || has_topo) ? "├" : "└"
-        println(io, char * "─Boundary: $(length(boundary(cloud))) points")
+        println(io, "├─Boundary: $(length(boundary(cloud))) points")
         N = length(namedsurfaces(cloud))
+        vert = "│ "
         for (i, name) in enumerate(names(boundary(cloud)))
             char = i < N ? "├" : "└"
             println(io, vert * char * "─$(name)")
         end
     end
     if has_vol
-        char = has_topo ? "├" : "└"
-        println(io, char * "─Volume: $(length(volume(cloud))) points")
+        println(io, "├─Volume: $(length(volume(cloud))) points")
     end
-    if has_topo
-        topo = topology(cloud)
-        topo_name = nameof(typeof(topo))
-        println(io, "└─Topology: $topo_name")
-    end
+    topo = topology(cloud)
+    topo_name = nameof(typeof(topo))
+    println(io, "└─Topology: $topo_name")
 end
 
 Base.show(io::IO, ::PointCloud) = println(io, "PointCloud")

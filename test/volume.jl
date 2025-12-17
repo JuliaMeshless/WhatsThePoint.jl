@@ -135,6 +135,7 @@ end
     output = String(take!(io))
     @test occursin("PointVolume", output)
     @test occursin("Number of points: $N", output)
+    @test occursin("Topology: NoTopology", output)
 
     io = IOBuffer()
     show(io, vol)
