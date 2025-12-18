@@ -36,9 +36,9 @@ function PointBoundary(filepath::String)
     return PointBoundary(surfaces)
 end
 
-to(boundary::PointBoundary) = to.(Meshes.pointify(boundary))
-centroid(boundary::PointBoundary) = centroid(PointSet(Meshes.pointify(boundary)))
-boundingbox(boundary::PointBoundary) = boundingbox(Meshes.pointify(boundary))
+to(boundary::PointBoundary) = to.(points(boundary))
+centroid(boundary::PointBoundary) = centroid(points(boundary))
+boundingbox(boundary::PointBoundary) = boundingbox(points(boundary))
 
 boundary(boundary::PointBoundary) = boundary
 namedsurfaces(boundary::PointBoundary) = boundary.surfaces
@@ -48,7 +48,12 @@ area(boundary::PointBoundary) = mapreduce(area, vcat, surfaces(boundary))
 
 hassurface(boundary::PointBoundary, name) = haskey(namedsurfaces(boundary), name)
 
-Meshes.pointify(boundary::PointBoundary) = mapreduce(pointify, vcat, surfaces(boundary))
+"""
+    points(boundary::PointBoundary)
+
+Return vector of all points from all surfaces in the boundary.
+"""
+points(boundary::PointBoundary) = mapreduce(points, vcat, surfaces(boundary))
 Meshes.nelements(boundary::PointBoundary) = length(boundary)
 
 Base.length(boundary::PointBoundary) = sum(length, surfaces(boundary))

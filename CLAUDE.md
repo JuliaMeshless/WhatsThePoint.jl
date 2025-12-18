@@ -53,7 +53,8 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 - `surface.jl` - PointSurface and SurfaceElement types
 - `boundary.jl` - PointBoundary managing named surfaces
 - `volume.jl` - PointVolume for interior points
-- `cloud.jl` - PointCloud combining boundary and volume
+- `cloud.jl` - PointCloud combining boundary, volume, and topology
+- `topology.jl` - Point connectivity (KNNTopology, RadiusTopology)
 
 ### Geometry Operations (`src/`)
 - `normals.jl` - Normal computation using PCA and orientation via MST+DFS (Hoppe 1992)
@@ -110,6 +111,51 @@ Different algorithms for different dimensions:
 ### Surface Import Behavior
 When importing meshes (e.g., STL files), the package uses **face centers** as boundary points, not vertices. This is important for understanding point distributions after import.
 
+### Topology (Point Connectivity)
+
+PointCloud, PointSurface, and PointVolume all support optional topology storing point neighborhoods for meshless stencils. All types use **immutable structs** with functional API (operations return new objects).
+
+```julia
+# Add k-nearest neighbor topology (returns new cloud)
+cloud = set_topology(cloud, KNNTopology, 21)
+
+# Or radius-based topology
+cloud = set_topology(cloud, RadiusTopology, 2mm)
+
+# Surface-level topology (local indices)
+surf = set_topology(surf, KNNTopology, 10)
+neighbors(surf, i)  # Local indices: 1..length(surf)
+
+# Volume-level topology (local indices)
+vol = set_topology(vol, KNNTopology, 15)
+neighbors(vol, i)   # Local indices: 1..length(vol)
+
+# Cloud-level topology (global indices)
+neighbors(cloud, i) # Global indices: 1..length(cloud)
+
+# Check state
+hastopology(cloud)  # true if topology exists
+```
+
+**Key behaviors:**
+- `NoTopology` is the default (backwards compatible)
+- Topology is built eagerly when `set_topology` is called
+- All operations return new objects (immutable design for AD compatibility)
+- `repel` returns new cloud with `NoTopology` (points moved)
+- No invalidation needed - immutable objects can't become stale
+
+**Type hierarchy:**
+- `AbstractTopology{S}` - abstract base with storage type parameter
+- `NoTopology` - singleton, no connectivity
+- `KNNTopology{S}` - k-nearest neighbors
+- `RadiusTopology{S,R}` - radius-based neighbors
+
+**Multi-level topology:**
+- PointSurface has `topology::T` field for surface-local connectivity
+- PointVolume has `topology::T` field for volume-local connectivity
+- PointCloud has `topology::T` field for global connectivity
+- Component topologies use local indices; cloud topology uses global indices
+
 ## Common Workflows
 
 ### Creating a Point Cloud from STL
@@ -142,11 +188,12 @@ split_surface!(boundary, 75°)
 ### Node Repulsion Optimization
 
 ```julia
-# Optimize point distribution
-repel!(cloud, spacing; β=0.2, max_iters=1000)
+# Optimize point distribution (returns tuple)
+cloud, convergence = repel(cloud, spacing; β=0.2, max_iters=1000)
 
 # β controls repulsion strength
-# This improves point distribution quality iteratively
+# Returns (new_cloud, convergence_vector) tuple
+# New cloud has NoTopology since points moved
 ```
 
 ### Visualization
@@ -163,28 +210,33 @@ visualize_normals(boundary)
 
 ## Key Functions Reference
 
-- `discretize` / `discretize!` - Generate volume points from boundary
+- `discretize` - Generate volume points from boundary (returns new cloud)
 - `split_surface!` - Split boundary surfaces by normal angle threshold
 - `combine_surfaces!` - Merge multiple surfaces into one
 - `compute_normals` / `orient_normals!` - Normal vector handling
-- `repel!` - Optimize point distribution via node repulsion
+- `repel` - Optimize point distribution via node repulsion (returns new cloud, convergence)
 - `isinside` - Test if point is inside domain
 - `import_surface` - Load from STL/mesh files (via GeoIO.jl)
 - `export_cloud` - Save to VTK format
 - `visualize` - Makie-based visualization
+- `set_topology` - Build point connectivity and return new object
+- `rebuild_topology!` - Rebuild topology in place with same parameters
+- `neighbors` - Access point neighborhoods from topology
 
 ## Testing Structure
 
-Tests use `SafeTestsets.jl` for isolated environments:
+Tests use `TestItemRunner.jl` with `@testitem` macros:
 
 ```
 test/
-├── runtests.jl          # Main orchestrator
+├── runtests.jl          # Main orchestrator (@run_package_tests)
+├── testsetup.jl         # Common imports and test data
 ├── points.jl            # Point utilities tests
 ├── normals.jl           # Normal computation tests
 ├── surface.jl           # PointSurface tests
 ├── boundary.jl          # PointBoundary tests
 ├── cloud.jl             # PointCloud tests
+├── topology.jl          # Topology tests (KNNTopology, RadiusTopology)
 ├── isinside.jl          # Point-in-volume tests
 └── data/
     ├── bifurcation.stl  # Test data (24,780 points)

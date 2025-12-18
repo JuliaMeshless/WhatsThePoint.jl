@@ -131,12 +131,12 @@ end
     @test hassurface(cloud, :newsurface) == true
 end
 
-@testitem "PointCloud Meshes interface" setup = [TestData, CommonImports] begin
+@testitem "PointCloud points() and Meshes interface" setup = [TestData, CommonImports] begin
     N = 10
-    points = rand(Point, N)
-    cloud = PointCloud(PointBoundary(points))
+    boundary_pts = rand(Point, N)
+    cloud = PointCloud(PointBoundary(boundary_pts))
 
-    pts = Meshes.pointify(cloud)
+    pts = points(cloud)
     @test pts isa Vector{<:Point}
     @test length(pts) == N
 
@@ -147,11 +147,10 @@ end
     bbox = Meshes.boundingbox(cloud)
     @test bbox isa Box
 
-    vol_points = rand(Point, 5)
-    cloud_with_vol = PointCloud(PointBoundary(points))
-    cloud_with_vol.volume = PointVolume(vol_points)
+    vol_pts = rand(Point, 5)
+    cloud_with_vol = PointCloud(PointBoundary(boundary_pts), PointVolume(vol_pts))
 
-    pts_total = Meshes.pointify(cloud_with_vol)
+    pts_total = points(cloud_with_vol)
     @test length(pts_total) == N + 5
 
     n_elems_total = Meshes.nelements(cloud_with_vol)
@@ -186,10 +185,10 @@ end
     @test contains(output, "$(N) points")
     @test contains(output, "Boundary: $(N) points")
     @test contains(output, "surface1")
+    @test contains(output, "Topology: NoTopology")
 
     vol_points = rand(Point, 5)
-    cloud_with_vol = PointCloud(PointBoundary(points))
-    cloud_with_vol.volume = PointVolume(vol_points)
+    cloud_with_vol = PointCloud(PointBoundary(points), PointVolume(vol_points))
     io = IOBuffer()
     show(io, MIME("text/plain"), cloud_with_vol)
     output = String(take!(io))

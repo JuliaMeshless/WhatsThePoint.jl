@@ -9,12 +9,14 @@ function combine_surfaces!(boundary::PointBoundary, surfs...)
     new_geoms = mapreduce(vcat, combined_surfaces) do name
         boundary[name].geoms
     end
+    new_normals = mapreduce(vcat, combined_surfaces) do name
+        normal(boundary[name])
+    end
     # delete old surface of new combined name
     for name in surfs
         delete!(boundary, name)
     end
-    boundary[first(surfs)] = PointSurface(new_geoms, nothing)
-
+    boundary[first(surfs)] = PointSurface(new_geoms)
     return nothing
 end
 
