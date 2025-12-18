@@ -1,4 +1,13 @@
-function visualize(
+module WhatsThePointMakieExt
+
+using WhatsThePoint
+using WhatsThePoint: surfaces, names, volume, to
+using Meshes: 𝔼, lentype
+using Unitful: ustrip
+
+using Makie: Makie, Figure, Axis3, meshscatter!
+
+function WhatsThePoint.visualize(
     cloud::PointCloud{𝔼{3},C}; size=(1000, 1000), azimuth=1.275π, elevation=π / 8, kwargs...
 ) where {C}
     fig = Figure(; size=size)
@@ -10,7 +19,7 @@ function visualize(
     surfs = surfaces(cloud)
     vol = volume(cloud)
 
-    T = Meshes.lentype(C)
+    T = lentype(C)
     Ncolors = length(surfs)
     if Ncolors > 1
         labels = zeros(Int, N)
@@ -108,7 +117,7 @@ function visualize(
     return fig
 end
 
-function visualize(
+function WhatsThePoint.visualize(
     cloud::PointBoundary{𝔼{3},C};
     size=(1000, 1000),
     azimuth=1.275π,
@@ -122,7 +131,7 @@ function visualize(
     N = length(cloud)
     surfs = surfaces(cloud)
 
-    T = Meshes.lentype(C)
+    T = lentype(C)
     Ns = length(surfs)
     if Ns > 1
         labels = zeros(Int, N)
@@ -193,3 +202,5 @@ function visualize(
 
     return fig
 end
+
+end # module

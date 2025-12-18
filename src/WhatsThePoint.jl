@@ -3,11 +3,9 @@ module WhatsThePoint
 using Meshes
 using CoordRefSystems
 using LinearAlgebra
-using SparseArrays
 using StaticArrays
 using StructArrays
 using NearestNeighbors
-using ThreadsX
 using ChunkSplitters
 using OhMyThreads: tmap, tmap!, tmapreduce
 using OrderedCollections: LittleDict
@@ -17,18 +15,6 @@ using FileIO
 using ProgressMeter
 using GeoIO
 using WriteVTK
-using Makie: Makie
-using Makie:
-    Figure,
-    Axis,
-    Axis3,
-    scatter,
-    meshscatter,
-    meshscatter!,
-    meshscatter!,
-    arrows,
-    arrows!,
-    DataAspect
 using Graphs, SimpleWeightedGraphs
 using Distances: Distances, Euclidean, evaluate
 
@@ -99,7 +85,8 @@ include("metrics.jl")
 include("io.jl")
 export import_surface, export_cloud, visualize, save
 
-include("visualize.jl")
+# visualize function is defined in WhatsThePointMakieExt when Makie is loaded
+function visualize end
 
 # Backward compatibility for deprecated Meshes.jl pointify
 Base.@deprecate pointify(x) points(x)
@@ -113,7 +100,6 @@ using PrecompileTools
         b = PointBoundary(joinpath(@__DIR__, "precompile_tools_dummy.stl"))
         split_surface!(b, 75°)
         cloud = discretize(b, ConstantSpacing(1m); alg=VanDerSandeFornberg())
-        visualize(cloud; markersize=0.01)
     end
 end
 
