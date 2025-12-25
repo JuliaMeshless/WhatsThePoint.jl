@@ -86,7 +86,7 @@ include("skeletonization/skeletonization.jl")
 export AbstractSkeletonizationAlgorithm, LBCSkeletonization
 export GraphExtractionParams, ContractedSurface, SkeletonNode, SkeletonGraph
 export skeletonize, contract_lbc, extract_skeleton_graph
-export skeleton_length, branch_points, end_points
+export skeleton_length, branch_points, end_points, nodes, graph
 # Re-export Graphs functions for SkeletonGraph
 import Graphs: nv, ne, edges
 export nv, ne, edges
