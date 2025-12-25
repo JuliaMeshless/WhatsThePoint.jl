@@ -3,6 +3,7 @@ module WhatsThePoint
 using Meshes
 using CoordRefSystems
 using LinearAlgebra
+using SparseArrays
 using StaticArrays
 using StructArrays
 using NearestNeighbors
@@ -79,6 +80,16 @@ export discretize
 
 include("repel.jl")
 export repel
+
+# Skeletonization (must come after surface, uses PointSurface)
+include("skeletonization/skeletonization.jl")
+export AbstractSkeletonizationAlgorithm, LBCSkeletonization
+export GraphExtractionParams, ContractedSurface, SkeletonNode, SkeletonGraph
+export skeletonize, contract_lbc, extract_skeleton_graph
+export skeleton_length, branch_points, end_points
+# Re-export Graphs functions for SkeletonGraph
+import Graphs: nv, ne, edges
+export nv, ne, edges
 
 include("metrics.jl")
 
