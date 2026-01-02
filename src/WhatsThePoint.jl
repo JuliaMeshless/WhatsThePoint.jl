@@ -18,6 +18,8 @@ using GeoIO
 using WriteVTK
 using Graphs, SimpleWeightedGraphs
 using Distances: Distances, Euclidean, evaluate
+using MiniQhull: delaunay as qhull_delaunay
+using DataStructures: PriorityQueue, enqueue!, dequeue!
 
 using Unitful
 
@@ -81,15 +83,15 @@ export discretize
 include("repel.jl")
 export repel
 
-# Skeletonization (must come after surface, uses PointSurface)
+# Centerline extraction (Antiga et al. 2003) - must come after surface, uses PointSurface
 include("skeletonization/skeletonization.jl")
-export AbstractSkeletonizationAlgorithm, LBCSkeletonization
-export GraphExtractionParams, ContractedSurface, SkeletonNode, SkeletonGraph
-export skeletonize, contract_lbc, extract_skeleton_graph
-export skeleton_length, branch_points, end_points, nodes, graph
-# Re-export Graphs functions for SkeletonGraph
-import Graphs: nv, ne, edges
-export nv, ne, edges
+export AbstractCenterlineAlgorithm, VoronoiCenterlines
+export CenterlineResult, Centerline, CenterlinePoint
+export EmbeddedVoronoi, VoronoiVertex
+export compute_centerlines
+export arc_length, positions, radii, stenosis_grade, stenosis_index
+export mean_radius, min_radius, max_radius
+export interpolate_centerline
 
 include("metrics.jl")
 
