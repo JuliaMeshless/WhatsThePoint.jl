@@ -1,6 +1,6 @@
 struct VanDerSandeFornberg <: AbstractNodeGenerationAlgorithm end
 
-function discretize!(
+function _discretize_volume(
     cloud::PointCloud{𝔼{3},C},
     spacing::ConstantSpacing,
     ::VanDerSandeFornberg;
@@ -18,19 +18,19 @@ function discretize!(
     pdp = Meshes.vertices(pdp_grid)
     T = CoordRefSystems.mactype(C)
     heights =
-        rand(T, length(pdp)) * spacing(pointify(cloud)[1]) * 0.01 .+ coords(bbox.min).z
+        rand(T, length(pdp)) * spacing(points(cloud)[1]) * 0.01 .+ coords(bbox.min).z
     _, current_id = findmin_turbo(heights)
     p = pdp[current_id]
-    points = Vector{Point{𝔼{3},C}}(undef, max_points)
+    new_points = Vector{Point{𝔼{3},C}}(undef, max_points)
 
     dotnr = 1
     c = coords(p)
-    points[dotnr] = Point(c.x, c.y, heights[current_id])
-    r = spacing(points[dotnr]) * 0.99
+    new_points[dotnr] = Point(c.x, c.y, heights[current_id])
+    r = spacing(new_points[dotnr]) * 0.99
     search_method = BallSearch(pdp, MetricBall(r))
 
     prog = ProgressUnknown(; desc="generating nodes", spinner=true)
-    while coords(points[dotnr]).z < coords(bbox.max).z
+    while coords(new_points[dotnr]).z < coords(bbox.max).z
         if dotnr > (max_points - 1)
             @warn "discretization stopping early, reached max points ($max_points)"
             break
@@ -50,11 +50,10 @@ function discretize!(
         p = pdp[current_id]
         dotnr += 1
         c = coords(p)
-        points[dotnr] = Point(c.x, c.y, heights[current_id])
+        new_points[dotnr] = Point(c.x, c.y, heights[current_id])
     end
-    points = filter(x -> isinside(x, cloud), points[1:dotnr])
+    new_points = filter(x -> isinside(x, cloud), new_points[1:dotnr])
     ProgressMeter.finish!(prog)
 
-    cloud.volume = PointVolume(points)
-    return nothing
+    return PointVolume(new_points)
 end

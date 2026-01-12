@@ -1,17 +1,17 @@
-function isinside(testpoint::Point{𝔼{2}}, points::PointSet{𝔼{2},C}) where {C}
+function isinside(testpoint::Point{𝔼{2}}, pts::AbstractVector{<:Point{𝔼{2},C}}) where {C}
     # WARNING: this only works if the points are ordered in a loop...
 
     # first check if point is coincident with any surf surface point and return true if so
-    r = map(p -> norm(p - testpoint), points)
+    r = map(p -> norm(p - testpoint), pts)
     T = CoordRefSystems.mactype(C)
     unitful_eps = eps(T) * unit(lentype(C))
     any(r .< 1e2 * unitful_eps) && return true
 
     # compute sum of angles from first to last points
-    @views sumangles = sum(∠.(points[1:(end - 1)], testpoint, points[2:end]))
+    @views sumangles = sum(∠.(pts[1:(end - 1)], testpoint, pts[2:end]))
 
     # compute last segment from last point to first to complete the loop
-    sumangles += ∠(points[end], testpoint, points[1])
+    sumangles += ∠(pts[end], testpoint, pts[1])
 
     # TODO need to add a check if a multiple of 2*pi or 0 ??? does this make sense
 
@@ -20,11 +20,7 @@ function isinside(testpoint::Point{𝔼{2}}, points::PointSet{𝔼{2},C}) where 
 end
 
 function isinside(testpoint::Point{𝔼{2}}, cloud::PointCloud{𝔼{2}})
-    return isinside(testpoint, pointify(boundary(cloud)))
-end
-
-function isinside(testpoint::Point{𝔼{2}}, points::AbstractVector{<:Point{𝔼{2}}})
-    return isinside(testpoint, PointSet(points))
+    return isinside(testpoint, points(boundary(cloud)))
 end
 
 function isinside(testpoint::Point{𝔼{2}}, surf::Union{PointCloud{𝔼{2}},PointSurface{𝔼{2}}})

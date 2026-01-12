@@ -55,7 +55,7 @@ end
 
 function _compute_normal(points::AbstractVector{<:Point{𝔼{N}}}) where {N}
     # from "Surface Reconstruction from Unorganized Points" - Hoppe (1992).
-    v = ustrip.(to.(points))
+    v = map(x -> ustrip.(x), to.(points))
     _, Q = eigen(Symmetric(cov(v)))
     return SVector(Q[:, 1])
 end
@@ -135,7 +135,7 @@ function build_normal_weighted_graph(normals::AbstractVector{<:AbstractVector}, 
     g = SimpleWeightedGraph(length(normals))
     T = eltype(first(normals))
     epsilon = eps(T) * 1e2 # offset because edge weight cannot be 0
-    unitless_normals = ustrip.(normals)
+    unitless_normals = map(n -> ustrip.(n), normals)
     for n in neighbors, v in n[2:end]
         weight = one(T) - abs(unitless_normals[n[1]] ⋅ unitless_normals[v]) + epsilon
         add_edge!(g, n[1], v, weight)

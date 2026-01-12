@@ -5,18 +5,13 @@
     shadow = ShadowPoints(2m, 2)
 
     geoms = StructArray{SurfaceElement}((points, normals, areas))
-    surf = PointSurface(geoms, nothing)
+    surf = PointSurface(geoms, nothing, NoTopology())
 
     surf = PointSurface(points, normals, areas)
     @test length(surf) == 10
     @test surf.geoms isa StructVector
 
-    pointset = PointSet(points)
-    surf = PointSurface(pointset, normals, areas)
-    @test length(surf) == 10
-    @test surf.geoms isa StructVector
-
-    surf = PointSurface(pointset, normals, areas; shadow=shadow)
+    surf = PointSurface(points, normals, areas; shadow=shadow)
     @test length(surf) == 10
     @test surf.shadow == shadow
 
@@ -34,6 +29,18 @@
 
     surf_with_shadow = surf(shadow)
     @test surf_with_shadow.shadow == shadow
+
+    # Test constructor from SubDomain (view of a Domain)
+    domain = PointSet(points)
+    subdomain = view(domain, 1:5)
+    surf_from_subdomain = PointSurface(subdomain, normals[1:5], areas[1:5])
+    @test length(surf_from_subdomain) == 5
+    @test point(surf_from_subdomain) == points[1:5]
+
+    # Test _get_underlying_vector with AbstractVector passthrough
+    surf_from_vec = PointSurface(points, normals, areas)
+    @test length(surf_from_vec) == 10
+    @test point(surf_from_vec) == points
 end
 
 @testitem "SurfaceElement Constructors" setup=[TestData, CommonImports] begin
@@ -47,6 +54,13 @@ end
     @test elem.point == points[1]
     @test elem.normal == normals[1]
     @test elem.area == areas[1]
+
+    # Test Meshes.crs on SurfaceElement type
+    ElemType = typeof(elem)
+    @test Meshes.crs(ElemType) == Meshes.crs(points[1])
+
+    # Test Meshes.crs on SurfaceElement instance
+    @test Meshes.crs(elem) == Meshes.crs(points[1])
 end
 
 @testitem "PointSurface Properties" setup=[TestData, CommonImports] begin
@@ -77,14 +91,14 @@ end
     @test view(surf, 1:2:5) == view(surf.geoms, 1:2:5)
 end
 
-@testitem "PointSurface Meshes.jl Interface" setup=[TestData, CommonImports] begin
-    points = rand(Point, 10)
+@testitem "PointSurface points() and Meshes.jl Interface" setup=[TestData, CommonImports] begin
+    pts_data = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
-    surf = PointSurface(points, normals, areas)
+    surf = PointSurface(pts_data, normals, areas)
 
-    pts = Meshes.pointify(surf)
+    pts = points(surf)
     @test pts == point(surf)
     @test length(pts) == 10
 
@@ -128,6 +142,7 @@ end
     @test contains(output, "Number of points: 10")
     @test contains(output, "Area:")
     @test contains(output, "Shadow:")
+    @test contains(output, "Topology: NoTopology")
 
     surf_with_shadow = PointSurface(points, normals, areas; shadow=shadow)
     io = IOBuffer()
@@ -135,4 +150,11 @@ end
     output = String(take!(io))
     @test contains(output, "Shadow:")
     @test contains(output, "2")
+
+    # Test pretty printing with topology
+    surf_with_topo = set_topology(surf, KNNTopology, 5)
+    io = IOBuffer()
+    show(io, MIME("text/plain"), surf_with_topo)
+    output = String(take!(io))
+    @test contains(output, "Topology: KNNTopology")
 end

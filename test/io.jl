@@ -10,13 +10,9 @@
     @test length(areas) == length(points)
     @test mesh isa Meshes.Mesh
 
-    for n in normals
-        @test norm(n) ≈ 1.0 rtol = 1e-6
-    end
+    @test all(n -> isapprox(norm(n), 1.0; rtol=1e-6), normals)
 
-    for a in areas
-        @test Unitful.ustrip(a) > 0.0
-    end
+    @test all(a -> Unitful.ustrip(a) > 0, areas)
 end
 
 @testitem "export_cloud" setup = [TestData, CommonImports] begin

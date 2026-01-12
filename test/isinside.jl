@@ -1,8 +1,8 @@
-@testitem "isinside 2D PointSet" setup=[TestData, CommonImports] begin
-    points = PointSet(Point.([(0, 0), (1, 0), (1, 1), (0, 1)]))
-    @test isinside(Point(0.5, 0.5), points)
-    @test !isinside(Point(0.5, 1.5), points)
-    @test !isinside(Point(0.5, 1 + eps()), points)
+@testitem "isinside 2D Vector{Point}" setup=[TestData, CommonImports] begin
+    pts = Point.([(0, 0), (1, 0), (1, 1), (0, 1)])
+    @test isinside(Point(0.5, 0.5), pts)
+    @test !isinside(Point(0.5, 1.5), pts)
+    @test !isinside(Point(0.5, 1 + eps()), pts)
 end
 
 @testitem "isinside 2D AbstractVector{Point}" setup=[TestData, CommonImports] begin

@@ -1,6 +1,6 @@
 @testsnippet CommonImports begin
     using WhatsThePoint
-    using WhatsThePoint: volume, surfaces
+    using WhatsThePoint: volume, surfaces, topology
     using Meshes
     using Meshes: Euclidean
     using Random
