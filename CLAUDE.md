@@ -47,6 +47,18 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 - **Heavy parallelization:** Uses OhMyThreads (tmap, tmapreduce) throughout
 - **Full unit support:** Unitful.jl integrated across all operations
 
+### Iteration Behavior
+
+Iterating over `PointCloud` and `PointBoundary` yields individual points (as `SurfaceElement` or volume points), not surfaces. To iterate over surfaces, use `surfaces()`:
+
+```julia
+for pt in cloud               # iterates over individual points
+for surf in surfaces(cloud)   # iterates over PointSurface objects
+
+for pt in boundary            # iterates over individual points
+for surf in surfaces(boundary) # iterates over PointSurface objects
+```
+
 ## Core Components
 
 ### Data Structures (`src/`)
