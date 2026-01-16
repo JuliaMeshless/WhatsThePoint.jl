@@ -145,7 +145,7 @@ end
 end
 
 @testitem "Backwards compatibility - PointCloud without topology" setup = [
-    TestData, CommonImports
+    TestData, CommonImports,
 ] begin
     using WhatsThePoint: boundary
     # Ensure old code patterns still work

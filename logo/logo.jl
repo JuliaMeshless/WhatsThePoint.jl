@@ -21,11 +21,11 @@ function circle_nodes(origins)
 
     points = WhatsThePoint.Point.([(r * cos(i), r * sin(i)) for i in θ]) .+ (origins,)
     boundary = PointBoundary(points)
-    cloud = discretize(boundary, spacing; max_points=200)
+    cloud = discretize(boundary, spacing; max_points = 200)
 
     α = s / 10
     for _ in 1:5
-        repel!(cloud, spacing; α=α, β=0.2, k=12, max_iters=10_000, tol=1e-6)
+        repel!(cloud, spacing; α = α, β = 0.2, k = 12, max_iters = 10_000, tol = 1.0e-6)
         α /= 2
     end
 
@@ -41,8 +41,9 @@ colors = (Luxor.julia_red, Luxor.julia_green, Luxor.julia_purple)
 function draw_logo(colors, nodes, scale, r)
     for (color, node) in zip(colors, nodes)
         setcolor(color)
-        circle.(Luxor.Point.((scale .* node)...), r; action=:fill)
+        circle.(Luxor.Point.((scale .* node)...), r; action = :fill)
     end
+    return
 end
 
 begin

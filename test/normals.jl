@@ -1,4 +1,4 @@
-@testitem "Normals 2D" setup=[TestData, CommonImports] begin
+@testitem "Normals 2D" setup = [TestData, CommonImports] begin
     circle2D = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
     n = SVector(0.0, 1.0)
     e = SVector(1.0, 0.0)
@@ -19,11 +19,11 @@
     computed_normals = compute_normals(search_method, circle2D)
 
     @test all([any((computed_normals[i],) .≈ n) for (i, n) in enumerate(test_normals)])
-    orient_normals!(computed_normals, circle2D; k=k)
+    orient_normals!(computed_normals, circle2D; k = k)
     @test all(computed_normals .≈ correct_normals)
 end
 
-@testitem "Normals 3D" setup=[TestData, CommonImports] begin
+@testitem "Normals 3D" setup = [TestData, CommonImports] begin
     tri3d = Point.([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
     n = ones(SVector{3}) * sqrt(3) / 3
     computed_normal = WhatsThePoint._compute_normal(tri3d)
@@ -44,30 +44,32 @@ end
     search_method = KNearestSearch(sphere3d, k)
     computed_normals = compute_normals(search_method, sphere3d)
 
-    @test all([
-        any(WhatsThePoint._angle.((computed_normals[i],), n) .< 10 * π / 180) for
-        (i, n) in enumerate(test_normals)
-    ])
-    orient_normals!(computed_normals, sphere3d; k=5)
+    @test all(
+        [
+            any(WhatsThePoint._angle.((computed_normals[i],), n) .< 10 * π / 180) for
+                (i, n) in enumerate(test_normals)
+        ]
+    )
+    orient_normals!(computed_normals, sphere3d; k = 5)
     @test all(WhatsThePoint._angle.(computed_normals, correct_normals) .< 10 * π / 180)
 end
 
-@testitem "update_normals!" setup=[TestData, CommonImports] begin
+@testitem "update_normals!" setup = [TestData, CommonImports] begin
     circle2D = Point.([(cos(θ), sin(θ)) for θ in 0:(π / 4):(7π / 4)])
 
     k = 3
-    surf = PointSurface(circle2D; k=k)
+    surf = PointSurface(circle2D; k = k)
 
     original_normals = copy(normal(surf))
 
     normals_ref = normal(surf)
     for i in eachindex(normals_ref)
-        normals_ref[i] = normalize(randn(SVector{2,Float64}))
+        normals_ref[i] = normalize(randn(SVector{2, Float64}))
     end
 
     @test !(normal(surf) ≈ original_normals)
 
-    update_normals!(surf; k=k)
+    update_normals!(surf; k = k)
     orient_normals!(surf)
 
     @test normal(surf) ≈ original_normals

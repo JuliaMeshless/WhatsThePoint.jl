@@ -1,4 +1,4 @@
-@testitem "setindex!" setup=[TestData, CommonImports] begin
+@testitem "setindex!" setup = [TestData, CommonImports] begin
     N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
@@ -14,7 +14,7 @@
     @test point(b[:surface1]) == points1
 end
 
-@testitem "combine_surfaces!" setup=[TestData, CommonImports] begin
+@testitem "combine_surfaces!" setup = [TestData, CommonImports] begin
     N = 10
     points1 = rand(Point, N)
     points2 = rand(Point, N)
@@ -39,7 +39,7 @@ end
     @test length(b[:surface2]) == 2 * N
 end
 
-@testitem "combine_surfaces! - multiple surfaces" setup=[TestData, CommonImports] begin
+@testitem "combine_surfaces! - multiple surfaces" setup = [TestData, CommonImports] begin
     N = 10
     b = PointBoundary(rand(Point, N))
     b[:surface2] = PointSurface(rand(Point, N))
@@ -58,7 +58,7 @@ end
     @test length(b) == original_total
 end
 
-@testitem "combine_surfaces! - nonexistent surface" setup=[TestData, CommonImports] begin
+@testitem "combine_surfaces! - nonexistent surface" setup = [TestData, CommonImports] begin
     N = 10
     b = PointBoundary(rand(Point, N))
     b[:surface2] = PointSurface(rand(Point, N))
@@ -66,7 +66,7 @@ end
     @test_throws AssertionError combine_surfaces!(b, :surface1, :nonexistent)
 end
 
-@testitem "split_surface! - single surface" setup=[TestData, CommonImports] begin
+@testitem "split_surface! - single surface" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
     @test length(namedsurfaces(boundary)) == 1
 
@@ -77,7 +77,7 @@ end
     @test length(boundary) == 24780
 end
 
-@testitem "split_surface! - by target surface name" setup=[TestData, CommonImports] begin
+@testitem "split_surface! - by target surface name" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
 
     split_surface!(boundary, :surface1, 80°)
@@ -87,7 +87,7 @@ end
     @test length(boundary) == 24780
 end
 
-@testitem "split_surface! - by PointSurface object" setup=[TestData, CommonImports] begin
+@testitem "split_surface! - by PointSurface object" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
     surf = boundary[:surface1]
     original_length = length(boundary)
@@ -101,7 +101,7 @@ end
     @test length(boundary) == original_length
 end
 
-@testitem "split_surface! - with PointCloud" setup=[TestData, CommonImports] begin
+@testitem "split_surface! - with PointCloud" setup = [TestData, CommonImports] begin
     using WhatsThePoint: boundary
     cloud = PointCloud(TestData.BIFURCATION_PATH)
     @test length(namedsurfaces(cloud)) == 1
@@ -113,7 +113,7 @@ end
     @test length(boundary(cloud)) == 24780
 end
 
-@testitem "split_surface! - multiple surfaces error" setup=[TestData, CommonImports] begin
+@testitem "split_surface! - multiple surfaces error" setup = [TestData, CommonImports] begin
     N = 10
     boundary = PointBoundary(rand(Point, N))
     boundary[:surface2] = PointSurface(rand(Point, N))
@@ -122,14 +122,14 @@ end
     @test_throws AssertionError split_surface!(boundary, 80°)
 end
 
-@testitem "split_surface! - nonexistent surface error" setup=[TestData, CommonImports] begin
+@testitem "split_surface! - nonexistent surface error" setup = [TestData, CommonImports] begin
     N = 10
     boundary = PointBoundary(rand(Point, N))
 
     @test_throws AssertionError split_surface!(boundary, :nonexistent, 80°)
 end
 
-@testitem "split_surface! - different angles" setup=[TestData, CommonImports] begin
+@testitem "split_surface! - different angles" setup = [TestData, CommonImports] begin
     boundary1 = PointBoundary(TestData.BIFURCATION_PATH)
     boundary2 = PointBoundary(TestData.BIFURCATION_PATH)
 
@@ -143,14 +143,14 @@ end
     @test n_surfaces_45 > 1
 end
 
-@testitem "split_surface! - custom k parameter" setup=[TestData, CommonImports] begin
+@testitem "split_surface! - custom k parameter" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
 
-    @test_nowarn split_surface!(boundary, 80°; k=15)
+    @test_nowarn split_surface!(boundary, 80°; k = 15)
     @test length(namedsurfaces(boundary)) > 1
 end
 
-@testitem "surface operations integration" setup=[TestData, CommonImports] begin
+@testitem "surface operations integration" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
     original_length = length(boundary)
 

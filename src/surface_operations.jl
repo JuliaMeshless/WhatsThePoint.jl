@@ -20,24 +20,24 @@ function combine_surfaces!(boundary::PointBoundary, surfs...)
     return nothing
 end
 
-function split_surface!(cloud::Union{PointCloud,PointBoundary}, angle::Angle; k::Int=10)
+function split_surface!(cloud::Union{PointCloud, PointBoundary}, angle::Angle; k::Int = 10)
     @assert length(namedsurfaces(cloud)) == 1 "More than 1 surface in this cloud. Please specify a target surface."
     target_surf = only(names(boundary(cloud)))
-    return split_surface!(cloud, target_surf, angle; k=k)
+    return split_surface!(cloud, target_surf, angle; k = k)
 end
 
 function split_surface!(
-    cloud::Union{PointCloud,PointBoundary}, target_surf::Symbol, angle::Angle; k::Int=10
-)
+        cloud::Union{PointCloud, PointBoundary}, target_surf::Symbol, angle::Angle; k::Int = 10
+    )
     @assert hassurface(cloud, target_surf) "Target surface not found in cloud."
     surf = cloud[target_surf]
     delete!(namedsurfaces(boundary(cloud)), target_surf)
-    return split_surface!(cloud, surf, angle; k=k)
+    return split_surface!(cloud, surf, angle; k = k)
 end
 
 function split_surface!(
-    cloud::Union{PointCloud,PointBoundary}, surf::PointSurface, angle::Angle; k::Int=10
-)
+        cloud::Union{PointCloud, PointBoundary}, surf::PointSurface, angle::Angle; k::Int = 10
+    )
     points = point(surf)
     normals = normal(surf)
     areas = area(surf)
