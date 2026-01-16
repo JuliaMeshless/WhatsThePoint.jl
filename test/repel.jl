@@ -1,12 +1,12 @@
 @testitem "repel basic behavior" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     spacing = ConstantSpacing(1.0m)
-    cloud = discretize(boundary, spacing; max_points=50)
+    cloud = discretize(boundary, spacing; max_points = 50)
 
     original_points = deepcopy(collect(volume(cloud).points))
     original_count = length(volume(cloud))
 
-    new_cloud, conv = repel(cloud, spacing; max_iters=10)
+    new_cloud, conv = repel(cloud, spacing; max_iters = 10)
 
     # Return type checks
     @test conv isa Vector{<:AbstractFloat}
@@ -39,22 +39,22 @@ end
     boundary = PointBoundary(TestData.BOX_PATH)
     spacing = ConstantSpacing(1.0m)
 
-    cloud1 = discretize(boundary, spacing; max_points=50)
-    _, conv1 = repel(cloud1, spacing; max_iters=3)
+    cloud1 = discretize(boundary, spacing; max_points = 50)
+    _, conv1 = repel(cloud1, spacing; max_iters = 3)
     @test length(conv1) <= 3
 
-    cloud2 = discretize(boundary, spacing; max_points=50)
-    _, conv2 = repel(cloud2, spacing; max_iters=10)
+    cloud2 = discretize(boundary, spacing; max_points = 50)
+    _, conv2 = repel(cloud2, spacing; max_iters = 10)
     @test length(conv2) <= 10
 end
 
 @testitem "repel accepts parameter combinations" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     spacing = ConstantSpacing(1.0m)
-    cloud = discretize(boundary, spacing; max_points=30)
+    cloud = discretize(boundary, spacing; max_points = 30)
 
     # Test all parameters together in one call
-    new_cloud, conv = repel(cloud, spacing; β=0.3, tol=1e-5, max_iters=5)
+    new_cloud, conv = repel(cloud, spacing; β = 0.3, tol = 1.0e-5, max_iters = 5)
 
     @test conv isa Vector{<:AbstractFloat}
     @test length(conv) <= 5

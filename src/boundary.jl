@@ -3,12 +3,12 @@
 
 A boundary of points.
 """
-struct PointBoundary{M<:Manifold,C<:CRS} <: Domain{M,C}
-    surfaces::LittleDict{Symbol,AbstractSurface{M,C}}
+struct PointBoundary{M <: Manifold, C <: CRS} <: Domain{M, C}
+    surfaces::LittleDict{Symbol, AbstractSurface{M, C}}
     function PointBoundary(
-        surfaces::LittleDict{Symbol,AbstractSurface{M,C}}
-    ) where {M<:Manifold,C<:CRS}
-        return new{M,C}(surfaces)
+            surfaces::LittleDict{Symbol, AbstractSurface{M, C}}
+        ) where {M <: Manifold, C <: CRS}
+        return new{M, C}(surfaces)
     end
 end
 
@@ -16,7 +16,7 @@ function PointBoundary(points, normals, areas)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
-    surfaces = LittleDict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
+    surfaces = LittleDict{Symbol, AbstractSurface{M, C}}(:surface1 => surf)
     return PointBoundary(surfaces)
 end
 
@@ -32,7 +32,7 @@ function PointBoundary(filepath::String)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
-    surfaces = LittleDict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
+    surfaces = LittleDict{Symbol, AbstractSurface{M, C}}(:surface1 => surf)
     return PointBoundary(surfaces)
 end
 
@@ -73,6 +73,7 @@ function Base.getindex(boundary::PointBoundary, index::Int)
         index <= (length(surf) + offset) && return surf[index - offset]
         offset += length(surf)
     end
+    return
 end
 function Base.setindex!(boundary::PointBoundary, surf::PointSurface, name::Symbol)
     hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))
@@ -80,17 +81,17 @@ function Base.setindex!(boundary::PointBoundary, surf::PointSurface, name::Symbo
     return nothing
 end
 
-function Base.iterate(boundary::PointBoundary, state=1)
+function Base.iterate(boundary::PointBoundary, state = 1)
     return state > length(boundary) ? nothing : (boundary[state], state + 1)
 end
 
 Base.delete!(boundary::PointBoundary, name::Symbol) = delete!(namedsurfaces(boundary), name)
 
 # pretty printing
-function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim,T}) where {Dim,T}
+function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim, T}) where {Dim, T}
     println(io, "PointBoundary{$Dim, $T}")
     println(io, "├─$(length(boundary)) points")
-    if !isnothing(namedsurfaces(boundary))
+    return if !isnothing(namedsurfaces(boundary))
         println(io, "└─Surfaces")
         N = length(namedsurfaces(boundary))
         for (i, name) in enumerate(names(boundary))

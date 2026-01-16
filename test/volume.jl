@@ -1,8 +1,8 @@
-@testitem "PointVolume Constructors" setup=[TestData, CommonImports] begin
+@testitem "PointVolume Constructors" setup = [TestData, CommonImports] begin
     N = 10
 
     @testset "Empty constructor" begin
-        vol = PointVolume{🌐,Cartesian{NoDatum}}()
+        vol = PointVolume{🌐, Cartesian{NoDatum}}()
         @test vol isa PointVolume
         @test isempty(vol)
         @test length(vol) == 0
@@ -18,7 +18,7 @@
     end
 end
 
-@testitem "PointVolume Base Methods" setup=[TestData, CommonImports] begin
+@testitem "PointVolume Base Methods" setup = [TestData, CommonImports] begin
     N = 10
 
     @testset "length and size" begin
@@ -48,7 +48,7 @@ end
     end
 
     @testset "isempty" begin
-        vol_empty = PointVolume{🌐,Cartesian{NoDatum}}()
+        vol_empty = PointVolume{🌐, Cartesian{NoDatum}}()
         @test isempty(vol_empty)
 
         points = [Point(Float64(i), Float64(i)) for i in 1:N]
@@ -76,7 +76,7 @@ end
     end
 end
 
-@testitem "PointVolume Coordinate and Geometry Methods" setup=[TestData, CommonImports] begin
+@testitem "PointVolume Coordinate and Geometry Methods" setup = [TestData, CommonImports] begin
     N = 10
 
     @testset "to" begin
@@ -107,7 +107,7 @@ end
     end
 end
 
-@testitem "PointVolume points()" setup=[TestData, CommonImports] begin
+@testitem "PointVolume points()" setup = [TestData, CommonImports] begin
     N = 10
 
     @testset "points returns points" begin
@@ -119,13 +119,13 @@ end
     end
 
     @testset "points empty volume" begin
-        vol = PointVolume{🌐,Cartesian{NoDatum}}()
+        vol = PointVolume{🌐, Cartesian{NoDatum}}()
         result = points(vol)
         @test isempty(result)
     end
 end
 
-@testitem "PointVolume Pretty Printing" setup=[TestData, CommonImports] begin
+@testitem "PointVolume Pretty Printing" setup = [TestData, CommonImports] begin
     N = 10
     points = [Point(Float64(i), Float64(i)) for i in 1:N]
     vol = PointVolume(points)

@@ -1,4 +1,4 @@
-@testitem "ConstantSpacing" setup=[TestData, CommonImports] begin
+@testitem "ConstantSpacing" setup = [TestData, CommonImports] begin
     s = ConstantSpacing(1.0m)
     @test s.Δx == 1.0m
 
@@ -12,9 +12,10 @@
     @test s2(p) == 0.5m
 end
 
-@testitem "LogLike Spacing" setup=[TestData, CommonImports] begin
+@testitem "LogLike Spacing" setup = [TestData, CommonImports] begin
     points =
-        Point.([
+        Point.(
+        [
             (0.0, 0.0, 0.0),
             (1.0, 0.0, 0.0),
             (0.0, 1.0, 0.0),
@@ -23,7 +24,8 @@ end
             (0.0, 1.0, 1.0),
             (1.0, 0.0, 1.0),
             (1.0, 1.0, 1.0),
-        ])
+        ]
+    )
     cloud = PointCloud(PointBoundary(points))
 
     base_size = 0.1m
@@ -61,7 +63,7 @@ end
     @test s(close_point) < s(far_point)
 end
 
-@testitem "calculate_ninit 3D" setup=[TestData, CommonImports] begin
+@testitem "calculate_ninit 3D" setup = [TestData, CommonImports] begin
     points =
         Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
     cloud = PointCloud(PointBoundary(points))
@@ -71,11 +73,11 @@ end
     # For unit tetrahedron: extent = (1m, 1m, 1m), Δx = 0.1m
     # Expected: (ceil(1m * 10 / 0.1m), ceil(1m * 10 / 0.1m)) = (100, 100)
     ninit = WhatsThePoint.calculate_ninit(cloud, spacing)
-    @test ninit isa Tuple{Int,Int}
+    @test ninit isa Tuple{Int, Int}
     @test ninit == (100, 100)
 end
 
-@testitem "calculate_ninit 2D" setup=[TestData, CommonImports] begin
+@testitem "calculate_ninit 2D" setup = [TestData, CommonImports] begin
     points = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     cloud = PointCloud(PointBoundary(points))
     spacing = ConstantSpacing(0.1m)
@@ -88,61 +90,61 @@ end
     @test ninit == 100
 end
 
-@testitem "discretize with SlakKosec (3D)" setup=[TestData, CommonImports] begin
+@testitem "discretize with SlakKosec (3D)" setup = [TestData, CommonImports] begin
     using WhatsThePoint: boundary
     bnd = PointBoundary(TestData.BOX_PATH)
     spacing = ConstantSpacing(0.5m)
 
-    cloud = discretize(bnd, spacing; alg=SlakKosec(), max_points=50)
+    cloud = discretize(bnd, spacing; alg = SlakKosec(), max_points = 50)
     @test cloud isa PointCloud
     @test length(volume(cloud)) <= 50
     @test length(boundary(cloud)) == length(bnd)
 
     cloud2 = PointCloud(bnd)
     @test length(volume(cloud2)) == 0
-    cloud2 = discretize(cloud2, spacing; alg=SlakKosec(), max_points=50)
+    cloud2 = discretize(cloud2, spacing; alg = SlakKosec(), max_points = 50)
     @test length(volume(cloud2)) <= 50
     @test length(volume(cloud2)) > 0
 end
 
-@testitem "discretize with VanDerSandeFornberg (3D)" setup=[TestData, CommonImports] begin
+@testitem "discretize with VanDerSandeFornberg (3D)" setup = [TestData, CommonImports] begin
     bnd = PointBoundary(TestData.BOX_PATH)
     spacing = ConstantSpacing(5.0m)
 
-    cloud = discretize(bnd, spacing; alg=VanDerSandeFornberg(), max_points=100)
+    cloud = discretize(bnd, spacing; alg = VanDerSandeFornberg(), max_points = 100)
     @test cloud isa PointCloud
     @test length(volume(cloud)) <= 100
 
     cloud2 = PointCloud(bnd)
-    cloud2 = discretize(cloud2, spacing; alg=VanDerSandeFornberg(), max_points=100)
+    cloud2 = discretize(cloud2, spacing; alg = VanDerSandeFornberg(), max_points = 100)
     @test length(volume(cloud2)) <= 100
     @test length(volume(cloud2)) > 0
 end
 
-@testitem "discretize with FornbergFlyer (2D)" setup=[TestData, CommonImports] begin
+@testitem "discretize with FornbergFlyer (2D)" setup = [TestData, CommonImports] begin
     points = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     boundary = PointBoundary(points)
     spacing = ConstantSpacing(0.2m)
 
     cloud = @test_logs (
-        :warn, "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
-    ) discretize(boundary, spacing; alg=FornbergFlyer(), max_points=100)
+        :warn, "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.",
+    ) discretize(boundary, spacing; alg = FornbergFlyer(), max_points = 100)
     @test cloud isa PointCloud
     @test length(volume(cloud)) <= 100
 
     cloud2 = PointCloud(boundary)
-    cloud2 = discretize(cloud2, spacing; alg=FornbergFlyer(), max_points=100)
+    cloud2 = discretize(cloud2, spacing; alg = FornbergFlyer(), max_points = 100)
     @test length(volume(cloud2)) <= 100
 end
 
-@testitem "discretize default algorithms" setup=[TestData, CommonImports] begin
+@testitem "discretize default algorithms" setup = [TestData, CommonImports] begin
     @testset "3D default (SlakKosec)" begin
         points =
             Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
         boundary = PointBoundary(points)
         spacing = ConstantSpacing(0.5m)
 
-        cloud = discretize(boundary, spacing; max_points=50)
+        cloud = discretize(boundary, spacing; max_points = 50)
         @test cloud isa PointCloud
         @test length(volume(cloud)) <= 50
     end
@@ -155,13 +157,13 @@ end
         cloud = @test_logs (
             :warn,
             "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.",
-        ) discretize(boundary, spacing; max_points=100)
+        ) discretize(boundary, spacing; max_points = 100)
         @test cloud isa PointCloud
         @test length(volume(cloud)) <= 100
     end
 end
 
-@testitem "Algorithm constructors" setup=[TestData, CommonImports] begin
+@testitem "Algorithm constructors" setup = [TestData, CommonImports] begin
     alg1 = SlakKosec()
     @test alg1.n == 10
 
@@ -175,12 +177,12 @@ end
     @test alg4 isa FornbergFlyer
 end
 
-@testitem "max_points limit" setup=[TestData, CommonImports] begin
+@testitem "max_points limit" setup = [TestData, CommonImports] begin
     points = Point.([(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 2.0, 0.0), (0.0, 0.0, 2.0)])
     boundary = PointBoundary(points)
     spacing = ConstantSpacing(0.1m)
 
     max_pts = 20
-    cloud = discretize(boundary, spacing; alg=SlakKosec(), max_points=max_pts)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(), max_points = max_pts)
     @test length(volume(cloud)) <= max_pts
 end

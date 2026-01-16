@@ -10,7 +10,7 @@
     @test length(areas) == length(points)
     @test mesh isa Meshes.Mesh
 
-    @test all(n -> isapprox(norm(n), 1.0; rtol=1e-6), normals)
+    @test all(n -> isapprox(norm(n), 1.0; rtol = 1.0e-6), normals)
 
     @test all(a -> Unitful.ustrip(a) > 0, areas)
 end

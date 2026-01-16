@@ -1,4 +1,4 @@
-function metrics(cloud::PointCloud; k=20)
+function metrics(cloud::PointCloud; k = 20)
     method = KNearestSearch(cloud, k)
     results = searchdists(cloud, method)
     r = map(x -> x[2][2:end], results) # x[2] = distances, [2:end] skips self

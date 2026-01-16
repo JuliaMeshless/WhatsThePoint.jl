@@ -80,3 +80,28 @@ set_topology!(cloud, RadiusTopology, 2mm)
 
 Note: Operations that move points (like `repel!`) will invalidate the topology.
 Call `rebuild_topology!(cloud)` to recompute after such operations.
+
+## Iteration Behavior
+
+Iterating over `PointCloud` and `PointBoundary` yields individual points (as `SurfaceElement` or volume points), not surfaces. To iterate over surfaces, use the `surfaces()` function:
+
+```julia
+# Iterating over individual points
+for pt in cloud
+    # pt is a SurfaceElement or volume point
+end
+
+# Iterating over surfaces
+for surf in surfaces(cloud)
+    # surf is a PointSurface object
+end
+
+# Same applies to PointBoundary
+for pt in boundary
+    # pt is a SurfaceElement
+end
+
+for surf in surfaces(boundary)
+    # surf is a PointSurface object
+end
+```

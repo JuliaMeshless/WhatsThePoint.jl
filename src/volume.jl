@@ -9,18 +9,18 @@ Interior volume points with optional topology.
 - `T<:AbstractTopology` - topology type for volume-local connectivity
 - `V<:AbstractVector{Point{M,C}}` - storage type (allows GPU arrays)
 """
-struct PointVolume{M<:Manifold,C<:CRS,T<:AbstractTopology,V<:AbstractVector{Point{M,C}}} <: Domain{M,C}
+struct PointVolume{M <: Manifold, C <: CRS, T <: AbstractTopology, V <: AbstractVector{Point{M, C}}} <: Domain{M, C}
     points::V
     topology::T
 end
 
-function PointVolume{M,C}(;
-    topology::T=NoTopology()
-) where {M<:Manifold,C<:CRS,T<:AbstractTopology}
-    return PointVolume(Point{M,C}[], topology)
+function PointVolume{M, C}(;
+        topology::T = NoTopology()
+    ) where {M <: Manifold, C <: CRS, T <: AbstractTopology}
+    return PointVolume(Point{M, C}[], topology)
 end
 
-function PointVolume(pts::AbstractVector{<:Point}; topology=NoTopology())
+function PointVolume(pts::AbstractVector{<:Point}; topology = NoTopology())
     return PointVolume(pts, topology)
 end
 
@@ -28,7 +28,7 @@ Base.length(vol::PointVolume) = length(vol.points)
 Base.size(vol::PointVolume) = (length(vol),)
 Base.getindex(vol::PointVolume, index::Int) = vol.points[index]
 Base.getindex(vol::PointVolume, index::AbstractVector) = vol.points[index]
-function Base.iterate(vol::PointVolume, state=1)
+function Base.iterate(vol::PointVolume, state = 1)
     return state > length(vol) ? nothing : (vol[state], state + 1)
 end
 Base.isempty(vol::PointVolume) = isempty(vol.points)
@@ -97,7 +97,7 @@ function set_topology(vol::PointVolume, ::Type{KNNTopology}, k::Int)
     pts = points(vol)
     adj = _build_knn_neighbors(pts, k)
     topo = KNNTopology(adj, k)
-    return PointVolume(vol.points; topology=topo)
+    return PointVolume(vol.points; topology = topo)
 end
 
 """
@@ -109,7 +109,7 @@ function set_topology(vol::PointVolume, ::Type{RadiusTopology}, radius)
     pts = points(vol)
     adj = _build_radius_neighbors(pts, radius)
     topo = RadiusTopology(adj, radius)
-    return PointVolume(vol.points; topology=topo)
+    return PointVolume(vol.points; topology = topo)
 end
 
 """
@@ -124,7 +124,7 @@ function rebuild_topology!(vol::PointVolume)
 end
 
 # pretty printing
-function Base.show(io::IO, ::MIME"text/plain", vol::PointVolume{M,C}) where {M,C}
+function Base.show(io::IO, ::MIME"text/plain", vol::PointVolume{M, C}) where {M, C}
     println(io, "PointVolume{$M,$C}")
     println(io, "├─Number of points: $(length(vol.points))")
     topo = topology(vol)

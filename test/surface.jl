@@ -1,4 +1,4 @@
-@testitem "PointSurface Constructors" setup=[TestData, CommonImports] begin
+@testitem "PointSurface Constructors" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
@@ -11,7 +11,7 @@
     @test length(surf) == 10
     @test surf.geoms isa StructVector
 
-    surf = PointSurface(points, normals, areas; shadow=shadow)
+    surf = PointSurface(points, normals, areas; shadow = shadow)
     @test length(surf) == 10
     @test surf.shadow == shadow
 
@@ -43,7 +43,7 @@
     @test point(surf_from_vec) == points
 end
 
-@testitem "SurfaceElement Constructors" setup=[TestData, CommonImports] begin
+@testitem "SurfaceElement Constructors" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
@@ -63,7 +63,7 @@ end
     @test Meshes.crs(elem) == Meshes.crs(points[1])
 end
 
-@testitem "PointSurface Properties" setup=[TestData, CommonImports] begin
+@testitem "PointSurface Properties" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
@@ -76,7 +76,7 @@ end
     @test parent(surf) == surf.geoms
 end
 
-@testitem "PointSurface Base Methods" setup=[TestData, CommonImports] begin
+@testitem "PointSurface Base Methods" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
@@ -91,7 +91,7 @@ end
     @test view(surf, 1:2:5) == view(surf.geoms, 1:2:5)
 end
 
-@testitem "PointSurface points() and Meshes.jl Interface" setup=[TestData, CommonImports] begin
+@testitem "PointSurface points() and Meshes.jl Interface" setup = [TestData, CommonImports] begin
     pts_data = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
@@ -113,7 +113,7 @@ end
     @test bbox isa Box
 end
 
-@testitem "PointSurface Shadow Generation" setup=[TestData, CommonImports] begin
+@testitem "PointSurface Shadow Generation" setup = [TestData, CommonImports] begin
     surf_file = PointSurface(TestData.BIFURCATION_PATH)
     shadow = ShadowPoints(2m)
 
@@ -122,13 +122,13 @@ end
     @test all(p -> p isa Point, shadow_points)
 end
 
-@testitem "PointSurface Surface Operations" setup=[TestData, CommonImports] begin
+@testitem "PointSurface Surface Operations" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH)
     split_surface!(boundary, 80°)
     @test length(namedsurfaces(boundary)) == 4
 end
 
-@testitem "PointSurface Pretty Printing" setup=[TestData, CommonImports] begin
+@testitem "PointSurface Pretty Printing" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
@@ -144,7 +144,7 @@ end
     @test contains(output, "Shadow:")
     @test contains(output, "Topology: NoTopology")
 
-    surf_with_shadow = PointSurface(points, normals, areas; shadow=shadow)
+    surf_with_shadow = PointSurface(points, normals, areas; shadow = shadow)
     io = IOBuffer()
     show(io, MIME("text/plain"), surf_with_shadow)
     output = String(take!(io))

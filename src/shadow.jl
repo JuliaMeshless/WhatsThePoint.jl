@@ -1,11 +1,11 @@
-struct ShadowPoints{O,T}
+struct ShadowPoints{O, T}
     Δ::T
-    function ShadowPoints(Δ::T, order=1) where {T}
-        return new{order,T}(Δ)
+    function ShadowPoints(Δ::T, order = 1) where {T}
+        return new{order, T}(Δ)
     end
 end
 
-ShadowPoints(Δ::T, order) where {T<:Number} = ShadowPoints(_ -> Δ, order)
+ShadowPoints(Δ::T, order) where {T <: Number} = ShadowPoints(_ -> Δ, order)
 (s::ShadowPoints)(p) = s.Δ(p)
 
 function generate_shadows(points, normals, shadow::ShadowPoints)
@@ -20,7 +20,7 @@ function generate_shadows(points, normals, shadow::ShadowPoints)
     end
 end
 
-function Base.show(io::IO, ::MIME"text/plain", s::ShadowPoints{O,T}) where {O,T}
+function Base.show(io::IO, ::MIME"text/plain", s::ShadowPoints{O, T}) where {O, T}
     println(io, "ShadowPoints{$O}: $(s.Δ)")
     return nothing
 end

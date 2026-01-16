@@ -1,4 +1,4 @@
-@testitem "metrics with default k" setup=[TestData, CommonImports] begin
+@testitem "metrics with default k" setup = [TestData, CommonImports] begin
     function capture_stdout(f)
         old_stdout = stdout
         rd, wr = redirect_stdout()
@@ -24,7 +24,7 @@
     @test result === nothing
 end
 
-@testitem "metrics with custom k" setup=[TestData, CommonImports] begin
+@testitem "metrics with custom k" setup = [TestData, CommonImports] begin
     function capture_stdout(f)
         old_stdout = stdout
         rd, wr = redirect_stdout()
@@ -38,7 +38,7 @@ end
 
     cloud = PointCloud(TestData.BOX_PATH)
 
-    output, result = capture_stdout(() -> metrics(cloud; k=10))
+    output, result = capture_stdout(() -> metrics(cloud; k = 10))
 
     @test output isa String
     @test occursin("Cloud Metrics", output)
@@ -50,7 +50,7 @@ end
     @test result === nothing
 end
 
-@testitem "metrics with small k" setup=[TestData, CommonImports] begin
+@testitem "metrics with small k" setup = [TestData, CommonImports] begin
     function capture_stdout(f)
         old_stdout = stdout
         rd, wr = redirect_stdout()
@@ -64,14 +64,14 @@ end
 
     cloud = PointCloud(TestData.BOX_PATH)
 
-    output, result = capture_stdout(() -> metrics(cloud; k=5))
+    output, result = capture_stdout(() -> metrics(cloud; k = 5))
 
     @test output isa String
     @test occursin("avg. distance to 5 nearest neighbors", output)
     @test result === nothing
 end
 
-@testitem "metrics statistics verification" setup=[TestData, CommonImports] begin
+@testitem "metrics statistics verification" setup = [TestData, CommonImports] begin
     function capture_stdout(f)
         old_stdout = stdout
         rd, wr = redirect_stdout()
@@ -85,7 +85,7 @@ end
 
     cloud = PointCloud(TestData.BOX_PATH)
 
-    output, _ = capture_stdout(() -> metrics(cloud; k=10))
+    output, _ = capture_stdout(() -> metrics(cloud; k = 10))
 
     lines = split(output, '\n')
     stats_lines = filter(line -> occursin("distance to", line), lines)
@@ -97,7 +97,7 @@ end
     end
 end
 
-@testitem "metrics with minimal cloud" setup=[TestData, CommonImports] begin
+@testitem "metrics with minimal cloud" setup = [TestData, CommonImports] begin
     function capture_stdout(f)
         old_stdout = stdout
         rd, wr = redirect_stdout()
@@ -112,11 +112,11 @@ end
     points = Point.([(i * 1.0, 0.0, 0.0) for i in 1:25])
     small_cloud = PointCloud(PointBoundary(points))
 
-    output, result = capture_stdout(() -> metrics(small_cloud; k=10))
+    output, result = capture_stdout(() -> metrics(small_cloud; k = 10))
     @test occursin("Cloud Metrics", output)
     @test result === nothing
 
-    output2, result2 = capture_stdout(() -> metrics(small_cloud; k=20))
+    output2, result2 = capture_stdout(() -> metrics(small_cloud; k = 20))
     @test occursin("Cloud Metrics", output2)
     @test result2 === nothing
 end

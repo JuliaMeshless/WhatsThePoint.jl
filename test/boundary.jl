@@ -1,4 +1,4 @@
-@testitem "PointBoundary with Points" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary with Points" setup = [TestData, CommonImports] begin
     N = 10
     pts = rand(Point, N)
     b = PointBoundary(pts)
@@ -6,13 +6,13 @@
     @test point(b[:surface1]) == pts
 end
 
-@testitem "PointBoundary from file" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary from file" setup = [TestData, CommonImports] begin
     b = PointBoundary(TestData.BIFURCATION_PATH)
     @test length(b) == 24780
     @test hassurface(b, :surface1)
 end
 
-@testitem "PointBoundary Base Methods" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary Base Methods" setup = [TestData, CommonImports] begin
     N = 10
     b = PointBoundary(rand(Point, N))
     @test length(b) == N
@@ -33,7 +33,7 @@ end
     end
 end
 
-@testitem "PointBoundary setindex!" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary setindex!" setup = [TestData, CommonImports] begin
     N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
@@ -47,7 +47,7 @@ end
     @test_throws ArgumentError b[:newsurface] = surf2
 end
 
-@testitem "PointBoundary to()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary to()" setup = [TestData, CommonImports] begin
     N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
@@ -56,7 +56,7 @@ end
     @test all(coords .== to.(points))
 end
 
-@testitem "PointBoundary centroid()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary centroid()" setup = [TestData, CommonImports] begin
     N = 10
     pts = rand(Point, N)
     b = PointBoundary(pts)
@@ -66,7 +66,7 @@ end
     @test c == expected_centroid
 end
 
-@testitem "PointBoundary boundingbox()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary boundingbox()" setup = [TestData, CommonImports] begin
     N = 10
     pts = rand(Point, N)
     b = PointBoundary(pts)
@@ -76,7 +76,7 @@ end
     @test bbox == expected_bbox
 end
 
-@testitem "PointBoundary normal() and area()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary normal() and area()" setup = [TestData, CommonImports] begin
     N = 10
     points = rand(Point, N)
     normals = [rand(3) .* m for _ in 1:N]
@@ -101,7 +101,7 @@ end
     @test all_areas == vcat(areas, areas2)
 end
 
-@testitem "PointBoundary points()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary points()" setup = [TestData, CommonImports] begin
     N = 10
     pts = rand(Point, N)
     b = PointBoundary(pts)
@@ -117,7 +117,7 @@ end
     @test all(result .== vcat(pts, pts2))
 end
 
-@testitem "PointBoundary Meshes.nelements()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary Meshes.nelements()" setup = [TestData, CommonImports] begin
     N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
@@ -129,7 +129,7 @@ end
     @test Meshes.nelements(b) == N + N ÷ 2
 end
 
-@testitem "PointBoundary delete!()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary delete!()" setup = [TestData, CommonImports] begin
     N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
@@ -154,7 +154,7 @@ end
     @test hassurface(b, :surface1)
 end
 
-@testitem "PointBoundary names()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary names()" setup = [TestData, CommonImports] begin
     N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
@@ -172,7 +172,7 @@ end
     @test :mysurface in surface_names
 end
 
-@testitem "PointBoundary surfaces()" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary surfaces()" setup = [TestData, CommonImports] begin
     N = 10
     points1 = rand(Point, N)
     b = PointBoundary(points1)
@@ -197,7 +197,7 @@ end
     @test total_points == N + N ÷ 2 + N * 2
 end
 
-@testitem "PointBoundary Pretty Printing" setup=[TestData, CommonImports] begin
+@testitem "PointBoundary Pretty Printing" setup = [TestData, CommonImports] begin
     N = 10
     points = rand(Point, N)
     b = PointBoundary(points)
