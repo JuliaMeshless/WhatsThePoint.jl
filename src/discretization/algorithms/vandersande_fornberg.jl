@@ -6,10 +6,6 @@ function _discretize_volume(
     ::VanDerSandeFornberg;
     max_points=10_000_000,
 ) where {C}
-    # NOTE: InsideAccelerator disabled for discretization by default
-    # The local Green's approximation (k_local neighbors) is inaccurate for interior points.
-    # Discretization uses full Green's function (all boundary points) for correctness.
-
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
     xmin, ymin, _ = to(bbox.min)
@@ -56,10 +52,7 @@ function _discretize_volume(
         c = coords(p)
         new_points[dotnr] = Point(c.x, c.y, heights[current_id])
     end
-
-    # Filter points using full Green's function (no accelerator)
     new_points = filter(x -> isinside(x, cloud), new_points[1:dotnr])
-
     ProgressMeter.finish!(prog)
 
     return PointVolume(new_points)
