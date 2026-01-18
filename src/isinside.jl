@@ -143,7 +143,8 @@ function isinside(
     else
         # Far from boundary: use fast sign test with nearest normal
         vec_to_test = testpoint - nearest_elem.point
-        return (vec_to_test ⋅ nearest_elem.normal) < 0
+        # Note: normal is dimensionless, so dot product has length units
+        return (vec_to_test ⋅ nearest_elem.normal) < zero(T) * accel.unit_length
     end
 end
 

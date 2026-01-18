@@ -1,0 +1,165 @@
+# Tests for geometric utilities (Layer 2)
+# These test triangle-point distance and triangle-box intersection
+
+using WhatsThePoint
+using StaticArrays
+using Test
+using LinearAlgebra
+
+# Include the geometric utilities
+include("../src/octree/geometric_utils.jl")
+
+@testset "Closest Point on Triangle" begin
+    # Test 1: Point directly above triangle center
+    v1 = SVector(0.0, 0.0, 0.0)
+    v2 = SVector(1.0, 0.0, 0.0)
+    v3 = SVector(0.0, 1.0, 0.0)
+    P = SVector(0.25, 0.25, 1.0)
+
+    Q = closest_point_on_triangle(P, v1, v2, v3)
+    @test Q[1] ≈ 0.25 atol=1e-10
+    @test Q[2] ≈ 0.25 atol=1e-10
+    @test Q[3] ≈ 0.0 atol=1e-10
+
+    # Test 2: Point closest to vertex v1
+    P = SVector(-1.0, -1.0, 0.0)
+    Q = closest_point_on_triangle(P, v1, v2, v3)
+    @test Q ≈ v1 atol=1e-10
+
+    # Test 3: Point closest to vertex v2
+    P = SVector(2.0, -1.0, 0.0)
+    Q = closest_point_on_triangle(P, v1, v2, v3)
+    @test Q ≈ v2 atol=1e-10
+
+    # Test 4: Point closest to vertex v3
+    P = SVector(-1.0, 2.0, 0.0)
+    Q = closest_point_on_triangle(P, v1, v2, v3)
+    @test Q ≈ v3 atol=1e-10
+
+    # Test 5: Point closest to edge v1-v2
+    P = SVector(0.5, -0.5, 0.0)
+    Q = closest_point_on_triangle(P, v1, v2, v3)
+    @test Q[1] ≈ 0.5 atol=1e-10
+    @test Q[2] ≈ 0.0 atol=1e-10
+    @test Q[3] ≈ 0.0 atol=1e-10
+
+    # Test 6: Point closest to edge v1-v3
+    P = SVector(-0.5, 0.5, 0.0)
+    Q = closest_point_on_triangle(P, v1, v2, v3)
+    @test Q[1] ≈ 0.0 atol=1e-10
+    @test Q[2] ≈ 0.5 atol=1e-10
+    @test Q[3] ≈ 0.0 atol=1e-10
+
+    # Test 7: Point inside triangle projects to itself
+    P = SVector(0.3, 0.3, 0.0)
+    Q = closest_point_on_triangle(P, v1, v2, v3)
+    @test Q ≈ P atol=1e-10
+end
+
+@testset "Distance Point to Triangle" begin
+    # Simple triangle in xy-plane
+    v1 = SVector(0.0, 0.0, 0.0)
+    v2 = SVector(1.0, 0.0, 0.0)
+    v3 = SVector(0.0, 1.0, 0.0)
+
+    # Test 1: Point on triangle
+    P = SVector(0.25, 0.25, 0.0)
+    d = distance_point_triangle(P, v1, v2, v3)
+    @test d ≈ 0.0 atol=1e-10
+
+    # Test 2: Point above triangle
+    P = SVector(0.25, 0.25, 1.0)
+    d = distance_point_triangle(P, v1, v2, v3)
+    @test d ≈ 1.0 atol=1e-10
+end
+
+@testset "Triangle-Box Intersection" begin
+    # Box: [0,1]³
+    box_min = SVector(0.0, 0.0, 0.0)
+    box_max = SVector(1.0, 1.0, 1.0)
+
+    # Test 1: Triangle completely inside box
+    v1 = SVector(0.2, 0.2, 0.2)
+    v2 = SVector(0.8, 0.2, 0.2)
+    v3 = SVector(0.5, 0.8, 0.2)
+    @test triangle_box_intersection(v1, v2, v3, box_min, box_max) == true
+
+    # Test 2: Triangle completely outside box
+    v1 = SVector(0.2, 0.2, 2.0)
+    v2 = SVector(0.8, 0.2, 2.0)
+    v3 = SVector(0.5, 0.8, 2.0)
+    @test triangle_box_intersection(v1, v2, v3, box_min, box_max) == false
+end
+
+@testset "Boxes Intersected by Triangle" begin
+    # Parent box: [0,10]³ subdivided into 2³ = 8 children
+    parent_min = SVector(0.0, 0.0, 0.0)
+    parent_size = 10.0
+
+    # Test 1: Small triangle entirely in one child box (lower-left-front octant)
+    v1 = SVector(1.0, 1.0, 1.0)
+    v2 = SVector(2.0, 1.0, 1.0)
+    v3 = SVector(1.5, 2.0, 1.0)
+    boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
+    @test length(boxes) == 1
+    @test (0, 0, 0) ∈ boxes
+
+    # Test 2: Triangle spanning two adjacent boxes in x-direction
+    v1 = SVector(4.0, 1.0, 1.0)
+    v2 = SVector(6.0, 1.0, 1.0)
+    v3 = SVector(5.0, 3.0, 1.0)
+    boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
+    @test length(boxes) >= 2
+    @test (0, 0, 0) ∈ boxes  # Crosses from first to second octant
+    @test (1, 0, 0) ∈ boxes
+
+    # Test 3: Triangle spanning multiple boxes in xy-plane
+    v1 = SVector(0.0, 0.0, 0.0)
+    v2 = SVector(10.0, 0.0, 0.0)
+    v3 = SVector(5.0, 10.0, 0.0)
+    boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
+    @test length(boxes) == 4  # Should intersect all 4 boxes in z=0 plane
+    @test (0, 0, 0) ∈ boxes
+    @test (1, 0, 0) ∈ boxes
+    @test (0, 1, 0) ∈ boxes
+    @test (1, 1, 0) ∈ boxes
+
+    # Test 4: Triangle outside parent box
+    v1 = SVector(-5.0, -5.0, -5.0)
+    v2 = SVector(-3.0, -5.0, -5.0)
+    v3 = SVector(-4.0, -3.0, -5.0)
+    boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
+    @test length(boxes) == 0  # No intersection
+end
+
+@testset "Signed Distance Point to Triangle" begin
+    # Triangle in xy-plane
+    v1 = SVector(0.0, 0.0, 0.0)
+    v2 = SVector(1.0, 0.0, 0.0)
+    v3 = SVector(0.0, 1.0, 0.0)
+    normal = SVector(0.0, 0.0, 1.0)
+
+    # Test 1: Point above triangle (on normal side)
+    P_above = SVector(0.25, 0.25, 1.0)
+    d = distance_point_triangle(P_above, v1, v2, v3, normal)
+    @test d ≈ 1.0 atol=1e-10  # Positive on normal side
+
+    # Test 2: Point below triangle (opposite side)
+    P_below = SVector(0.25, 0.25, -1.0)
+    d = distance_point_triangle(P_below, v1, v2, v3, normal)
+    @test d ≈ -1.0 atol=1e-10  # Negative on opposite side
+
+    # Test 3: Point on triangle plane
+    P_on = SVector(0.25, 0.25, 0.0)
+    d = distance_point_triangle(P_on, v1, v2, v3, normal)
+    @test abs(d) < 1e-10  # Should be zero
+
+    # Test 4: Point above but closer to edge
+    P_edge = SVector(0.5, -0.5, 1.0)
+    d = distance_point_triangle(P_edge, v1, v2, v3, normal)
+    @test d > 0  # Positive on normal side
+    # Distance should be sqrt(0.5^2 + 1^2) ≈ 1.118
+    @test d ≈ sqrt(0.5^2 + 1.0^2) atol=1e-10
+end
+
+println("✓ All geometric utility tests passed!")

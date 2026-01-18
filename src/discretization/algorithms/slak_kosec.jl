@@ -9,20 +9,19 @@ function _discretize_volume(
     spacing::AbstractSpacing,
     alg::SlakKosec;
     max_points=1_000,
-    use_accel::Bool=true,
 ) where {C}
     seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
     new_points = Point{𝔼{3},C}[]
 
-    # Build KD-tree accelerator if enabled
-    accel = nothing
-    if use_accel
-        @info "Building KD-tree accelerator for isinside checks"
-        @time accel = InsideAccelerator(cloud)
-    end
+    # NOTE: InsideAccelerator disabled for discretization by default
+    # The local Green's approximation (k_local neighbors) is inaccurate for interior points.
+    # Discretization uses full Green's function (all boundary points) for correctness.
 
     i = 0
+    points_since_rebuild = 0
+    rebuild_interval = 100  # Rebuild KD-tree every N points for efficiency
+
     prog = ProgressMeter.Progress(
         max_points; desc="Generating nodes (SlakKosec): ", dt=1.0, barlen=40
     )
@@ -31,15 +30,20 @@ function _discretize_volume(
         r = spacing(p)
         candidates = _get_candidates(p, r; n=alg.n)
         for c in candidates
-            # Use accelerated isinside if available
-            is_inside = use_accel ? isinside(c, accel) : isinside(c, cloud)
-
-            if is_inside
+            # Use full Green's function for accurate isinside test
+            if isinside(c, cloud)
                 _, dist = searchdists(c, search_method)
                 if first(dist) > r
                     push!(seeds, c)
                     push!(new_points, c)
-                    search_method = KNearestSearch(seeds, 1)
+                    points_since_rebuild += 1
+
+                    # Rebuild KD-tree periodically instead of every iteration
+                    if points_since_rebuild >= rebuild_interval
+                        search_method = KNearestSearch(seeds, 1)
+                        points_since_rebuild = 0
+                    end
+
                     i += 1
                     ProgressMeter.update!(
                         prog, i; showvalues=[("Seeds remaining", length(seeds))]

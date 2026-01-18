@@ -5,15 +5,10 @@ function _discretize_volume(
     spacing::ConstantSpacing,
     ::VanDerSandeFornberg;
     max_points=10_000_000,
-    use_accel::Bool=true,
 ) where {C}
-    # Build KD-tree accelerator if enabled and geometry is large enough
-    accel = nothing
-    if use_accel && length(points(boundary(cloud))) > 1000
-        @info "Building KD-tree accelerator for fast isinside queries..."
-        @time accel = InsideAccelerator(cloud)
-        @info "Accelerator built. Expected speedup: 50-200×"
-    end
+    # NOTE: InsideAccelerator disabled for discretization by default
+    # The local Green's approximation (k_local neighbors) is inaccurate for interior points.
+    # Discretization uses full Green's function (all boundary points) for correctness.
 
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
@@ -62,12 +57,8 @@ function _discretize_volume(
         new_points[dotnr] = Point(c.x, c.y, heights[current_id])
     end
 
-    # Use accelerated isinside if available
-    if isnothing(accel)
-        new_points = filter(x -> isinside(x, cloud), new_points[1:dotnr])
-    else
-        new_points = filter(x -> isinside(x, accel), new_points[1:dotnr])
-    end
+    # Filter points using full Green's function (no accelerator)
+    new_points = filter(x -> isinside(x, cloud), new_points[1:dotnr])
 
     ProgressMeter.finish!(prog)
 
