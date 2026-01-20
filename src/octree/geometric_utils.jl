@@ -3,10 +3,7 @@
 # This file provides geometric primitives needed for triangle-octree implementation.
 # Functions work on raw coordinates (SVector) for generality and performance.
 # Unit handling should be done at a higher level.
-#
-# References:
-# - AdjointMeshlessCube geoUtilities.jl
-# - Ericson, "Real-Time Collision Detection" (2004)
+
 
 using StaticArrays
 using LinearAlgebra
@@ -47,7 +44,7 @@ function closest_point_on_triangle(
     P::SVector{3,T},
     v1::SVector{3,T},
     v2::SVector{3,T},
-    v3::SVector{3,T}
+    v3::SVector{3,T},
 ) where {T<:Real}
     # Triangle vertices
     a = v1
@@ -163,7 +160,7 @@ function distance_point_triangle(
     v1::SVector{3,T},
     v2::SVector{3,T},
     v3::SVector{3,T},
-    normal::SVector{3,T}
+    normal::SVector{3,T},
 ) where {T<:Real}
     # Find closest point on triangle
     Q = closest_point_on_triangle(P, v1, v2, v3)
@@ -199,7 +196,7 @@ function distance_point_triangle(
     P::SVector{3,T},
     v1::SVector{3,T},
     v2::SVector{3,T},
-    v3::SVector{3,T}
+    v3::SVector{3,T},
 ) where {T<:Real}
     # Find closest point on triangle
     Q = closest_point_on_triangle(P, v1, v2, v3)
@@ -239,7 +236,7 @@ overlap along the given axis.
     v0::SVector{3,T},
     v1::SVector{3,T},
     v2::SVector{3,T},
-    half::SVector{3,T}
+    half::SVector{3,T},
 ) where {T<:Real}
     # Project triangle vertices onto axis
     p0 = dot(v0, axis)
@@ -288,7 +285,7 @@ function triangle_box_intersection(
     v2::SVector{3,T},
     v3::SVector{3,T},
     box_min::SVector{3,T},
-    box_max::SVector{3,T}
+    box_max::SVector{3,T},
 ) where {T<:Real}
     # Box center and half-extents
     box_center = (box_min + box_max) / 2
@@ -331,7 +328,10 @@ function triangle_box_intersection(
     d = -dot(normal, v0)
 
     # Box vertices in normal direction
-    r = abs(normal[1]) * box_half[1] + abs(normal[2]) * box_half[2] + abs(normal[3]) * box_half[3]
+    r =
+        abs(normal[1]) * box_half[1] +
+        abs(normal[2]) * box_half[2] +
+        abs(normal[3]) * box_half[3]
 
     if abs(d) > r
         return false
@@ -434,13 +434,13 @@ function boxes_intersected_by_triangle(
     v3::SVector{3,T},
     parent_min::SVector{3,T},
     parent_size::T,
-    subdivision::Int = 2
+    subdivision::Int = 2,
 ) where {T<:Real}
     child_size = parent_size / subdivision
     intersected = NTuple{3,Int}[]
 
     # Check each child box
-    for k in 0:(subdivision-1), j in 0:(subdivision-1), i in 0:(subdivision-1)
+    for k = 0:(subdivision-1), j = 0:(subdivision-1), i = 0:(subdivision-1)
         # Child box bounds
         box_min = parent_min + SVector{3,T}(i, j, k) * child_size
         box_max = box_min + SVector{3,T}(child_size, child_size, child_size)

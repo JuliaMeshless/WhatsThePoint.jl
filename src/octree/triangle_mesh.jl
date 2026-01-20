@@ -44,11 +44,14 @@ struct Triangle{T<:Real}
     normal::SVector{3,T}
 
     # Inner constructor with validation
-    function Triangle(v1::SVector{3,T}, v2::SVector{3,T}, v3::SVector{3,T},
-        normal::SVector{3,T}) where T<:Real
-        # Validate normal is unit length
+    function Triangle(
+        v1::SVector{3,T},
+        v2::SVector{3,T},
+        v3::SVector{3,T},
+        normal::SVector{3,T},
+    ) where {T<:Real}
         n_mag = norm(normal)
-        if !isapprox(n_mag, one(T), atol=1e-6)
+        if !isapprox(n_mag, one(T), atol = 1e-6)
             error("Triangle normal must be unit length, got norm=$n_mag")
         end
         return new{T}(v1, v2, v3, normal)
@@ -64,12 +67,11 @@ Normal direction: (v2-v1) × (v3-v1), normalized to unit length.
 
 Throws an error if vertices are collinear or duplicated (degenerate triangle).
 """
-function Triangle(v1::SVector{3,T}, v2::SVector{3,T}, v3::SVector{3,T}) where T<:Real
+function Triangle(v1::SVector{3,T}, v2::SVector{3,T}, v3::SVector{3,T}) where {T<:Real}
     e1 = v2 - v1
     e2 = v3 - v1
     n = cross(e1, e2)
 
-    # Check for degenerate triangle
     n_mag = norm(n)
     if n_mag < eps(T) * 100
         error("Degenerate triangle: vertices are collinear or duplicate")
@@ -109,9 +111,11 @@ struct TriangleMesh{T<:Real}
     bbox_max::SVector{3,T}
 
     # Inner constructor with validation
-    function TriangleMesh(triangles::Vector{Triangle{T}},
+    function TriangleMesh(
+        triangles::Vector{Triangle{T}},
         bbox_min::SVector{3,T},
-        bbox_max::SVector{3,T}) where T<:Real
+        bbox_max::SVector{3,T},
+    ) where {T<:Real}
         isempty(triangles) && error("TriangleMesh cannot be empty")
 
         # Validate bounding box
@@ -128,7 +132,7 @@ end
 
 Construct TriangleMesh with automatic bounding box computation from all vertices.
 """
-function TriangleMesh(triangles::Vector{Triangle{T}}) where T<:Real
+function TriangleMesh(triangles::Vector{Triangle{T}}) where {T<:Real}
     isempty(triangles) && error("Cannot create TriangleMesh from empty triangle list")
 
     # Compute bounding box from all vertices
@@ -140,13 +144,13 @@ function TriangleMesh(triangles::Vector{Triangle{T}}) where T<:Real
     bbox_min = SVector{3,T}(
         minimum(v[1] for v in all_coords),
         minimum(v[2] for v in all_coords),
-        minimum(v[3] for v in all_coords)
+        minimum(v[3] for v in all_coords),
     )
 
     bbox_max = SVector{3,T}(
         maximum(v[1] for v in all_coords),
         maximum(v[2] for v in all_coords),
-        maximum(v[3] for v in all_coords)
+        maximum(v[3] for v in all_coords),
     )
 
     # Handle planar meshes by adding small epsilon in degenerate dimensions
@@ -157,13 +161,13 @@ function TriangleMesh(triangles::Vector{Triangle{T}}) where T<:Real
     bbox_min = SVector{3,T}(
         bbox_size[1] == 0 ? bbox_min[1] - eps_val : bbox_min[1],
         bbox_size[2] == 0 ? bbox_min[2] - eps_val : bbox_min[2],
-        bbox_size[3] == 0 ? bbox_min[3] - eps_val : bbox_min[3]
+        bbox_size[3] == 0 ? bbox_min[3] - eps_val : bbox_min[3],
     )
 
     bbox_max = SVector{3,T}(
         bbox_size[1] == 0 ? bbox_max[1] + eps_val : bbox_max[1],
         bbox_size[2] == 0 ? bbox_max[2] + eps_val : bbox_max[2],
-        bbox_size[3] == 0 ? bbox_max[3] + eps_val : bbox_max[3]
+        bbox_size[3] == 0 ? bbox_max[3] + eps_val : bbox_max[3],
     )
 
     return TriangleMesh(triangles, bbox_min, bbox_max)
@@ -172,7 +176,7 @@ end
 # Convenience accessors
 Base.length(mesh::TriangleMesh) = length(mesh.triangles)
 Base.getindex(mesh::TriangleMesh, i::Int) = mesh.triangles[i]
-Base.iterate(mesh::TriangleMesh, state=1) =
+Base.iterate(mesh::TriangleMesh, state = 1) =
     state > length(mesh.triangles) ? nothing : (mesh.triangles[state], state + 1)
 
 """
@@ -188,7 +192,7 @@ bbox_size(mesh::TriangleMesh) = mesh.bbox_max - mesh.bbox_min
 Extract unique vertices from all triangles in the mesh.
 Returns a vector of unique SVector{3,T} points.
 """
-function unique_points(mesh::TriangleMesh{T}) where T
+function unique_points(mesh::TriangleMesh{T}) where {T}
     points = Set{SVector{3,T}}()
     for tri in mesh.triangles
         push!(points, tri.v1)
@@ -205,94 +209,68 @@ Return the center of the bounding box as SVector{3,T}.
 """
 bbox_center(mesh::TriangleMesh) = (mesh.bbox_min + mesh.bbox_max) / 2
 
-# ============================================================================
-# OPTIONAL: STL File Loading (requires GeoIO and Meshes)
-# This is the ONLY place where Meshes.jl/Unitful are touched!
-# ============================================================================
+"""
+    TriangleMesh(filepath::String)
 
-# Try to load GeoIO/Meshes for STL support (optional)
-const HAS_GEOIO = try
-    @eval using GeoIO
-    @eval using Meshes
-    true
-catch
-    false
-end
+Load triangle mesh from STL file. **Strips units and converts to plain Float64 coordinates.**
 
-if HAS_GEOIO
-    """
-        TriangleMesh(filepath::String)
+**CRITICAL**: This is the ONLY function that touches Meshes.jl/Unitful!
+Core Triangle and TriangleMesh structures remain completely unit-free.
 
-    Load triangle mesh from STL file. **Strips units and converts to plain Float64 coordinates.**
+# Arguments
+- `filepath::String` - Path to STL file
 
-    **CRITICAL**: This is the ONLY function that touches Meshes.jl/Unitful!
-    Core Triangle and TriangleMesh structures remain completely unit-free.
+# Returns
+- `TriangleMesh{Float64}` with **pure numeric coordinates** (no units)
 
-    # Arguments
-    - `filepath::String` - Path to STL file
+# Example
+```julia
+mesh = TriangleMesh("test/data/box.stl")
+println("Loaded \$(length(mesh)) triangles")
+# mesh.triangles[1].v1 is SVector{3,Float64}, NOT with units!
+```
+"""
+function TriangleMesh(filepath::String)
+    # Load using existing GeoIO infrastructure
+    geo = GeoIO.load(filepath)
+    mesh_data = geo.geometry
 
-    # Returns
-    - `TriangleMesh{Float64}` with **pure numeric coordinates** (no units)
+    # Extract triangles and STRIP UNITS IMMEDIATELY
+    triangles = Triangle{Float64}[]
 
-    # Example
-    ```julia
-    mesh = TriangleMesh("test/data/box.stl")
-    println("Loaded \$(length(mesh)) triangles")
-    # mesh.triangles[1].v1 is SVector{3,Float64}, NOT with units!
-    ```
-    """
-    function TriangleMesh(filepath::String)
-        # Load using existing GeoIO infrastructure
-        geo = GeoIO.load(filepath)
-        mesh_data = geo.geometry
+    for elem in Meshes.elements(mesh_data)
+        # Get vertices (Meshes.jl Points with units) - ONLY in this scope!
+        verts = Meshes.vertices(elem)
 
-        # Extract triangles and STRIP UNITS IMMEDIATELY
-        triangles = Triangle{Float64}[]
+        if length(verts) != 3
+            @warn "Skipping non-triangular element with $(length(verts)) vertices"
+            continue
+        end
 
-        for elem in Meshes.elements(mesh_data)
-            # Get vertices (Meshes.jl Points with units) - ONLY in this scope!
-            verts = Meshes.vertices(elem)
+        # Convert to pure tuples and strip units
+        v1_tuple = Meshes.to(verts[1])
+        v2_tuple = Meshes.to(verts[2])
+        v3_tuple = Meshes.to(verts[3])
 
-            if length(verts) != 3
-                @warn "Skipping non-triangular element with $(length(verts)) vertices"
+        # Convert to pure SVector{3,Float64} - NO UNITS!
+        v1 = SVector{3,Float64}(ustrip.(v1_tuple))
+        v2 = SVector{3,Float64}(ustrip.(v2_tuple))
+        v3 = SVector{3,Float64}(ustrip.(v3_tuple))
+        # After this point, units are gone forever!
+
+        # Create triangle (auto-computes normal)
+        try
+            tri = Triangle(v1, v2, v3)
+            push!(triangles, tri)
+        catch e
+            if isa(e, ErrorException) && occursin("degenerate", lowercase(e.msg))
+                @warn "Skipping degenerate triangle at vertices: $v1, $v2, $v3"
                 continue
-            end
-
-            # Convert to pure tuples and strip units
-            v1_tuple = Meshes.to(verts[1])
-            v2_tuple = Meshes.to(verts[2])
-            v3_tuple = Meshes.to(verts[3])
-
-            # Convert to pure SVector{3,Float64} - NO UNITS!
-            v1 = SVector{3,Float64}(ustrip.(v1_tuple))
-            v2 = SVector{3,Float64}(ustrip.(v2_tuple))
-            v3 = SVector{3,Float64}(ustrip.(v3_tuple))
-            # After this point, units are gone forever!
-
-            # Create triangle (auto-computes normal)
-            try
-                tri = Triangle(v1, v2, v3)
-                push!(triangles, tri)
-            catch e
-                if isa(e, ErrorException) && occursin("degenerate", lowercase(e.msg))
-                    @warn "Skipping degenerate triangle at vertices: $v1, $v2, $v3"
-                    continue
-                else
-                    rethrow(e)
-                end
+            else
+                rethrow(e)
             end
         end
-
-        if isempty(triangles)
-            error("No valid triangles found in $filepath")
-        end
-
-        # Use automatic bounding box constructor
-        return TriangleMesh(triangles)
     end
-else
-    # Fallback if GeoIO not available
-    function TriangleMesh(filepath::String)
-        error("GeoIO.jl not available. Install it with: using Pkg; Pkg.add(\"GeoIO\")")
-    end
+
+    return TriangleMesh(triangles)
 end

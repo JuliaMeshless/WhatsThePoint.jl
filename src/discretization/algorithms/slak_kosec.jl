@@ -61,13 +61,16 @@ result = discretize(cloud, spacing; alg=alg, max_points=100_000)
 struct SlakKosec <: AbstractNodeGenerationAlgorithm
     n::Int
     octree::Union{Nothing,TriangleOctree}
-    SlakKosec(n::Int, octree::Union{Nothing,TriangleOctree}=nothing) = new(n, octree)
+    SlakKosec(n::Int, octree::Union{Nothing,TriangleOctree} = nothing) = new(n, octree)
 end
 SlakKosec() = SlakKosec(10, nothing)
 SlakKosec(octree::TriangleOctree) = SlakKosec(10, octree)
 
 function _discretize_volume(
-    cloud::PointCloud{𝔼{3},C}, spacing::AbstractSpacing, alg::SlakKosec; max_points=1_000
+    cloud::PointCloud{𝔼{3},C},
+    spacing::AbstractSpacing,
+    alg::SlakKosec;
+    max_points = 1_000,
 ) where {C}
     seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
@@ -77,7 +80,7 @@ function _discretize_volume(
     while !isempty(seeds) && i < max_points
         p = popfirst!(seeds)
         r = spacing(p)
-        candidates = _get_candidates(p, r; n=alg.n)
+        candidates = _get_candidates(p, r; n = alg.n)
         for c in candidates
             # Use octree-based isinside if available, otherwise use standard isinside
             inside = if !isnothing(alg.octree)
@@ -122,7 +125,7 @@ function _isinside_octree(point::Point{𝔼{3},C}, octree::TriangleOctree{T}) wh
     return isinside(svec, octree)
 end
 
-function _get_candidates(p::Point{𝔼{3},C}, r; n=10) where {C}
+function _get_candidates(p::Point{𝔼{3},C}, r; n = 10) where {C}
     T = CoordRefSystems.mactype(C)
 
     u = rand(T, n)

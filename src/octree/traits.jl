@@ -197,6 +197,47 @@ function should_subdivide(c::AndCriterion, tree, box_idx)
     return all(should_subdivide(crit, tree, box_idx) for crit in c.criteria)
 end
 
+"""
+    can_subdivide(criterion::SubdivisionCriterion, tree, box_idx) -> Bool
+
+Check if box CAN be subdivided based on physical constraints only.
+
+Unlike `should_subdivide`, this ignores content-based criteria (like element count)
+and only checks physical limits (like minimum size). Used during balancing where
+subdivision is required for geometric correctness, not optimization.
+
+# Arguments
+- `criterion`: Subdivision criterion (only size constraints are checked)
+- `tree`: Spatial tree
+- `box_idx`: Index of box to check
+
+# Returns
+`true` if box can physically be subdivided, `false` if at minimum size limit.
+
+# Example
+```julia
+# For balancing, we only respect size limits
+if needs_balancing(leaf)
+    if can_subdivide(criterion, tree, leaf)
+        subdivide!(tree, leaf)
+    end
+end
+```
+"""
+function can_subdivide end
+
+# Only check size constraints
+can_subdivide(c::MaxElementsCriterion, tree, box_idx) = true  # No physical limit
+
+function can_subdivide(c::SizeCriterion, tree, box_idx)
+    return box_size(tree, box_idx) > c.h_min
+end
+
+function can_subdivide(c::AndCriterion, tree, box_idx)
+    # Check all criteria, but MaxElements always returns true
+    return all(can_subdivide(crit, tree, box_idx) for crit in c.criteria)
+end
+
 #=============================================================================
 Utility Functions
 =============================================================================#

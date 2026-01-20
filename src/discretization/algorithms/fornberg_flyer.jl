@@ -1,8 +1,11 @@
 struct FornbergFlyer <: AbstractNodeGenerationAlgorithm end
 
 function _discretize_volume(
-        cloud::PointCloud{𝔼{2}, C}, spacing::ConstantSpacing, ::FornbergFlyer; max_points = 10_000
-    ) where {C}
+    cloud::PointCloud{𝔼{2},C},
+    spacing::ConstantSpacing,
+    ::FornbergFlyer;
+    max_points = 10_000,
+) where {C}
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
     xmin, _ = to(bbox.min)
@@ -17,7 +20,7 @@ function _discretize_volume(
     pdp = Point.(x, heights)
     _, current_id = findmin_turbo(heights)
     p = pdp[current_id]
-    new_points = Vector{Point{𝔼{2}, C}}(undef, max_points)
+    new_points = Vector{Point{𝔼{2},C}}(undef, max_points)
 
     dotnr = 1
     new_points[dotnr] = Point(p.coords.x, heights[current_id])

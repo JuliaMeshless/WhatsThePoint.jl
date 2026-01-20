@@ -4,7 +4,7 @@ function _discretize_volume(
     cloud::PointCloud{𝔼{3},C},
     spacing::ConstantSpacing,
     ::VanDerSandeFornberg;
-    max_points=10_000_000,
+    max_points = 10_000_000,
 ) where {C}
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
@@ -17,8 +17,7 @@ function _discretize_volume(
     pdp_grid = CartesianGrid(S(bbox.min), S(bbox.max), (dx, dy))
     pdp = Meshes.vertices(pdp_grid)
     T = CoordRefSystems.mactype(C)
-    heights =
-        rand(T, length(pdp)) * spacing(points(cloud)[1]) * 0.01 .+ coords(bbox.min).z
+    heights = rand(T, length(pdp)) * spacing(points(cloud)[1]) * 0.01 .+ coords(bbox.min).z
     _, current_id = findmin_turbo(heights)
     p = pdp[current_id]
     new_points = Vector{Point{𝔼{3},C}}(undef, max_points)
@@ -29,14 +28,14 @@ function _discretize_volume(
     r = spacing(new_points[dotnr]) * 0.99
     search_method = BallSearch(pdp, MetricBall(r))
 
-    prog = ProgressUnknown(; desc="generating nodes", spinner=true)
+    prog = ProgressUnknown(; desc = "generating nodes", spinner = true)
     while coords(new_points[dotnr]).z < coords(bbox.max).z
         if dotnr > (max_points - 1)
             @warn "discretization stopping early, reached max points ($max_points)"
             break
         end
 
-        ProgressMeter.next!(prog; spinner=spinner_icons)
+        ProgressMeter.next!(prog; spinner = spinner_icons)
         inside_ids = search(p, search_method)
 
         xydist = map(pdp_inside -> norm(p - pdp_inside), @view pdp[inside_ids])

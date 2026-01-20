@@ -2,8 +2,6 @@
 #
 # Concrete implementation of AbstractOctree using integer coordinate system
 # for efficient neighbor finding and 2:1 balance enforcement.
-#
-# Reference: AdjointMeshlessCube STLOctree.jl
 
 using StaticArrays
 
@@ -88,11 +86,15 @@ origin = SVector(0.0, 0.0, 0.0)
 octree = SpatialOctree{Int,Float64}(origin, 10.0)
 ```
 """
-function SpatialOctree{T,C}(origin::SVector{3,C}, size::C; initial_capacity=1000) where {T,C}
+function SpatialOctree{T,C}(
+    origin::SVector{3,C},
+    size::C;
+    initial_capacity = 1000,
+) where {T,C}
     parent = zeros(Int, initial_capacity)
-    children = [SVector{8,Int}(zeros(Int, 8)) for _ in 1:initial_capacity]
-    coords = [SVector{4,Int}(zeros(Int, 4)) for _ in 1:initial_capacity]
-    element_lists = [T[] for _ in 1:initial_capacity]
+    children = [SVector{8,Int}(zeros(Int, 8)) for _ = 1:initial_capacity]
+    coords = [SVector{4,Int}(zeros(Int, 4)) for _ = 1:initial_capacity]
+    element_lists = [T[] for _ = 1:initial_capacity]
 
     # Initialize root at (0,0,0,1)
     coords[1] = SVector{4,Int}(0, 0, 0, 1)
@@ -186,7 +188,7 @@ Total number of elements stored in tree.
 """
 function num_elements(octree::SpatialOctree)
     total = 0
-    for box_idx in 1:octree.num_boxes[]
+    for box_idx = 1:octree.num_boxes[]
         total += length(octree.element_lists[box_idx])
     end
     return total
@@ -198,7 +200,8 @@ end
 Get overall bounding box of tree (root box).
 """
 function bounding_box(octree::SpatialOctree{T,C}) where {T,C}
-    max_corner = octree.origin + SVector{3,C}(octree.root_size, octree.root_size, octree.root_size)
+    max_corner =
+        octree.origin + SVector{3,C}(octree.root_size, octree.root_size, octree.root_size)
     return (octree.origin, max_corner)
 end
 
@@ -221,26 +224,33 @@ Automatically grows arrays if capacity exceeded.
 # Returns
 Index of newly created box
 """
-function add_box!(octree::SpatialOctree{T}, i::Int, j::Int, k::Int, N::Int, parent_idx::Int) where {T}
+function add_box!(
+    octree::SpatialOctree{T},
+    i::Int,
+    j::Int,
+    k::Int,
+    N::Int,
+    parent_idx::Int,
+) where {T}
     octree.num_boxes[] += 1
     box_idx = octree.num_boxes[]
 
     # Grow arrays if needed
+    # Invariant: all arrays have same length
     if box_idx > length(octree.parent)
-        new_capacity = 2 * length(octree.parent)
+        old_capacity = length(octree.parent)
+        new_capacity = 2 * old_capacity
 
         resize!(octree.parent, new_capacity)
-
-        # Resize children vector - now works correctly!
-        current_length = length(octree.children)
-        append!(octree.children, [SVector{8,Int}(zeros(Int, 8)) for _ in 1:(new_capacity-current_length)])
-
-        # Resize coords vector - now works correctly!
-        current_length = length(octree.coords)
-        append!(octree.coords, [SVector{4,Int}(zeros(Int, 4)) for _ in 1:(new_capacity-current_length)])
-
-        # Grow element_lists
-        append!(octree.element_lists, [T[] for _ in 1:(new_capacity-length(octree.element_lists))])
+        append!(
+            octree.children,
+            [SVector{8,Int}(zeros(Int, 8)) for _ = 1:(new_capacity-old_capacity)],
+        )
+        append!(
+            octree.coords,
+            [SVector{4,Int}(zeros(Int, 4)) for _ = 1:(new_capacity-old_capacity)],
+        )
+        append!(octree.element_lists, [T[] for _ = 1:(new_capacity-old_capacity)])
     end
 
     octree.parent[box_idx] = parent_idx
@@ -279,7 +289,7 @@ function subdivide!(octree::SpatialOctree, box_idx::Int)
     child_indices = Int[]
 
     # Standard octree ordering: iterate through (di, dj, dk) ∈ {0,1}³
-    for dk in 0:1, dj in 0:1, di in 0:1
+    for dk = 0:1, dj = 0:1, di = 0:1
         i_c = 2 * i_p + di
         j_c = 2 * j_p + dj
         k_c = 2 * k_p + dk
@@ -387,9 +397,6 @@ Handles 2:1 refinement level difference:
 
 # Returns
 Vector of neighbor box indices (may be empty if at boundary)
-
-# Reference
-Based on AdjointMeshlessCube OT.jl neighbor finding logic
 """
 function find_neighbor(octree::SpatialOctree, box_idx::Int, direction::Int)
     i, j, k, N = octree.coords[box_idx]
@@ -422,7 +429,13 @@ Find box(es) at given (i,j,k,N) coordinates.
 # Returns
 Vector of box indices covering the target location
 """
-function find_boxes_at_coords(octree::SpatialOctree, i_target::Int, j_target::Int, k_target::Int, N_target::Int)
+function find_boxes_at_coords(
+    octree::SpatialOctree,
+    i_target::Int,
+    j_target::Int,
+    k_target::Int,
+    N_target::Int,
+)
     # Start at root
     current = 1
 
@@ -492,7 +505,7 @@ Return indices of all leaf boxes.
 """
 function all_leaves(octree::SpatialOctree)
     leaves = Int[]
-    for box_idx in 1:octree.num_boxes[]
+    for box_idx = 1:octree.num_boxes[]
         if is_leaf(octree, box_idx)
             push!(leaves, box_idx)
         end
@@ -519,9 +532,6 @@ Balancing (2:1 Constraint)
 Check if subdividing this box would violate 2:1 balance with any neighbor.
 
 Returns true if any neighbor has grandchildren (2-level refinement difference).
-
-# Reference
-AdjointMeshlessCube STLOctree.jl:549-601
 """
 function needs_balancing(octree::SpatialOctree, box_idx::Int)
     if !is_leaf(octree, box_idx)
@@ -529,7 +539,7 @@ function needs_balancing(octree::SpatialOctree, box_idx::Int)
     end
 
     # Check all 6 neighbors
-    for direction in 1:6
+    for direction = 1:6
         neighbors = find_neighbor(octree, box_idx, direction)
 
         for neighbor_idx in neighbors
@@ -558,16 +568,18 @@ Iteratively subdivides boxes that violate the 2:1 constraint until
 all adjacent boxes differ by at most one refinement level.
 
 # Arguments
-- `criterion`: Subdivision criterion (used to check h_min and other constraints)
+- `criterion`: Subdivision criterion (only size constraints are enforced)
 
 # Algorithm
 1. Collect all leaves
 2. Check each leaf for balance violations
-3. Subdivide violating neighbors (respecting criterion)
+3. Subdivide violating neighbors (only respecting physical limits like h_min)
 4. Repeat until no violations
 
 # Note
-Maximum iterations limit prevents infinite loops. If hit, tree may not be fully balanced.
+- Uses `can_subdivide` (not `should_subdivide`) to ignore element count criteria
+- Balancing is a geometric constraint, not an optimization decision
+- Maximum iterations limit prevents infinite loops. If hit, tree may not be fully balanced.
 """
 function balance_octree!(octree::SpatialOctree, criterion::SubdivisionCriterion)
     max_iterations = 100  # Safety limit
@@ -584,8 +596,8 @@ function balance_octree!(octree::SpatialOctree, criterion::SubdivisionCriterion)
             end
 
             if needs_balancing(octree, leaf_idx)
-                # Check if we can subdivide (respects h_min etc.)
-                if should_subdivide(criterion, octree, leaf_idx)
+                # Check if we CAN subdivide (only physical limits, not element count)
+                if can_subdivide(criterion, octree, leaf_idx)
                     subdivide!(octree, leaf_idx)
                     subdivided_any = true
                 end
