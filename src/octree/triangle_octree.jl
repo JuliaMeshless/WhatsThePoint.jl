@@ -29,10 +29,10 @@ is_inside = isinside(point, octree)
 distance = signed_distance(point, octree)
 ```
 """
-struct TriangleOctree{T<:Real}
-    tree::SpatialOctree{Int,T}
+struct TriangleOctree{T <: Real}
+    tree::SpatialOctree{Int, T}
     mesh::TriangleMesh{T}
-    leaf_classification::Union{Nothing,Vector{Int8}}
+    leaf_classification::Union{Nothing, Vector{Int8}}
 end
 
 """
@@ -89,13 +89,13 @@ end
 ```
 """
 function has_consistent_normals(
-    mesh::TriangleMesh{T};
-    alignment_threshold::T = T(-0.3),
-) where {T<:Real}
+        mesh::TriangleMesh{T};
+        alignment_threshold::T = T(-0.3),
+    ) where {T <: Real}
     length(mesh) <= 1 && return true
 
     # Check each triangle against all others for edge adjacency
-    for i = 1:length(mesh)
+    for i in 1:length(mesh)
         tri_i = mesh.triangles[i]
 
         # Get the 3 edges of triangle i
@@ -106,7 +106,7 @@ function has_consistent_normals(
         ]
 
         # Check against all subsequent triangles
-        for j = (i+1):length(mesh)
+        for j in (i + 1):length(mesh)
             tri_j = mesh.triangles[j]
 
             # Get the 3 edges of triangle j
@@ -180,12 +180,12 @@ For accurate inside/outside queries, triangle normals should consistently point 
 inconsistent, you may get incorrect isinside() results near the affected triangles.
 """
 function TriangleOctree(
-    mesh::TriangleMesh{T};
-    h_min::T,
-    max_triangles_per_box::Int = 50,
-    classify_leaves::Bool = true,
-    verify_orientation::Bool = true,
-) where {T<:Real}
+        mesh::TriangleMesh{T};
+        h_min::T,
+        max_triangles_per_box::Int = 50,
+        classify_leaves::Bool = true,
+        verify_orientation::Bool = true,
+    ) where {T <: Real}
     # 1. Verify normal consistency (optional but recommended)
     if verify_orientation && !has_consistent_normals(mesh)
         @warn """
@@ -204,12 +204,12 @@ function TriangleOctree(
     # Rule of thumb: ~8 boxes per subdivision level, need log2(n_triangles) levels
     estimated_boxes = max(1000, length(mesh) * 2)  # Conservative estimate
     tree =
-        SpatialOctree{Int,T}(mesh.bbox_min, root_size; initial_capacity = estimated_boxes)
+        SpatialOctree{Int, T}(mesh.bbox_min, root_size; initial_capacity = estimated_boxes)
 
     # 3. Distribute triangles to root box
     # The root is always box index 1
     root_elements = tree.element_lists[1]
-    for tri_idx = 1:length(mesh.triangles)
+    for tri_idx in 1:length(mesh.triangles)
         push!(root_elements, tri_idx)
     end
 
@@ -241,11 +241,11 @@ For each box that needs subdivision:
 4. Recursively subdivide children if they meet criteria
 """
 function _subdivide_triangle_octree!(
-    tree::SpatialOctree{Int,T},
-    mesh::TriangleMesh{T},
-    box_idx::Int,
-    criterion,
-) where {T<:Real}
+        tree::SpatialOctree{Int, T},
+        mesh::TriangleMesh{T},
+        box_idx::Int,
+        criterion,
+    ) where {T <: Real}
     # Check if this box needs subdivision
     if !should_subdivide(criterion, tree, box_idx)
         return
@@ -285,6 +285,7 @@ function _subdivide_triangle_octree!(
         child_idx == 0 && continue
         _subdivide_triangle_octree!(tree, mesh, child_idx, criterion)
     end
+    return
 end
 
 """
@@ -301,7 +302,7 @@ Classify octree leaves as exterior (0), boundary (1), or interior (2).
 # Returns
 Vector of Int8 classifications, indexed by box_idx
 """
-function _classify_leaves(tree::SpatialOctree{Int,T}, mesh::TriangleMesh{T}) where {T<:Real}
+function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::TriangleMesh{T}) where {T <: Real}
     n_boxes = length(tree.element_lists)
     classification = zeros(Int8, n_boxes)
     distances = fill(T(Inf), n_boxes)
@@ -312,7 +313,7 @@ function _classify_leaves(tree::SpatialOctree{Int,T}, mesh::TriangleMesh{T}) whe
     for leaf_idx in all_leaves(tree)
         if !isempty(tree.element_lists[leaf_idx])
             classification[leaf_idx] = 1  # Boundary
-            distances[leaf_idx] = T(1e-6)  # Small positive (on surface)
+            distances[leaf_idx] = T(1.0e-6)  # Small positive (on surface)
             visited[leaf_idx] = true
             push!(queue, leaf_idx)
         end
@@ -324,7 +325,7 @@ function _classify_leaves(tree::SpatialOctree{Int,T}, mesh::TriangleMesh{T}) whe
 
         for box_idx in queue
             # Check all 6 neighbors (±x, ±y, ±z)
-            for direction = 1:6
+            for direction in 1:6
                 neighbors = find_neighbor(tree, box_idx, direction)
 
                 for neighbor_idx in neighbors
@@ -375,9 +376,9 @@ Returns:
 - Zero if point is exactly on the surface
 """
 function _compute_signed_distance(
-    point::SVector{3,T},
-    mesh::TriangleMesh{T},
-) where {T<:Real}
+        point::SVector{3, T},
+        mesh::TriangleMesh{T},
+    ) where {T <: Real}
     min_dist = T(Inf)
     closest_tri = nothing
 
@@ -441,7 +442,7 @@ is_inside = isinside(point, octree)  # ~0.05ms vs ~50ms brute-force
 Requires `classify_leaves=true` during construction for empty leaf queries.
 If octree was built without classification, only boundary leaf queries work.
 """
-function isinside(point::SVector{3,T}, octree::TriangleOctree{T}) where {T<:Real}
+function isinside(point::SVector{3, T}, octree::TriangleOctree{T}) where {T <: Real}
     tree = octree.tree
     mesh = octree.mesh
 
@@ -452,7 +453,7 @@ function isinside(point::SVector{3,T}, octree::TriangleOctree{T}) where {T<:Real
     if isnothing(octree.leaf_classification)
         error(
             """Cannot query without classification!
-      Rebuild TriangleOctree with classify_leaves=true to enable full isinside() queries.""",
+            Rebuild TriangleOctree with classify_leaves=true to enable full isinside() queries.""",
         )
     end
 
@@ -474,7 +475,7 @@ function isinside(point::SVector{3,T}, octree::TriangleOctree{T}) where {T<:Real
         else
             # Boundary leaf but empty - search neighbors
             neighbor_triangles = Int[]
-            for direction = 1:6
+            for direction in 1:6
                 neighbors = find_neighbor(tree, leaf_idx, direction)
                 for neighbor_idx in neighbors
                     if is_leaf(tree, neighbor_idx)
@@ -516,10 +517,10 @@ we only check the k≈10-50 triangles in the point's octree leaf.
 Signed distance (negative = interior, positive = exterior)
 """
 function _compute_local_signed_distance(
-    point::SVector{3,T},
-    mesh::TriangleMesh{T},
-    tri_indices::Vector{Int},
-) where {T<:Real}
+        point::SVector{3, T},
+        mesh::TriangleMesh{T},
+        tri_indices::Vector{Int},
+    ) where {T <: Real}
     min_dist = typemax(T)
     closest_tri = nothing
 
@@ -560,7 +561,7 @@ test_points = [SVector(randn(3)...) for _ in 1:1000]
 results = isinside(test_points, octree)  # Returns Vector{Bool}
 ```
 """
-function isinside(points::Vector{SVector{3,T}}, octree::TriangleOctree{T}) where {T<:Real}
+function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree{T}) where {T <: Real}
     return [isinside(p, octree) for p in points]
     # TODO: Add @threads for parallelization:
     # return ThreadsX.map(p -> isinside(p, octree), points)

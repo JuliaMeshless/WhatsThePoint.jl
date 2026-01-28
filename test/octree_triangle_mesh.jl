@@ -24,9 +24,9 @@ end
     tri = Triangle(v1, v2, v3)
 
     # Normal should be (v2-v1) × (v3-v1) = [1,0,0] × [0,1,0] = [0,0,1]
-    @test tri.normal[1] ≈ 0.0 atol = 1e-10
-    @test tri.normal[2] ≈ 0.0 atol = 1e-10
-    @test tri.normal[3] ≈ 1.0 atol = 1e-10
+    @test tri.normal[1] ≈ 0.0 atol = 1.0e-10
+    @test tri.normal[2] ≈ 0.0 atol = 1.0e-10
+    @test tri.normal[3] ≈ 1.0 atol = 1.0e-10
     @test norm(tri.normal) ≈ 1.0
 end
 

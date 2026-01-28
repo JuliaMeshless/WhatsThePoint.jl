@@ -11,7 +11,7 @@
 
     # Basic checks
     @test octree.mesh === mesh
-    @test octree.tree isa SpatialOctree{Int,Float64}
+    @test octree.tree isa SpatialOctree{Int, Float64}
     @test num_triangles(octree) == 2
     @test num_leaves(octree) > 0
 end
@@ -70,7 +70,7 @@ end
     for leaf_idx in all_leaves(octree.tree)
         leaf_size = box_size(octree.tree, leaf_idx)
         # Size should be either >= h_min or very close (due to FP precision)
-        @test (leaf_size >= h_min - 1e-10) || (leaf_size ≈ h_min)
+        @test (leaf_size >= h_min - 1.0e-10) || (leaf_size ≈ h_min)
     end
 end
 
@@ -168,7 +168,7 @@ end
 
         # Should have all three types
         @test n_boundary > 0  # Must have boundary leaves with triangles
-    # Note: exterior/interior might be 0 depending on mesh topology
+        # Note: exterior/interior might be 0 depending on mesh topology
     else
         @test_skip "box.stl not available"
     end

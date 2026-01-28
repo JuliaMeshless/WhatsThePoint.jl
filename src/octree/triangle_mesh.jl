@@ -37,21 +37,21 @@ n = SVector(0.0, 0.0, 1.0)
 tri = Triangle(v1, v2, v3, n)
 ```
 """
-struct Triangle{T<:Real}
-    v1::SVector{3,T}
-    v2::SVector{3,T}
-    v3::SVector{3,T}
-    normal::SVector{3,T}
+struct Triangle{T <: Real}
+    v1::SVector{3, T}
+    v2::SVector{3, T}
+    v3::SVector{3, T}
+    normal::SVector{3, T}
 
     # Inner constructor with validation
     function Triangle(
-        v1::SVector{3,T},
-        v2::SVector{3,T},
-        v3::SVector{3,T},
-        normal::SVector{3,T},
-    ) where {T<:Real}
+            v1::SVector{3, T},
+            v2::SVector{3, T},
+            v3::SVector{3, T},
+            normal::SVector{3, T},
+        ) where {T <: Real}
         n_mag = norm(normal)
-        if !isapprox(n_mag, one(T), atol = 1e-6)
+        if !isapprox(n_mag, one(T), atol = 1.0e-6)
             error("Triangle normal must be unit length, got norm=$n_mag")
         end
         return new{T}(v1, v2, v3, normal)
@@ -67,7 +67,7 @@ Normal direction: (v2-v1) × (v3-v1), normalized to unit length.
 
 Throws an error if vertices are collinear or duplicated (degenerate triangle).
 """
-function Triangle(v1::SVector{3,T}, v2::SVector{3,T}, v3::SVector{3,T}) where {T<:Real}
+function Triangle(v1::SVector{3, T}, v2::SVector{3, T}, v3::SVector{3, T}) where {T <: Real}
     e1 = v2 - v1
     e2 = v3 - v1
     n = cross(e1, e2)
@@ -105,17 +105,17 @@ mesh = TriangleMesh(triangles)  # Automatic bbox computation
 mesh = TriangleMesh("bunny.stl")
 ```
 """
-struct TriangleMesh{T<:Real}
+struct TriangleMesh{T <: Real}
     triangles::Vector{Triangle{T}}
-    bbox_min::SVector{3,T}
-    bbox_max::SVector{3,T}
+    bbox_min::SVector{3, T}
+    bbox_max::SVector{3, T}
 
     # Inner constructor with validation
     function TriangleMesh(
-        triangles::Vector{Triangle{T}},
-        bbox_min::SVector{3,T},
-        bbox_max::SVector{3,T},
-    ) where {T<:Real}
+            triangles::Vector{Triangle{T}},
+            bbox_min::SVector{3, T},
+            bbox_max::SVector{3, T},
+        ) where {T <: Real}
         isempty(triangles) && error("TriangleMesh cannot be empty")
 
         # Validate bounding box
@@ -132,7 +132,7 @@ end
 
 Construct TriangleMesh with automatic bounding box computation from all vertices.
 """
-function TriangleMesh(triangles::Vector{Triangle{T}}) where {T<:Real}
+function TriangleMesh(triangles::Vector{Triangle{T}}) where {T <: Real}
     isempty(triangles) && error("Cannot create TriangleMesh from empty triangle list")
 
     # Compute bounding box from all vertices
@@ -141,30 +141,30 @@ function TriangleMesh(triangles::Vector{Triangle{T}}) where {T<:Real}
     append!(all_coords, [tri.v3 for tri in triangles])
 
     # Find min/max in each dimension
-    bbox_min = SVector{3,T}(
+    bbox_min = SVector{3, T}(
         minimum(v[1] for v in all_coords),
         minimum(v[2] for v in all_coords),
         minimum(v[3] for v in all_coords),
     )
 
-    bbox_max = SVector{3,T}(
+    bbox_max = SVector{3, T}(
         maximum(v[1] for v in all_coords),
         maximum(v[2] for v in all_coords),
         maximum(v[3] for v in all_coords),
     )
 
     # Handle planar meshes by adding small epsilon in degenerate dimensions
-    eps_val = max(eps(T) * 100, 1e-10)
+    eps_val = max(eps(T) * 100, 1.0e-10)
     bbox_size = bbox_max .- bbox_min
 
     # If any dimension has zero size (planar mesh), add small thickness
-    bbox_min = SVector{3,T}(
+    bbox_min = SVector{3, T}(
         bbox_size[1] == 0 ? bbox_min[1] - eps_val : bbox_min[1],
         bbox_size[2] == 0 ? bbox_min[2] - eps_val : bbox_min[2],
         bbox_size[3] == 0 ? bbox_min[3] - eps_val : bbox_min[3],
     )
 
-    bbox_max = SVector{3,T}(
+    bbox_max = SVector{3, T}(
         bbox_size[1] == 0 ? bbox_max[1] + eps_val : bbox_max[1],
         bbox_size[2] == 0 ? bbox_max[2] + eps_val : bbox_max[2],
         bbox_size[3] == 0 ? bbox_max[3] + eps_val : bbox_max[3],
@@ -193,7 +193,7 @@ Extract unique vertices from all triangles in the mesh.
 Returns a vector of unique SVector{3,T} points.
 """
 function unique_points(mesh::TriangleMesh{T}) where {T}
-    points = Set{SVector{3,T}}()
+    points = Set{SVector{3, T}}()
     for tri in mesh.triangles
         push!(points, tri.v1)
         push!(points, tri.v2)
@@ -253,9 +253,9 @@ function TriangleMesh(filepath::String)
         v3_tuple = Meshes.to(verts[3])
 
         # Convert to pure SVector{3,Float64} - NO UNITS!
-        v1 = SVector{3,Float64}(ustrip.(v1_tuple))
-        v2 = SVector{3,Float64}(ustrip.(v2_tuple))
-        v3 = SVector{3,Float64}(ustrip.(v3_tuple))
+        v1 = SVector{3, Float64}(ustrip.(v1_tuple))
+        v2 = SVector{3, Float64}(ustrip.(v2_tuple))
+        v3 = SVector{3, Float64}(ustrip.(v3_tuple))
         # After this point, units are gone forever!
 
         # Create triangle (auto-computes normal)

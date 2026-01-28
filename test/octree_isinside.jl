@@ -39,7 +39,7 @@
 
         triangles = [
             Triangle(vertices[i], vertices[j], vertices[k]) for
-            (i, j, k) in triangle_indices
+                (i, j, k) in triangle_indices
         ]
 
         return TriangleMesh(triangles)
@@ -102,7 +102,7 @@ end
         ]
         triangles = [
             Triangle(vertices[i], vertices[j], vertices[k]) for
-            (i, j, k) in triangle_indices
+                (i, j, k) in triangle_indices
         ]
         return TriangleMesh(triangles)
     end
@@ -156,12 +156,12 @@ end
         ]
         triangles = [
             Triangle(vertices[i], vertices[j], vertices[k]) for
-            (i, j, k) in triangle_indices
+                (i, j, k) in triangle_indices
         ]
         return TriangleMesh(triangles)
     end
 
-    function isinside_bruteforce(point::SVector{3,T}, mesh::TriangleMesh{T}) where {T<:Real}
+    function isinside_bruteforce(point::SVector{3, T}, mesh::TriangleMesh{T}) where {T <: Real}
         dist = WhatsThePoint._compute_signed_distance(point, mesh)
         return dist < 0
     end
@@ -178,7 +178,7 @@ end
     Random.seed!(42)
     n_test = 100
 
-    for _ = 1:n_test
+    for _ in 1:n_test
         # Random point in [-0.5, 1.5]³
         point = SVector(rand(3)...) .* 2.0 .- 0.5
 
@@ -215,7 +215,7 @@ end
 
         # Test 3: Random points within bounding box
         Random.seed!(123)
-        for _ = 1:20
+        for _ in 1:20
             # Random point in bounding box
             t = rand(3)
             point = SVector{3}(mesh.bbox_min .+ t .* (mesh.bbox_max - mesh.bbox_min))
@@ -258,7 +258,7 @@ end
         ]
         triangles = [
             Triangle(vertices[i], vertices[j], vertices[k]) for
-            (i, j, k) in triangle_indices
+                (i, j, k) in triangle_indices
         ]
         return TriangleMesh(triangles)
     end
@@ -324,7 +324,7 @@ end
         ]
         triangles = [
             Triangle(vertices[i], vertices[j], vertices[k]) for
-            (i, j, k) in triangle_indices
+                (i, j, k) in triangle_indices
         ]
         return TriangleMesh(triangles)
     end

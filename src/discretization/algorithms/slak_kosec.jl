@@ -60,21 +60,21 @@ result = discretize(cloud, spacing; alg=alg, max_points=100_000)
 """
 struct SlakKosec <: AbstractNodeGenerationAlgorithm
     n::Int
-    octree::Union{Nothing,TriangleOctree}
-    SlakKosec(n::Int, octree::Union{Nothing,TriangleOctree} = nothing) = new(n, octree)
+    octree::Union{Nothing, TriangleOctree}
+    SlakKosec(n::Int, octree::Union{Nothing, TriangleOctree} = nothing) = new(n, octree)
 end
 SlakKosec() = SlakKosec(10, nothing)
 SlakKosec(octree::TriangleOctree) = SlakKosec(10, octree)
 
 function _discretize_volume(
-    cloud::PointCloud{𝔼{3},C},
-    spacing::AbstractSpacing,
-    alg::SlakKosec;
-    max_points = 1_000,
-) where {C}
+        cloud::PointCloud{𝔼{3}, C},
+        spacing::AbstractSpacing,
+        alg::SlakKosec;
+        max_points = 1_000,
+    ) where {C}
     seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
-    new_points = Point{𝔼{3},C}[]
+    new_points = Point{𝔼{3}, C}[]
 
     i = 0
     while !isempty(seeds) && i < max_points
@@ -116,16 +116,16 @@ Convert Point to SVector and use octree-based isinside query.
 This provides significant speedup (100-1000×) over standard Green's function approach
 by leveraging spatial indexing.
 """
-function _isinside_octree(point::Point{𝔼{3},C}, octree::TriangleOctree{T}) where {C,T}
+function _isinside_octree(point::Point{𝔼{3}, C}, octree::TriangleOctree{T}) where {C, T}
     # Convert Point to SVector (stripping units if present)
     coords = to(point)
-    svec = SVector{3,T}(ustrip.(coords)...)
+    svec = SVector{3, T}(ustrip.(coords)...)
 
     # Use octree-based isinside query
     return isinside(svec, octree)
 end
 
-function _get_candidates(p::Point{𝔼{3},C}, r; n = 10) where {C}
+function _get_candidates(p::Point{𝔼{3}, C}, r; n = 10) where {C}
     T = CoordRefSystems.mactype(C)
 
     u = rand(T, n)
