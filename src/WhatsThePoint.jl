@@ -35,6 +35,24 @@ export metrics
 
 include("geometry.jl")
 
+# Octree spatial indexing
+include("octree/traits.jl")
+include("octree/spatial_octree.jl")
+include("octree/geometric_utils.jl")
+include("octree/triangle_mesh.jl")
+include("octree/triangle_octree.jl")
+export AbstractSpatialTree, AbstractOctree, AbstractQuadtree
+export SpatialOctree
+export InsertionStrategy, PointInsertion, GeometricInsertion
+export SubdivisionCriterion, MaxElementsCriterion, SizeCriterion, AndCriterion
+export should_subdivide, find_leaf, box_center, box_size, box_bounds, bounding_box
+export subdivide!, balance_octree!, find_neighbor
+export is_leaf, has_children, num_elements, all_leaves, all_boxes, needs_balancing
+export Triangle, TriangleMesh, bbox_size, bbox_center, unique_points
+export TriangleOctree, num_leaves, num_triangles
+export closest_point_on_triangle, distance_point_triangle
+export triangle_box_intersection, boxes_intersected_by_triangle
+
 include("points.jl")
 export emptyspace
 

@@ -1,7 +1,10 @@
 struct FornbergFlyer <: AbstractNodeGenerationAlgorithm end
 
 function _discretize_volume(
-        cloud::PointCloud{𝔼{2}, C}, spacing::ConstantSpacing, ::FornbergFlyer; max_points = 10_000
+        cloud::PointCloud{𝔼{2}, C},
+        spacing::ConstantSpacing,
+        ::FornbergFlyer;
+        max_points = 10_000,
     ) where {C}
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
