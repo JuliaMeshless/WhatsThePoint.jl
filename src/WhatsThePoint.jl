@@ -71,6 +71,7 @@ export PointVolume
 
 include("boundary.jl")
 export PointBoundary, surfaces, namedsurfaces, names, normals, areas, hassurface
+export source_mesh, has_source_mesh, NoMesh
 
 include("cloud.jl")
 export PointCloud, boundary, volume, topology
