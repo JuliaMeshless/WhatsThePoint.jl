@@ -10,22 +10,22 @@ include("algorithms/slak_kosec.jl")
 Generate volume points for the given boundary and return a new PointCloud.
 """
 function discretize(
-    bnd::PointBoundary{𝔼{3}},
-    spacing::AbstractSpacing;
-    alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-    max_points = 10_000_000,
-)
+        bnd::PointBoundary{𝔼{3}},
+        spacing::AbstractSpacing;
+        alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
+        max_points = 10_000_000,
+    )
     cloud = PointCloud(bnd)
     new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
 function discretize(
-    bnd::PointBoundary{𝔼{2}},
-    spacing::AbstractSpacing;
-    alg::AbstractNodeGenerationAlgorithm = FornbergFlyer(),
-    max_points = 10_000_000,
-)
+        bnd::PointBoundary{𝔼{2}},
+        spacing::AbstractSpacing;
+        alg::AbstractNodeGenerationAlgorithm = FornbergFlyer(),
+        max_points = 10_000_000,
+    )
     @warn "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
     cloud = PointCloud(bnd)
     new_volume =
@@ -39,11 +39,11 @@ end
 Generate volume points for an existing cloud and return a new PointCloud with the volume populated.
 """
 function discretize(
-    cloud::PointCloud,
-    spacing::AbstractSpacing;
-    alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-    max_points = 10_000_000,
-)
+        cloud::PointCloud,
+        spacing::AbstractSpacing;
+        alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
+        max_points = 10_000_000,
+    )
     new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end

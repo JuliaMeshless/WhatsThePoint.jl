@@ -2,14 +2,14 @@
     N = 10
 
     @testset "Empty constructor" begin
-        vol = PointVolume{🌐,Cartesian{NoDatum}}()
+        vol = PointVolume{🌐, Cartesian{NoDatum}}()
         @test vol isa PointVolume
         @test isempty(vol)
         @test length(vol) == 0
     end
 
     @testset "Vector constructor" begin
-        pts = [Point(Float64(i), Float64(i)) for i = 1:N]
+        pts = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(pts)
         @test vol isa PointVolume
         @test length(vol) == N
@@ -22,14 +22,14 @@ end
     N = 10
 
     @testset "length and size" begin
-        points = [Point(Float64(i), Float64(i)) for i = 1:N]
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         @test length(vol) == N
         @test size(vol) == (N,)
     end
 
     @testset "getindex" begin
-        points = [Point(Float64(i), Float64(i)) for i = 1:N]
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         @test vol[1] == points[1]
         @test vol[end] == points[end]
@@ -37,7 +37,7 @@ end
     end
 
     @testset "iterate" begin
-        points = [Point(Float64(i), Float64(i)) for i = 1:N]
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         collected = collect(vol)
         @test collected == points
@@ -48,23 +48,23 @@ end
     end
 
     @testset "isempty" begin
-        vol_empty = PointVolume{🌐,Cartesian{NoDatum}}()
+        vol_empty = PointVolume{🌐, Cartesian{NoDatum}}()
         @test isempty(vol_empty)
 
-        points = [Point(Float64(i), Float64(i)) for i = 1:N]
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         @test !isempty(vol)
     end
 
     @testset "parent" begin
-        pts = [Point(Float64(i), Float64(i)) for i = 1:N]
+        pts = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(pts)
         @test parent(vol) == pts
         @test parent(vol) isa AbstractVector{<:Point}
     end
 
     @testset "filter" begin
-        points = [Point(Float64(i), Float64(i)) for i = 1:10]
+        points = [Point(Float64(i), Float64(i)) for i in 1:10]
         vol = PointVolume(points)
         filtered_vol = filter(p -> to(p)[1] > 5.0m, vol)
         @test length(filtered_vol) == 5
@@ -80,7 +80,7 @@ end
     N = 10
 
     @testset "to" begin
-        points = [Point(Float64(i), Float64(i)) for i = 1:N]
+        points = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(points)
         coords = to(vol)
         @test coords isa Vector
@@ -111,7 +111,7 @@ end
     N = 10
 
     @testset "points returns points" begin
-        pts = [Point(Float64(i), Float64(i)) for i = 1:N]
+        pts = [Point(Float64(i), Float64(i)) for i in 1:N]
         vol = PointVolume(pts)
         result = points(vol)
         @test result isa AbstractVector{<:Point}
@@ -119,7 +119,7 @@ end
     end
 
     @testset "points empty volume" begin
-        vol = PointVolume{🌐,Cartesian{NoDatum}}()
+        vol = PointVolume{🌐, Cartesian{NoDatum}}()
         result = points(vol)
         @test isempty(result)
     end
@@ -127,7 +127,7 @@ end
 
 @testitem "PointVolume Pretty Printing" setup = [TestData, CommonImports] begin
     N = 10
-    points = [Point(Float64(i), Float64(i)) for i = 1:N]
+    points = [Point(Float64(i), Float64(i)) for i in 1:N]
     vol = PointVolume(points)
 
     io = IOBuffer()

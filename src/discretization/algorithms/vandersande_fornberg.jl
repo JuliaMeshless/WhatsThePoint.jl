@@ -1,11 +1,11 @@
 struct VanDerSandeFornberg <: AbstractNodeGenerationAlgorithm end
 
 function _discretize_volume(
-    cloud::PointCloud{𝔼{3},C},
-    spacing::ConstantSpacing,
-    ::VanDerSandeFornberg;
-    max_points = 10_000_000,
-) where {C}
+        cloud::PointCloud{𝔼{3}, C},
+        spacing::ConstantSpacing,
+        ::VanDerSandeFornberg;
+        max_points = 10_000_000,
+    ) where {C}
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
     xmin, ymin, _ = to(bbox.min)
@@ -20,7 +20,7 @@ function _discretize_volume(
     heights = rand(T, length(pdp)) * spacing(points(cloud)[1]) * 0.01 .+ coords(bbox.min).z
     _, current_id = findmin_turbo(heights)
     p = pdp[current_id]
-    new_points = Vector{Point{𝔼{3},C}}(undef, max_points)
+    new_points = Vector{Point{𝔼{3}, C}}(undef, max_points)
 
     dotnr = 1
     c = coords(p)

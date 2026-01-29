@@ -79,7 +79,7 @@ end
 @testitem "PointBoundary normal() and area()" setup = [TestData, CommonImports] begin
     N = 10
     points = rand(Point, N)
-    normals = [rand(3) .* m for _ = 1:N]
+    normals = [rand(3) .* m for _ in 1:N]
     areas = rand(N) * m^2
     surf = PointSurface(points, normals, areas)
 
@@ -88,7 +88,7 @@ end
     @test area(b) == areas
 
     points2 = rand(Point, N)
-    normals2 = [rand(3) .* m for _ = 1:N]
+    normals2 = [rand(3) .* m for _ in 1:N]
     areas2 = rand(N) * m^2
     surf2 = PointSurface(points2, normals2, areas2)
     b[:surface2] = surf2

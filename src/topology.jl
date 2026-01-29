@@ -36,7 +36,7 @@ Radius-based topology where neighbors are all points within a given radius.
 - `neighbors::S` - neighbor indices storage
 - `radius::R` - search radius (scalar or function of position)
 """
-mutable struct RadiusTopology{S,R} <: AbstractTopology{S}
+mutable struct RadiusTopology{S, R} <: AbstractTopology{S}
     neighbors::S
     radius::R
 end
@@ -66,7 +66,7 @@ neighbors(::NoTopology, ::Int) = throw(ArgumentError("NoTopology has no neighbor
 
 Check if topology is valid. With immutable design, topology is always valid if it exists.
 """
-Base.isvalid(::Union{KNNTopology,RadiusTopology}) = true
+Base.isvalid(::Union{KNNTopology, RadiusTopology}) = true
 Base.isvalid(::NoTopology) = true
 
 # Build functions for creating topology from points

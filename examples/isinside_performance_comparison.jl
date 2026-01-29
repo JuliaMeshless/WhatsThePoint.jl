@@ -158,10 +158,10 @@ lines!(ax3, Q_values, total_fmm, label = "FMM", color = colors.fmm, linewidth = 
 
 # Find and mark crossover points
 function find_crossover(costs1, costs2, Q_vals)
-    for i = 2:length(Q_vals)
-        if (costs1[i-1] <= costs2[i-1]) && (costs1[i] > costs2[i])
+    for i in 2:length(Q_vals)
+        if (costs1[i - 1] <= costs2[i - 1]) && (costs1[i] > costs2[i])
             return Q_vals[i]
-        elseif (costs1[i-1] >= costs2[i-1]) && (costs1[i] < costs2[i])
+        elseif (costs1[i - 1] >= costs2[i - 1]) && (costs1[i] < costs2[i])
             return Q_vals[i]
         end
     end

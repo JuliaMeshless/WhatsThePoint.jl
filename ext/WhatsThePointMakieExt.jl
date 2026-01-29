@@ -8,12 +8,12 @@ using Unitful: ustrip
 using Makie: Makie, Figure, Axis3, meshscatter!
 
 function WhatsThePoint.visualize(
-    cloud::PointCloud{𝔼{3},C};
-    size = (1000, 1000),
-    azimuth = 1.275π,
-    elevation = π / 8,
-    kwargs...,
-) where {C}
+        cloud::PointCloud{𝔼{3}, C};
+        size = (1000, 1000),
+        azimuth = 1.275π,
+        elevation = π / 8,
+        kwargs...,
+    ) where {C}
     fig = Figure(; size = size)
     ax = Axis3(fig[1, 1]; azimuth = azimuth, elevation = elevation)
     ax.aspect = :data
@@ -122,12 +122,12 @@ function WhatsThePoint.visualize(
 end
 
 function WhatsThePoint.visualize(
-    cloud::PointBoundary{𝔼{3},C};
-    size = (1000, 1000),
-    azimuth = 1.275π,
-    elevation = π / 8,
-    kwargs...,
-) where {C}
+        cloud::PointBoundary{𝔼{3}, C};
+        size = (1000, 1000),
+        azimuth = 1.275π,
+        elevation = π / 8,
+        kwargs...,
+    ) where {C}
     fig = Figure(; size = size)
     ax = Axis3(fig[1, 1]; azimuth = azimuth, elevation = elevation)
     ax.aspect = :data

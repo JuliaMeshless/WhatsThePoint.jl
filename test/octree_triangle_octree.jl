@@ -16,7 +16,7 @@
 
     # Basic checks
     @test octree.mesh === mesh
-    @test octree.tree isa SpatialOctree{Int,Float64}
+    @test octree.tree isa SpatialOctree{Int, Float64}
     @test num_triangles(octree) == 2
     @test num_leaves(octree) > 0
 end

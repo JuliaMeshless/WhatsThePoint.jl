@@ -1,6 +1,6 @@
 @testitem "PointSurface Constructors" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
-    normals = [Vec(rand(3)...) for _ = 1:10]
+    normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
     shadow = ShadowPoints(2m, 2)
 
@@ -45,7 +45,7 @@ end
 
 @testitem "SurfaceElement Constructors" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
-    normals = [Vec(rand(3)...) for _ = 1:10]
+    normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
     elem = SurfaceElement(points[1], normals[1], areas[1])
@@ -65,7 +65,7 @@ end
 
 @testitem "PointSurface Properties" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
-    normals = [Vec(rand(3)...) for _ = 1:10]
+    normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
     surf = PointSurface(points, normals, areas)
@@ -78,7 +78,7 @@ end
 
 @testitem "PointSurface Base Methods" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
-    normals = [Vec(rand(3)...) for _ = 1:10]
+    normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
     surf = PointSurface(points, normals, areas)
@@ -93,7 +93,7 @@ end
 
 @testitem "PointSurface points() and Meshes.jl Interface" setup = [TestData, CommonImports] begin
     pts_data = rand(Point, 10)
-    normals = [Vec(rand(3)...) for _ = 1:10]
+    normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
     surf = PointSurface(pts_data, normals, areas)
@@ -130,7 +130,7 @@ end
 
 @testitem "PointSurface Pretty Printing" setup = [TestData, CommonImports] begin
     points = rand(Point, 10)
-    normals = [Vec(rand(3)...) for _ = 1:10]
+    normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
     shadow = ShadowPoints(2m, 2)
 

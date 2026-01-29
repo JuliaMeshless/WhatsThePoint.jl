@@ -35,26 +35,26 @@ point = SVector(0.5, 0.5, 0.5)
 is_inside = isinside(point, octree)
 ```
 """
-struct TriangleOctree{M<:Manifold,C<:CRS,T<:Real}
-    tree::SpatialOctree{Int,T}
-    mesh::SimpleMesh{M,C}
+struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
+    tree::SpatialOctree{Int, T}
+    mesh::SimpleMesh{M, C}
     triangles::StructArray{
         @NamedTuple{
-            v1::SVector{3,T},
-            v2::SVector{3,T},
-            v3::SVector{3,T},
-            normal::SVector{3,T},
+            v1::SVector{3, T},
+            v2::SVector{3, T},
+            v3::SVector{3, T},
+            normal::SVector{3, T},
         },
         1,
         @NamedTuple{
-            v1::Vector{SVector{3,T}},
-            v2::Vector{SVector{3,T}},
-            v3::Vector{SVector{3,T}},
-            normal::Vector{SVector{3,T}},
+            v1::Vector{SVector{3, T}},
+            v2::Vector{SVector{3, T}},
+            v3::Vector{SVector{3, T}},
+            normal::Vector{SVector{3, T}},
         },
     }
-    leaf_classification::Union{Nothing,Vector{Int8}}
-    leaf_nearest_triangle::Union{Nothing,Vector{Int}}
+    leaf_classification::Union{Nothing, Vector{Int8}}
+    leaf_nearest_triangle::Union{Nothing, Vector{Int}}
 end
 
 """
@@ -64,7 +64,7 @@ Extract and normalize a Meshes.jl Vec normal to a unit SVector{3,Float64}.
 """
 @inline function _normalize_normal(n_vec)
     # Direct component access avoids tuple overhead
-    n = SVector{3,Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
+    n = SVector{3, Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
     n_mag = norm(n)
     if n_mag < eps(Float64) * 100
         error("Degenerate triangle: zero normal")
@@ -79,7 +79,7 @@ Extract coordinates from a Meshes.jl vertex to an SVector{3,Float64}.
 """
 @inline function _extract_vertex(vert)
     coords = Meshes.to(vert)
-    return SVector{3,Float64}(ustrip(coords[1]), ustrip(coords[2]), ustrip(coords[3]))
+    return SVector{3, Float64}(ustrip(coords[1]), ustrip(coords[2]), ustrip(coords[3]))
 end
 
 """
@@ -94,7 +94,7 @@ from vertex winding order, which can be inconsistent in STL files.
 
 Performance: Parallelized extraction using OhMyThreads for large meshes.
 """
-function _extract_triangle_data(mesh::SimpleMesh{M,C}) where {M,C}
+function _extract_triangle_data(mesh::SimpleMesh{M, C}) where {M, C}
     # Collect elements once to enable indexed parallel access
     elems = collect(elements(mesh))
 
@@ -105,10 +105,10 @@ function _extract_triangle_data(mesh::SimpleMesh{M,C}) where {M,C}
         if length(verts) != 3
             @warn "Skipping non-triangular element with $(length(verts)) vertices"
             return (
-                v1 = SVector{3,Float64}(0.0, 0.0, 0.0),
-                v2 = SVector{3,Float64}(0.0, 0.0, 0.0),
-                v3 = SVector{3,Float64}(0.0, 0.0, 0.0),
-                normal = SVector{3,Float64}(0.0, 0.0, 1.0),
+                v1 = SVector{3, Float64}(0.0, 0.0, 0.0),
+                v2 = SVector{3, Float64}(0.0, 0.0, 0.0),
+                v3 = SVector{3, Float64}(0.0, 0.0, 0.0),
+                normal = SVector{3, Float64}(0.0, 0.0, 1.0),
             )
         end
 
@@ -118,11 +118,11 @@ function _extract_triangle_data(mesh::SimpleMesh{M,C}) where {M,C}
 
         # Compute normal from element
         n_vec = Meshes.normal(elem)
-        n = SVector{3,Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
+        n = SVector{3, Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
         n_mag = norm(n)
 
         normal = if n_mag < eps(Float64) * 100
-            SVector{3,Float64}(0.0, 0.0, 1.0)  # Degenerate triangle
+            SVector{3, Float64}(0.0, 0.0, 1.0)  # Degenerate triangle
         else
             n / n_mag
         end
@@ -150,7 +150,7 @@ function _compute_bbox(triangles::StructArray)
     max_x, max_y, max_z = v[1], v[2], v[3]
 
     # Single-pass accumulation over all vertices
-    @inbounds for i = 1:n
+    @inbounds for i in 1:n
         # Vertex 1
         v = triangles.v1[i]
         min_x = min(min_x, v[1])
@@ -194,7 +194,7 @@ function _compute_bbox(triangles::StructArray)
         max_z += eps_val
     end
 
-    return SVector{3,T}(min_x, min_y, min_z), SVector{3,T}(max_x, max_y, max_z)
+    return SVector{3, T}(min_x, min_y, min_z), SVector{3, T}(max_x, max_y, max_z)
 end
 
 """
@@ -203,11 +203,11 @@ end
 Create a canonical edge key from two vertices (order-independent).
 Uses component-wise comparison for consistent ordering.
 """
-@inline function _edge_key(v1::SVector{3,T}, v2::SVector{3,T}) where {T}
+@inline function _edge_key(v1::SVector{3, T}, v2::SVector{3, T}) where {T}
     # Order vertices lexicographically for canonical key
     if v1[1] < v2[1] ||
-       (v1[1] == v2[1] && v1[2] < v2[2]) ||
-       (v1[1] == v2[1] && v1[2] == v2[2] && v1[3] < v2[3])
+            (v1[1] == v2[1] && v1[2] < v2[2]) ||
+            (v1[1] == v2[1] && v1[2] == v2[2] && v1[3] < v2[3])
         return (v1, v2)
     else
         return (v2, v1)
@@ -246,10 +246,10 @@ function has_consistent_normals(triangles::StructArray; alignment_threshold::Flo
 
     # Build edge → first triangle index map in O(n)
     # When we encounter an edge again, check normal alignment immediately
-    edge_map = Dict{Tuple{SVector{3,Float64},SVector{3,Float64}},Int}()
+    edge_map = Dict{Tuple{SVector{3, Float64}, SVector{3, Float64}}, Int}()
     sizehint!(edge_map, 3 * n)  # Each triangle has 3 edges
 
-    @inbounds for i = 1:n
+    @inbounds for i in 1:n
         v1 = triangles.v1[i]
         v2 = triangles.v2[i]
         v3 = triangles.v3[i]
@@ -312,12 +312,12 @@ println("Built octree with ", num_leaves(octree), " leaves")
 ```
 """
 function TriangleOctree(
-    mesh::SimpleMesh{M,C};
-    h_min,
-    max_triangles_per_box::Int = 50,
-    classify_leaves::Bool = true,
-    verify_orientation::Bool = true,
-) where {M<:Manifold,C<:CRS}
+        mesh::SimpleMesh{M, C};
+        h_min,
+        max_triangles_per_box::Int = 50,
+        classify_leaves::Bool = true,
+        verify_orientation::Bool = true,
+    ) where {M <: Manifold, C <: CRS}
     T = Float64
     h_min_val = T(ustrip(h_min))
 
@@ -337,10 +337,10 @@ function TriangleOctree(
     root_size = maximum(bbox_sz)
 
     estimated_boxes = max(1000, length(triangles) * 2)
-    tree = SpatialOctree{Int,T}(bbox_min, root_size; initial_capacity = estimated_boxes)
+    tree = SpatialOctree{Int, T}(bbox_min, root_size; initial_capacity = estimated_boxes)
 
     root_elements = tree.element_lists[1]
-    for tri_idx = 1:length(triangles)
+    for tri_idx in 1:length(triangles)
         push!(root_elements, tri_idx)
     end
 
@@ -392,11 +392,11 @@ For each box that needs subdivision:
 4. Recursively subdivide children if they meet criteria
 """
 function _subdivide_triangle_octree!(
-    tree::SpatialOctree{Int,T},
-    triangles::StructArray,
-    box_idx::Int,
-    criterion,
-) where {T<:Real}
+        tree::SpatialOctree{Int, T},
+        triangles::StructArray,
+        box_idx::Int,
+        criterion,
+    ) where {T <: Real}
     if !should_subdivide(criterion, tree, box_idx)
         return
     end
@@ -449,9 +449,9 @@ Tuple of:
 - `nearest_triangle::Vector{Int}`: Index of nearest triangle for each box (0 if not computed)
 """
 function _classify_leaves(
-    tree::SpatialOctree{Int,T},
-    triangles::StructArray,
-) where {T<:Real}
+        tree::SpatialOctree{Int, T},
+        triangles::StructArray,
+    ) where {T <: Real}
     n_boxes = length(tree.element_lists)
     classification = zeros(Int8, n_boxes)
     nearest_triangle = zeros(Int, n_boxes)
@@ -474,7 +474,7 @@ function _classify_leaves(
         next_queue = Int[]
 
         for box_idx in queue
-            for direction = 1:6
+            for direction in 1:6
                 neighbors = find_neighbor(tree, box_idx, direction)
 
                 for neighbor_idx in neighbors
@@ -521,13 +521,13 @@ Returns:
 - Zero if point is exactly on the surface
 """
 function _compute_signed_distance(
-    point::SVector{3,T},
-    triangles::StructArray,
-) where {T<:Real}
+        point::SVector{3, T},
+        triangles::StructArray,
+    ) where {T <: Real}
     min_dist = T(Inf)
     closest_idx = 0
 
-    for i = 1:length(triangles)
+    for i in 1:length(triangles)
         closest_pt = closest_point_on_triangle(
             point,
             triangles.v1[i],
@@ -561,13 +561,13 @@ Returns:
   - `closest_idx`: 1-based index of the nearest triangle
 """
 function _compute_signed_distance_with_index(
-    point::SVector{3,T},
-    triangles::StructArray,
-) where {T<:Real}
+        point::SVector{3, T},
+        triangles::StructArray,
+    ) where {T <: Real}
     min_dist = T(Inf)
     closest_idx = 0
 
-    for i = 1:length(triangles)
+    for i in 1:length(triangles)
         closest_pt = closest_point_on_triangle(
             point,
             triangles.v1[i],
@@ -623,7 +623,7 @@ point = SVector(0.5, 0.5, 0.5)
 is_inside = isinside(point, octree)  # ~0.05ms vs ~50ms brute-force
 ```
 """
-function isinside(point::SVector{3,T}, octree::TriangleOctree) where {T<:Real}
+function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
     tree = octree.tree
     triangles = octree.triangles
 
@@ -650,7 +650,7 @@ function isinside(point::SVector{3,T}, octree::TriangleOctree) where {T<:Real}
             return dist < 0
         else
             neighbor_triangles = Int[]
-            for direction = 1:6
+            for direction in 1:6
                 neighbors = find_neighbor(tree, leaf_idx, direction)
                 for neighbor_idx in neighbors
                     if is_leaf(tree, neighbor_idx)
@@ -693,10 +693,10 @@ we only check the k≈10-50 triangles in the point's octree leaf.
 Performance: Fused computation avoids redundant closest_point calculation.
 """
 function _compute_local_signed_distance(
-    point::SVector{3,T},
-    triangles::StructArray,
-    tri_indices::Vector{Int},
-) where {T<:Real}
+        point::SVector{3, T},
+        triangles::StructArray,
+        tri_indices::Vector{Int},
+    ) where {T <: Real}
     min_dist_sq = typemax(T)
     closest_idx = 0
     closest_pt = point  # Will be overwritten
@@ -736,6 +736,6 @@ test_points = [SVector(randn(3)...) for _ in 1:1000]
 results = isinside(test_points, octree)  # Returns Vector{Bool}
 ```
 """
-function isinside(points::Vector{SVector{3,T}}, octree::TriangleOctree) where {T<:Real}
+function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}
     return [isinside(p, octree) for p in points]
 end

@@ -6,7 +6,7 @@ using Test
 
 @testset "SpatialOctree Construction" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     @test octree.num_boxes[] == 1
     @test octree.coords[1] == SVector(0, 0, 0, 1)
@@ -17,7 +17,7 @@ end
 
 @testset "Box Geometry" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     center = box_center(octree, 1)
     @test center ≈ SVector(5.0, 5.0, 5.0)
@@ -31,7 +31,7 @@ end
 
 @testset "Subdivision" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     children = subdivide!(octree, 1)
 
@@ -58,7 +58,7 @@ end
 
 @testset "Point Query" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     # Before subdivision, all points map to root
     point = SVector(2.0, 2.0, 2.0)
@@ -86,7 +86,7 @@ end
 
 @testset "Neighbor Finding" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     children = subdivide!(octree, 1)
 
@@ -110,7 +110,7 @@ end
 
 @testset "Element Storage" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     # Add elements to root
     push!(octree.element_lists[1], 1)
@@ -137,10 +137,10 @@ end
 
 @testset "Subdivision Criteria" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     # Add elements to root
-    for i = 1:60
+    for i in 1:60
         push!(octree.element_lists[1], i)
     end
 
@@ -168,7 +168,7 @@ end
 
 @testset "Leaf Iteration" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     # Test 1: Root is a leaf
     leaves = all_leaves(octree)
@@ -192,7 +192,7 @@ end
 
 @testset "Octree Balancing" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     # Create imbalanced tree
     # Subdivide root
@@ -219,7 +219,7 @@ end
 
 @testset "Bounding Box" begin
     origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int,Float64}(origin, 10.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     min_corner, max_corner = bounding_box(octree)
     @test min_corner ≈ SVector(0.0, 0.0, 0.0)
