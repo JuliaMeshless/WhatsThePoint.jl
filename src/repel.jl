@@ -7,14 +7,14 @@ Returns `(new_cloud, convergence_vector)` tuple.
 The returned cloud has `NoTopology` since points have moved.
 """
 function repel(
-        cloud::PointCloud{𝔼{N}, C},
-        spacing;
-        β = 0.2,
-        α = minimum(spacing(to(cloud))) * 0.05,
-        k = 21,
-        max_iters = 1.0e3,
-        tol = 1.0e-6,
-    ) where {N, C <: CRS}
+    cloud::PointCloud{𝔼{N},C},
+    spacing;
+    β = 0.2,
+    α = minimum(spacing(to(cloud))) * 0.05,
+    k = 21,
+    max_iters = 1.0e3,
+    tol = 1.0e-6,
+) where {N,C<:CRS}
     # Miotti 2023
     α = ustrip(α)
     p = collect(volume(cloud).points)

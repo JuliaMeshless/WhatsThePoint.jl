@@ -15,7 +15,7 @@ end
 
 @testitem "isinside 2D PointSurface" setup = [TestData, CommonImports] begin
     points = Point.([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
-    normals = [[0.0, -1.0] * m for _ in 1:4]
+    normals = [[0.0, -1.0] * m for _ = 1:4]
     areas = [0.5, 0.5, 0.5, 0.5] * m
     surf = PointSurface(points, normals, areas)
 
@@ -26,7 +26,7 @@ end
 
 @testitem "isinside 2D PointCloud" setup = [TestData, CommonImports] begin
     points = Point.([(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0)])
-    normals = [[0.0, -1.0] * m for _ in 1:4]
+    normals = [[0.0, -1.0] * m for _ = 1:4]
     areas = [0.75, 0.75, 0.75, 0.75] * m
     boundary = PointBoundary(points, normals, areas)
     cloud = PointCloud(boundary)
@@ -38,7 +38,7 @@ end
 
 @testitem "isinside 2D testpoint as AbstractVector" setup = [TestData, CommonImports] begin
     points = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
-    normals = [[0.0, -1.0] * m for _ in 1:4]
+    normals = [[0.0, -1.0] * m for _ = 1:4]
     areas = [0.25, 0.25, 0.25, 0.25] * m
     surf = PointSurface(points, normals, areas)
 

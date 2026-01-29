@@ -44,7 +44,7 @@ end
     using WhatsThePoint: topology
     # Create points in a grid pattern for predictable neighbors
     spacing = 0.1u"m"
-    points = [Point(i * spacing, j * spacing) for i in 0:4 for j in 0:4]
+    points = [Point(i * spacing, j * spacing) for i = 0:4 for j = 0:4]
     cloud = PointCloud(PointBoundary(points))
 
     # Radius that should capture adjacent points
@@ -144,9 +144,8 @@ end
     @test contains(output, "KNNTopology")
 end
 
-@testitem "Backwards compatibility - PointCloud without topology" setup = [
-    TestData, CommonImports,
-] begin
+@testitem "Backwards compatibility - PointCloud without topology" setup =
+    [TestData, CommonImports] begin
     using WhatsThePoint: boundary
     # Ensure old code patterns still work
     N = 10
@@ -167,7 +166,7 @@ end
     using WhatsThePoint: topology
     N = 20
     points = rand(Point, N)
-    normals = [Point(0.0, 0.0, 1.0) for _ in 1:N]
+    normals = [Point(0.0, 0.0, 1.0) for _ = 1:N]
     areas = zeros(N) * u"m^2"
     surf = PointSurface(points, normals, areas)
 
@@ -217,7 +216,7 @@ end
     using WhatsThePoint: topology
     # Create grid pattern for predictable neighbors
     spacing = 0.1u"m"
-    points = [Point(i * spacing, j * spacing) for i in 0:4 for j in 0:4]
+    points = [Point(i * spacing, j * spacing) for i = 0:4 for j = 0:4]
     normals = [Point(0.0, 0.0, 1.0) for _ in points]
     areas = zeros(length(points)) * u"m^2"
     surf = PointSurface(points, normals, areas)
@@ -243,7 +242,7 @@ end
     using WhatsThePoint: topology
     # Create grid pattern for predictable neighbors
     spacing = 0.1u"m"
-    points = [Point(i * spacing, j * spacing) for i in 0:4 for j in 0:4]
+    points = [Point(i * spacing, j * spacing) for i = 0:4 for j = 0:4]
     vol = PointVolume(points)
 
     # Add RadiusTopology
@@ -267,7 +266,7 @@ end
     using WhatsThePoint: topology
     # Create grid for predictable results
     spacing = 0.1u"m"
-    points = [Point(i * spacing, j * spacing) for i in 0:3 for j in 0:3]
+    points = [Point(i * spacing, j * spacing) for i = 0:3 for j = 0:3]
     cloud = PointCloud(PointBoundary(points))
 
     # Set RadiusTopology
@@ -292,7 +291,7 @@ end
     using WhatsThePoint: topology
     # Create surface with RadiusTopology
     spacing = 0.1u"m"
-    points = [Point(i * spacing, j * spacing) for i in 0:3 for j in 0:3]
+    points = [Point(i * spacing, j * spacing) for i = 0:3 for j = 0:3]
     normals = [Point(0.0, 0.0, 1.0) for _ in points]
     areas = zeros(length(points)) * u"m^2"
     surf = PointSurface(points, normals, areas)
@@ -317,7 +316,7 @@ end
     using WhatsThePoint: topology
     # Create volume with RadiusTopology
     spacing = 0.1u"m"
-    points = [Point(i * spacing, j * spacing) for i in 0:3 for j in 0:3]
+    points = [Point(i * spacing, j * spacing) for i = 0:3 for j = 0:3]
     vol = PointVolume(points)
 
     radius = 0.15u"m"

@@ -11,4 +11,4 @@ Contains views (data, not visual) of a surface of a [PointBoundary](@ref).
 This is a data view, so mutations to this data will change the data in the [PointBoundary](@ref)
        which this surface resides as well.
 """
-struct ParameterizedSurface{Dim, T} <: AbstractSurface{Dim, T} end
+struct ParameterizedSurface{Dim,T} <: AbstractSurface{Dim,T} end

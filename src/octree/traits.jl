@@ -31,21 +31,21 @@ Optional:
 - `find_neighbors(tree, box_idx, direction)` - Neighbor queries
 - `balance!(tree)` - Enforce refinement constraints
 """
-abstract type AbstractSpatialTree{N, T, C <: Real} end
+abstract type AbstractSpatialTree{N,T,C<:Real} end
 
 """
     AbstractOctree{T,C} = AbstractSpatialTree{3,T,C}
 
 Convenience alias for 3D spatial trees (octrees).
 """
-const AbstractOctree{T, C} = AbstractSpatialTree{3, T, C}
+const AbstractOctree{T,C} = AbstractSpatialTree{3,T,C}
 
 """
     AbstractQuadtree{T,C} = AbstractSpatialTree{2,T,C}
 
 Convenience alias for 2D spatial trees (quadtrees).
 """
-const AbstractQuadtree{T, C} = AbstractSpatialTree{2, T, C}
+const AbstractQuadtree{T,C} = AbstractSpatialTree{2,T,C}
 
 #=============================================================================
 Element Insertion Traits
@@ -150,7 +150,7 @@ Subdivide box if size exceeds threshold.
 # Fields
 - `h_min::C`: Minimum box size (stop subdividing when reached)
 """
-struct SizeCriterion{C <: Real} <: SubdivisionCriterion
+struct SizeCriterion{C<:Real} <: SubdivisionCriterion
     h_min::C
 end
 

@@ -43,7 +43,7 @@ end
 
 @testitem "PointCloud generate_shadows" setup = [TestData, CommonImports] begin
     radius = 1.0u"m"
-    circle_points = [Point(radius * cos(θ), radius * sin(θ)) for θ in 0:(π / 4):(7π / 4)]
+    circle_points = [Point(radius * cos(θ), radius * sin(θ)) for θ = 0:(π/4):(7π/4)]
 
     cloud = PointCloud(PointBoundary(circle_points))
 
@@ -69,7 +69,9 @@ end
         shadow_angle = atan(shadow_coords[2], shadow_coords[1])
         angle_diff = abs(orig_angle - shadow_angle)
         @test (
-            angle_diff < 1.0e-6 || abs(angle_diff - 2π) < 1.0e-6 || abs(angle_diff - π) < 1.0e-6
+            angle_diff < 1.0e-6 ||
+            abs(angle_diff - 2π) < 1.0e-6 ||
+            abs(angle_diff - π) < 1.0e-6
         )
     end
 end

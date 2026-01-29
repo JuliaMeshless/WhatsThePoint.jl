@@ -1,29 +1,45 @@
+# Tests for TriangleOctree with SimpleMesh
+
 @testitem "TriangleOctree Simple 2-Triangle Mesh" setup = [CommonImports] begin
-    # Create a simple square made of 2 triangles in xy-plane
-    tri_list = [
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0)),
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0), SVector(0.0, 1.0, 0.0)),
+    # Helper function to create a simple 2-triangle square in xy-plane
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
     ]
-    mesh = TriangleMesh(tri_list)
+    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
+    mesh = SimpleMesh(pts, connec)
 
     # Build octree
     octree = TriangleOctree(mesh; h_min = 0.1, max_triangles_per_box = 1)
 
     # Basic checks
     @test octree.mesh === mesh
-    @test octree.tree isa SpatialOctree{Int, Float64}
+    @test octree.tree isa SpatialOctree{Int,Float64}
     @test num_triangles(octree) == 2
     @test num_leaves(octree) > 0
 end
 
 @testitem "TriangleOctree Subdivision Behavior" setup = [CommonImports] begin
-    # Create mesh with multiple triangles to force subdivision
-    tri_list = [
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(0.3, 0.0, 0.0), SVector(0.3, 0.3, 0.0)),
-        Triangle(SVector(0.5, 0.5, 0.0), SVector(0.8, 0.5, 0.0), SVector(0.8, 0.8, 0.0)),
-        Triangle(SVector(0.0, 0.5, 0.5), SVector(0.3, 0.5, 0.5), SVector(0.3, 0.8, 0.5)),
+    # Create mesh with multiple spatially separated triangles
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(0.3, 0.0, 0.0),
+        Point(0.3, 0.3, 0.0),
+        Point(0.5, 0.5, 0.0),
+        Point(0.8, 0.5, 0.0),
+        Point(0.8, 0.8, 0.0),
+        Point(0.0, 0.5, 0.5),
+        Point(0.3, 0.5, 0.5),
+        Point(0.3, 0.8, 0.5),
     ]
-    mesh = TriangleMesh(tri_list)
+    connec = [
+        connect((1, 2, 3), Meshes.Triangle),
+        connect((4, 5, 6), Meshes.Triangle),
+        connect((7, 8, 9), Meshes.Triangle),
+    ]
+    mesh = SimpleMesh(pts, connec)
 
     # Build with low threshold to force subdivision
     octree = TriangleOctree(mesh; h_min = 0.05, max_triangles_per_box = 1)
@@ -43,8 +59,9 @@ end
 
 @testitem "TriangleOctree Triangle Distribution" setup = [CommonImports] begin
     # Single triangle spanning octree
-    tri = Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 0.0, 0.0), SVector(0.5, 1.0, 0.0))
-    mesh = TriangleMesh([tri])
+    pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.5, 1.0, 0.0)]
+    connec = [connect((1, 2, 3), Meshes.Triangle)]
+    mesh = SimpleMesh(pts, connec)
 
     octree = TriangleOctree(mesh; h_min = 0.2, max_triangles_per_box = 1)
 
@@ -59,27 +76,29 @@ end
 end
 
 @testitem "TriangleOctree Minimum Size Constraint" setup = [CommonImports] begin
-    tri_list =
-        [Triangle(SVector(0.0, 0.0, 0.0), SVector(0.1, 0.0, 0.0), SVector(0.1, 0.1, 0.0))]
-    mesh = TriangleMesh(tri_list)
+    pts = [Point(0.0, 0.0, 0.0), Point(0.1, 0.0, 0.0), Point(0.1, 0.1, 0.0)]
+    connec = [connect((1, 2, 3), Meshes.Triangle)]
+    mesh = SimpleMesh(pts, connec)
 
-    h_min = 0.05  # Smaller than the triangle, so we can test constraint
+    h_min = 0.05
     octree = TriangleOctree(mesh; h_min = h_min, max_triangles_per_box = 1)
 
     # No leaf should be smaller than h_min (with small tolerance for floating point)
     for leaf_idx in all_leaves(octree.tree)
         leaf_size = box_size(octree.tree, leaf_idx)
-        # Size should be either >= h_min or very close (due to FP precision)
         @test (leaf_size >= h_min - 1.0e-10) || (leaf_size ≈ h_min)
     end
 end
 
 @testitem "TriangleOctree Leaf Classification - Disabled" setup = [CommonImports] begin
-    tri_list = [
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0)),
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0), SVector(0.0, 1.0, 0.0)),
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
     ]
-    mesh = TriangleMesh(tri_list)
+    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
+    mesh = SimpleMesh(pts, connec)
 
     octree = TriangleOctree(
         mesh;
@@ -92,11 +111,14 @@ end
 end
 
 @testitem "TriangleOctree Leaf Classification - Enabled" setup = [CommonImports] begin
-    tri_list = [
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0)),
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0), SVector(0.0, 1.0, 0.0)),
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
     ]
-    mesh = TriangleMesh(tri_list)
+    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
+    mesh = SimpleMesh(pts, connec)
 
     octree = TriangleOctree(
         mesh;
@@ -124,15 +146,13 @@ end
 @testitem "TriangleOctree with box.stl Construction" setup = [CommonImports, TestData] begin
     # Only run if test file exists
     if isfile(TestData.BOX_PATH)
-        mesh = TriangleMesh(TestData.BOX_PATH)
-
-        # Build octree with coarser parameters to avoid hitting capacity limits
+        # Build octree directly from file path
         octree = TriangleOctree(
-            mesh;
-            h_min = 0.05,  # Coarser minimum size
-            max_triangles_per_box = 100,  # Higher threshold
+            TestData.BOX_PATH;
+            h_min = 0.05,
+            max_triangles_per_box = 100,
             classify_leaves = false,
-        )  # Skip classification for speed
+        )
 
         @test num_triangles(octree) == 46786
         @test num_leaves(octree) > 1
@@ -140,7 +160,7 @@ end
         # Check that triangles were distributed
         total_refs =
             sum(length(octree.tree.element_lists[leaf]) for leaf in all_leaves(octree.tree))
-        @test total_refs >= num_triangles(octree)  # Should be >= due to multi-box triangles
+        @test total_refs >= num_triangles(octree)
     else
         @test_skip "box.stl not available"
     end
@@ -149,12 +169,10 @@ end
 @testitem "TriangleOctree box.stl with Classification" setup = [CommonImports, TestData] begin
     # Only run if test file exists
     if isfile(TestData.BOX_PATH)
-        mesh = TriangleMesh(TestData.BOX_PATH)
-
-        # Build with classification (slower but complete), coarser params
+        # Build octree from file with classification
         octree = TriangleOctree(
-            mesh;
-            h_min = 0.1,  # Even coarser for classification test
+            TestData.BOX_PATH;
+            h_min = 0.1,
             max_triangles_per_box = 200,
             classify_leaves = true,
         )
@@ -167,17 +185,17 @@ end
         n_interior = count(==(2), octree.leaf_classification)
 
         # Should have all three types
-        @test n_boundary > 0  # Must have boundary leaves with triangles
-        # Note: exterior/interior might be 0 depending on mesh topology
+        @test n_boundary > 0
     else
         @test_skip "box.stl not available"
     end
 end
 
 @testitem "TriangleOctree Accessors" setup = [CommonImports] begin
-    tri_list =
-        [Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0))]
-    mesh = TriangleMesh(tri_list)
+    pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
+    connec = [connect((1, 2, 3), Meshes.Triangle)]
+    mesh = SimpleMesh(pts, connec)
+
     octree = TriangleOctree(mesh; h_min = 0.1, max_triangles_per_box = 10)
 
     @test length(octree) == 1
@@ -186,42 +204,77 @@ end
 end
 
 @testitem "has_consistent_normals - Consistent Mesh" setup = [CommonImports] begin
-    # Create two triangles with consistent normals (both pointing up in +z)
-    tri_list = [
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0)),
-        Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0), SVector(0.0, 1.0, 0.0)),
+    # Two triangles with consistent normals (both pointing up in +z)
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
     ]
-    mesh = TriangleMesh(tri_list)
+    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
+    mesh = SimpleMesh(pts, connec)
+
+    octree = TriangleOctree(mesh; h_min = 0.1, verify_orientation = false)
 
     # Both triangles have normals pointing in +z, so should be consistent
-    @test has_consistent_normals(mesh)
+    @test has_consistent_normals(octree.triangles)
 end
 
 @testitem "has_consistent_normals - Inconsistent Mesh" setup = [CommonImports] begin
-    # Create two nearby triangles with opposite normals
-    # First triangle: normal points up (+z)
-    tri1 = Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0))
+    # Two triangles with opposite normals (one +z, one -z)
+    # First triangle: CCW -> normal +z
+    # Second triangle: CW -> normal -z
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+    ]
+    connec = [
+        connect((1, 2, 3), Meshes.Triangle),  # CCW: normal +z
+        connect((1, 4, 3), Meshes.Triangle),  # CW: normal -z
+    ]
+    mesh = SimpleMesh(pts, connec)
 
-    # Second triangle: vertices in opposite winding order -> normal points down (-z)
-    # By reversing v2 and v3, we flip the normal
-    tri2 = Triangle(SVector(0.0, 0.0, 0.0), SVector(0.0, 1.0, 0.0), SVector(1.0, 1.0, 0.0))
+    octree = TriangleOctree(mesh; h_min = 0.1, verify_orientation = false)
 
-    mesh = TriangleMesh([tri1, tri2])
-
-    # Verify the normals are actually opposite
-    @test dot(tri1.normal, tri2.normal) < 0
+    # Normals should be opposite
+    @test dot(octree.triangles.normal[1], octree.triangles.normal[2]) < 0
 
     # Should detect inconsistency
-    @test !has_consistent_normals(mesh)
+    @test !has_consistent_normals(octree.triangles)
 end
 
 @testitem "TriangleOctree Verification Disabled" setup = [CommonImports] begin
-    # Create mesh with inconsistent normals
-    tri1 = Triangle(SVector(0.0, 0.0, 0.0), SVector(1.0, 0.0, 0.0), SVector(1.0, 1.0, 0.0))
-    tri2 = Triangle(SVector(0.0, 0.0, 0.0), SVector(0.0, 1.0, 0.0), SVector(1.0, 1.0, 0.0))
-    mesh = TriangleMesh([tri1, tri2])
+    # Mesh with inconsistent normals
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+    ]
+    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 4, 3), Meshes.Triangle)]
+    mesh = SimpleMesh(pts, connec)
 
     # Should build without warning when verification is disabled
     octree = TriangleOctree(mesh; h_min = 0.1, verify_orientation = false)
-    @test octree isa TriangleOctree{Float64}
+    @test octree isa TriangleOctree
+end
+
+@testitem "TriangleOctree From File Path" setup = [CommonImports, TestData] begin
+    if isfile(TestData.BOX_PATH)
+        # Test file path constructor
+        octree = TriangleOctree(
+            TestData.BOX_PATH;
+            h_min = 0.1,
+            max_triangles_per_box = 100,
+            classify_leaves = false,
+            verify_orientation = false,
+        )
+
+        @test octree isa TriangleOctree
+        @test num_triangles(octree) == 46786
+    else
+        @test_skip "box.stl not available"
+    end
 end

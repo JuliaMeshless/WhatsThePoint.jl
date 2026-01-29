@@ -8,18 +8,18 @@ A point cloud with optional topology (connectivity).
 - `C<:CRS` - coordinate reference system
 - `T<:AbstractTopology` - topology type for cloud-level connectivity
 """
-struct PointCloud{M <: Manifold, C <: CRS, T <: AbstractTopology} <: Domain{M, C}
-    boundary::PointBoundary{M, C}
-    volume::PointVolume{M, C}
+struct PointCloud{M<:Manifold,C<:CRS,T<:AbstractTopology} <: Domain{M,C}
+    boundary::PointBoundary{M,C}
+    volume::PointVolume{M,C}
     topology::T
 end
 
-function PointCloud(boundary::PointBoundary{M, C}, volume::PointVolume{M, C}) where {M, C}
+function PointCloud(boundary::PointBoundary{M,C}, volume::PointVolume{M,C}) where {M,C}
     return PointCloud(boundary, volume, NoTopology())
 end
 
-function PointCloud(boundary::PointBoundary{M, C}) where {M, C}
-    vol = PointVolume{M, C}()
+function PointCloud(boundary::PointBoundary{M,C}) where {M,C}
+    vol = PointVolume{M,C}()
     return PointCloud(deepcopy(boundary), vol, NoTopology())
 end
 
@@ -43,7 +43,7 @@ function Base.getindex(cloud::PointCloud, index::Int)
             ),
         )
     end
-    return index <= length(b) ? b[index] : v[index - length(b)]
+    return index <= length(b) ? b[index] : v[index-length(b)]
 end
 function Base.iterate(cloud::PointCloud, state = 1)
     return state > length(cloud) ? nothing : (cloud[state], state + 1)
@@ -51,7 +51,7 @@ end
 Base.names(cloud::PointCloud) = names(boundary(cloud))
 
 to(cloud::PointCloud) = to.(points(cloud))
-function to(namedsurfaces::LittleDict{Symbol, <:AbstractSurface})
+function to(namedsurfaces::LittleDict{Symbol,<:AbstractSurface})
     return mapreduce(to, vcat, values(namedsurfaces))
 end
 boundary(cloud::PointCloud) = cloud.boundary

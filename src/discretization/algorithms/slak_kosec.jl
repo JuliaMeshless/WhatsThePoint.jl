@@ -45,9 +45,12 @@ using WhatsThePoint
 boundary = PointBoundary("model.stl")
 cloud = PointCloud(boundary)
 
-# Build octree from triangle mesh (STL file)
-mesh = TriangleMesh("model.stl")  # Loads triangles from STL
-octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
+# Build octree from STL file (Option 1: simplest)
+octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
+
+# Or from SimpleMesh (Option 2)
+# mesh = GeoIO.load("model.stl").geometry
+# octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
 
 # Use octree-accelerated discretization (100-1000× faster!)
 spacing = ConstantSpacing(1.0u"m")
@@ -58,23 +61,25 @@ result = discretize(cloud, spacing; alg=alg, max_points=100_000)
 # References
 Šlak J, Kosec G. "On generation of node distributions for meshless PDE discretizations" (2019)
 """
-struct SlakKosec <: AbstractNodeGenerationAlgorithm
+struct SlakKosec{O<:Union{Nothing,TriangleOctree}} <: AbstractNodeGenerationAlgorithm
     n::Int
-    octree::Union{Nothing, TriangleOctree}
-    SlakKosec(n::Int, octree::Union{Nothing, TriangleOctree} = nothing) = new(n, octree)
+    octree::O
 end
-SlakKosec() = SlakKosec(10, nothing)
-SlakKosec(octree::TriangleOctree) = SlakKosec(10, octree)
+SlakKosec(n::Int = 10) = SlakKosec{Nothing}(n, nothing)
+SlakKosec(octree::TriangleOctree{M,C,T}) where {M,C,T} =
+    SlakKosec{TriangleOctree{M,C,T}}(10, octree)
+SlakKosec(n::Int, octree::TriangleOctree{M,C,T}) where {M,C,T} =
+    SlakKosec{TriangleOctree{M,C,T}}(n, octree)
 
 function _discretize_volume(
-        cloud::PointCloud{𝔼{3}, C},
-        spacing::AbstractSpacing,
-        alg::SlakKosec;
-        max_points = 1_000,
-    ) where {C}
+    cloud::PointCloud{𝔼{3},C},
+    spacing::AbstractSpacing,
+    alg::SlakKosec;
+    max_points = 1_000,
+) where {C}
     seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
-    new_points = Point{𝔼{3}, C}[]
+    new_points = Point{𝔼{3},C}[]
 
     i = 0
     while !isempty(seeds) && i < max_points
@@ -116,16 +121,19 @@ Convert Point to SVector and use octree-based isinside query.
 This provides significant speedup (100-1000×) over standard Green's function approach
 by leveraging spatial indexing.
 """
-function _isinside_octree(point::Point{𝔼{3}, C}, octree::TriangleOctree{T}) where {C, T}
+function _isinside_octree(
+    point::Point{𝔼{3},C},
+    octree::TriangleOctree{M,CRS,T},
+) where {C,M,CRS,T}
     # Convert Point to SVector (stripping units if present)
     coords = to(point)
-    svec = SVector{3, T}(ustrip.(coords)...)
+    svec = SVector{3,T}(ustrip.(coords)...)
 
     # Use octree-based isinside query
     return isinside(svec, octree)
 end
 
-function _get_candidates(p::Point{𝔼{3}, C}, r; n = 10) where {C}
+function _get_candidates(p::Point{𝔼{3},C}, r; n = 10) where {C}
     T = CoordRefSystems.mactype(C)
 
     u = rand(T, n)
