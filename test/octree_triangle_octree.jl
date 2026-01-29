@@ -217,7 +217,7 @@ end
     octree = TriangleOctree(mesh; h_min = 0.1, verify_orientation = false)
 
     # Both triangles have normals pointing in +z, so should be consistent
-    @test has_consistent_normals(octree.triangles)
+    @test has_consistent_normals(octree.mesh)
 end
 
 @testitem "has_consistent_normals - Inconsistent Mesh" setup = [CommonImports] begin
@@ -239,10 +239,12 @@ end
     octree = TriangleOctree(mesh; h_min = 0.1, verify_orientation = false)
 
     # Normals should be opposite
-    @test dot(octree.triangles.normal[1], octree.triangles.normal[2]) < 0
+    n1 = WhatsThePoint._get_triangle_normal(octree.mesh, 1)
+    n2 = WhatsThePoint._get_triangle_normal(octree.mesh, 2)
+    @test dot(n1, n2) < 0
 
     # Should detect inconsistency
-    @test !has_consistent_normals(octree.triangles)
+    @test !has_consistent_normals(octree.mesh)
 end
 
 @testitem "TriangleOctree Verification Disabled" setup = [CommonImports] begin
@@ -277,4 +279,36 @@ end
     else
         @test_skip "box.stl not available"
     end
+end
+
+@testitem "TriangleOctree From PointBoundary" setup = [CommonImports, TestData] begin
+    if isfile(TestData.BOX_PATH)
+        # Create boundary from file (stores source mesh)
+        bnd = PointBoundary(TestData.BOX_PATH)
+        @test has_source_mesh(bnd)
+
+        # Build octree from boundary's stored mesh
+        octree = TriangleOctree(
+            bnd;
+            h_min = 0.1,
+            max_triangles_per_box = 100,
+            classify_leaves = false,
+            verify_orientation = false,
+        )
+
+        @test octree isa TriangleOctree
+        @test num_triangles(octree) == 46786
+    else
+        @test_skip "box.stl not available"
+    end
+end
+
+@testitem "TriangleOctree From PointBoundary without source mesh" setup = [CommonImports] begin
+    # Boundary from points has no source mesh
+    pts = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
+    bnd = PointBoundary(pts)
+    @test !has_source_mesh(bnd)
+
+    # Should throw ArgumentError
+    @test_throws ArgumentError TriangleOctree(bnd; h_min = 0.1)
 end

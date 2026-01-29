@@ -5,8 +5,7 @@ An octree-based spatial index for efficient triangle mesh queries.
 
 # Fields
 - `tree::SpatialOctree{Int,T}`: Underlying octree storing triangle indices
-- `mesh::SimpleMesh{M,C}`: Original Meshes.jl mesh
-- `triangles::StructArray`: Cached triangle data (v1, v2, v3, normal as SVectors)
+- `mesh::SimpleMesh{M,C}`: Original Meshes.jl mesh (single source of truth for triangle data)
 - `leaf_classification::Union{Nothing, Vector{Int8}}`: Classification of empty leaves
   - `0`: Exterior (outside mesh)
   - `1`: Boundary (near surface but empty)
@@ -19,7 +18,7 @@ An octree-based spatial index for efficient triangle mesh queries.
 For a mesh with M triangles:
 - Construction: O(M log M) - distribute triangles to boxes
 - Query: O(log M + k) where k ≈ 10-50 triangles per leaf
-- Memory: O(M) for triangle storage + O(N) for octree nodes
+- Memory: O(N) for octree nodes (mesh data accessed on-the-fly)
 
 # Example
 ```julia
@@ -38,21 +37,6 @@ is_inside = isinside(point, octree)
 struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
     tree::SpatialOctree{Int, T}
     mesh::SimpleMesh{M, C}
-    triangles::StructArray{
-        @NamedTuple{
-            v1::SVector{3, T},
-            v2::SVector{3, T},
-            v3::SVector{3, T},
-            normal::SVector{3, T},
-        },
-        1,
-        @NamedTuple{
-            v1::Vector{SVector{3, T}},
-            v2::Vector{SVector{3, T}},
-            v3::Vector{SVector{3, T}},
-            normal::Vector{SVector{3, T}},
-        },
-    }
     leaf_classification::Union{Nothing, Vector{Int8}}
     leaf_nearest_triangle::Union{Nothing, Vector{Int}}
 end
@@ -83,100 +67,59 @@ Extract coordinates from a Meshes.jl vertex to an SVector{3,Float64}.
 end
 
 """
-    _extract_triangle_data(mesh::SimpleMesh) -> StructArray
+    _get_triangle_vertices(mesh::SimpleMesh, tri_idx::Int) -> (SVector{3}, SVector{3}, SVector{3})
 
-Extract and cache triangle vertex and normal data from a SimpleMesh.
-Returns a StructArray with v1, v2, v3, normal fields as SVectors.
-
-Normals are computed using Meshes.normal(elem) which uses the proper
-geometric normal of the triangle. This is more reliable than computing
-from vertex winding order, which can be inconsistent in STL files.
-
-Performance: Parallelized extraction using OhMyThreads for large meshes.
+Extract triangle vertices from mesh as SVectors. Accesses mesh data on-the-fly.
 """
-function _extract_triangle_data(mesh::SimpleMesh{M, C}) where {M, C}
-    # Collect elements once to enable indexed parallel access
-    elems = collect(elements(mesh))
-
-    # Parallel extraction using OhMyThreads tmap
-    data = tmap(elems) do elem
-        verts = Meshes.vertices(elem)
-
-        if length(verts) != 3
-            @warn "Skipping non-triangular element with $(length(verts)) vertices"
-            return (
-                v1 = SVector{3, Float64}(0.0, 0.0, 0.0),
-                v2 = SVector{3, Float64}(0.0, 0.0, 0.0),
-                v3 = SVector{3, Float64}(0.0, 0.0, 0.0),
-                normal = SVector{3, Float64}(0.0, 0.0, 1.0),
-            )
-        end
-
-        v1 = _extract_vertex(verts[1])
-        v2 = _extract_vertex(verts[2])
-        v3 = _extract_vertex(verts[3])
-
-        # Compute normal from element
-        n_vec = Meshes.normal(elem)
-        n = SVector{3, Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
-        n_mag = norm(n)
-
-        normal = if n_mag < eps(Float64) * 100
-            SVector{3, Float64}(0.0, 0.0, 1.0)  # Degenerate triangle
-        else
-            n / n_mag
-        end
-
-        return (v1 = v1, v2 = v2, v3 = v3, normal = normal)
-    end
-
-    return StructArray(data)
+@inline function _get_triangle_vertices(mesh::SimpleMesh, tri_idx::Int)
+    elem = mesh[tri_idx]
+    verts = Meshes.vertices(elem)
+    v1 = _extract_vertex(verts[1])
+    v2 = _extract_vertex(verts[2])
+    v3 = _extract_vertex(verts[3])
+    return v1, v2, v3
 end
 
 """
-    _compute_bbox(triangles::StructArray) -> (bbox_min, bbox_max)
+    _get_triangle_normal(mesh::SimpleMesh, tri_idx::Int) -> SVector{3,Float64}
 
-Compute bounding box from cached triangle data.
-
-Performance: Single-pass min/max accumulation without intermediate allocations.
+Extract and normalize triangle normal from mesh. Accesses mesh data on-the-fly.
 """
-function _compute_bbox(triangles::StructArray)
-    T = eltype(eltype(triangles.v1))
-    n = length(triangles)
+@inline function _get_triangle_normal(mesh::SimpleMesh, tri_idx::Int)
+    elem = mesh[tri_idx]
+    return _normalize_normal(Meshes.normal(elem))
+end
+
+"""
+    _compute_bbox(mesh::SimpleMesh) -> (bbox_min, bbox_max)
+
+Compute bounding box from mesh triangle data.
+
+Performance: Single-pass min/max accumulation over all triangles.
+"""
+function _compute_bbox(mesh::SimpleMesh)
+    T = Float64
+    n = Meshes.nelements(mesh)
 
     # Initialize with first triangle's vertices
-    v = triangles.v1[1]
-    min_x, min_y, min_z = v[1], v[2], v[3]
-    max_x, max_y, max_z = v[1], v[2], v[3]
+    v1, v2, v3 = _get_triangle_vertices(mesh, 1)
+    min_x = min(v1[1], v2[1], v3[1])
+    min_y = min(v1[2], v2[2], v3[2])
+    min_z = min(v1[3], v2[3], v3[3])
+    max_x = max(v1[1], v2[1], v3[1])
+    max_y = max(v1[2], v2[2], v3[2])
+    max_z = max(v1[3], v2[3], v3[3])
 
-    # Single-pass accumulation over all vertices
-    @inbounds for i in 1:n
-        # Vertex 1
-        v = triangles.v1[i]
-        min_x = min(min_x, v[1])
-        min_y = min(min_y, v[2])
-        min_z = min(min_z, v[3])
-        max_x = max(max_x, v[1])
-        max_y = max(max_y, v[2])
-        max_z = max(max_z, v[3])
+    # Single-pass accumulation over all triangles
+    for i in 2:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
 
-        # Vertex 2
-        v = triangles.v2[i]
-        min_x = min(min_x, v[1])
-        min_y = min(min_y, v[2])
-        min_z = min(min_z, v[3])
-        max_x = max(max_x, v[1])
-        max_y = max(max_y, v[2])
-        max_z = max(max_z, v[3])
-
-        # Vertex 3
-        v = triangles.v3[i]
-        min_x = min(min_x, v[1])
-        min_y = min(min_y, v[2])
-        min_z = min(min_z, v[3])
-        max_x = max(max_x, v[1])
-        max_y = max(max_y, v[2])
-        max_z = max(max_z, v[3])
+        min_x = min(min_x, v1[1], v2[1], v3[1])
+        min_y = min(min_y, v1[2], v2[2], v3[2])
+        min_z = min(min_z, v1[3], v2[3], v3[3])
+        max_x = max(max_x, v1[1], v2[1], v3[1])
+        max_y = max(max_y, v1[2], v2[2], v3[2])
+        max_z = max(max_z, v1[3], v2[3], v3[3])
     end
 
     # Handle degenerate cases (zero extent in any dimension)
@@ -215,7 +158,7 @@ Uses component-wise comparison for consistent ordering.
 end
 
 """
-    has_consistent_normals(triangles::StructArray; alignment_threshold=-0.3) -> Bool
+    has_consistent_normals(mesh::SimpleMesh; alignment_threshold=-0.3) -> Bool
 
 Check if triangle normals are consistently oriented.
 
@@ -224,7 +167,7 @@ in similar directions. Inconsistent normals indicate a mesh quality issue that
 can cause incorrect inside/outside queries.
 
 # Arguments
-- `triangles::StructArray`: Cached triangle data with v1, v2, v3, normal fields
+- `mesh::SimpleMesh`: Meshes.jl SimpleMesh to check
 - `alignment_threshold::Float64=-0.3`: Minimum dot product for consistent normals.
   - `-1.0` to `1.0` range: `-1.0` = opposite directions, `1.0` = same direction
   - Default `-0.3` allows some surface curvature while detecting major flips
@@ -235,40 +178,40 @@ O(n) complexity using edge hash map instead of O(n²) pairwise comparison.
 # Examples
 ```julia
 octree = TriangleOctree("model.stl"; h_min=0.01)
-if !has_consistent_normals(octree.triangles)
+if !has_consistent_normals(octree.mesh)
     @warn "Mesh has inconsistent normals - may need repair"
 end
 ```
 """
-function has_consistent_normals(triangles::StructArray; alignment_threshold::Float64 = -0.3)
-    n = length(triangles)
+function has_consistent_normals(mesh::SimpleMesh; alignment_threshold::Float64 = -0.3)
+    n = Meshes.nelements(mesh)
     n <= 1 && return true
 
-    # Build edge → first triangle index map in O(n)
+    # Build edge → (triangle index, normal) map in O(n)
     # When we encounter an edge again, check normal alignment immediately
-    edge_map = Dict{Tuple{SVector{3, Float64}, SVector{3, Float64}}, Int}()
+    edge_map =
+        Dict{Tuple{SVector{3, Float64}, SVector{3, Float64}}, Tuple{Int, SVector{3, Float64}}}()
     sizehint!(edge_map, 3 * n)  # Each triangle has 3 edges
 
-    @inbounds for i in 1:n
-        v1 = triangles.v1[i]
-        v2 = triangles.v2[i]
-        v3 = triangles.v3[i]
-        normal_i = triangles.normal[i]
+    for i in 1:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
+        normal_i = _get_triangle_normal(mesh, i)
 
         # Process each edge of triangle i
         for (ea, eb) in ((v1, v2), (v2, v3), (v3, v1))
             key = _edge_key(ea, eb)
-            existing = get(edge_map, key, 0)
+            existing = get(edge_map, key, nothing)
 
-            if existing != 0
+            if existing !== nothing
                 # Edge shared with another triangle - check alignment
-                alignment = dot(normal_i, triangles.normal[existing])
+                _, existing_normal = existing
+                alignment = dot(normal_i, existing_normal)
                 if alignment < alignment_threshold
                     return false
                 end
             else
-                # First time seeing this edge
-                edge_map[key] = i
+                # First time seeing this edge - store index and normal
+                edge_map[key] = (i, normal_i)
             end
         end
     end
@@ -294,12 +237,11 @@ Build an octree spatial index for a SimpleMesh.
 
 # Algorithm
 1. (Optional) Verify triangle normal consistency
-2. Extract and cache triangle vertex/normal data
-3. Create root octree covering mesh bounding box
-4. Distribute triangles to boxes using SAT intersection tests
-5. Recursively subdivide boxes exceeding triangle threshold
-6. Balance octree to ensure 2:1 refinement constraint
-7. (Optional) Classify empty leaves via BFS from boundary
+2. Create root octree covering mesh bounding box
+3. Distribute triangles to boxes using SAT intersection tests
+4. Recursively subdivide boxes exceeding triangle threshold
+5. Balance octree to ensure 2:1 refinement constraint
+6. (Optional) Classify empty leaves via BFS from boundary
 
 # Returns
 `TriangleOctree{M,C,Float64}` ready for fast spatial queries
@@ -320,10 +262,9 @@ function TriangleOctree(
     ) where {M <: Manifold, C <: CRS}
     T = Float64
     h_min_val = T(ustrip(h_min))
+    n_triangles = Meshes.nelements(mesh)
 
-    triangles = _extract_triangle_data(mesh)
-
-    if verify_orientation && !has_consistent_normals(triangles)
+    if verify_orientation && !has_consistent_normals(mesh)
         @warn """
         Triangle mesh has inconsistent normal orientations!
 
@@ -332,32 +273,32 @@ function TriangleOctree(
         """
     end
 
-    bbox_min, bbox_max = _compute_bbox(triangles)
+    bbox_min, bbox_max = _compute_bbox(mesh)
     bbox_sz = bbox_max - bbox_min
     root_size = maximum(bbox_sz)
 
-    estimated_boxes = max(1000, length(triangles) * 2)
+    estimated_boxes = max(1000, n_triangles * 2)
     tree = SpatialOctree{Int, T}(bbox_min, root_size; initial_capacity = estimated_boxes)
 
     root_elements = tree.element_lists[1]
-    for tri_idx in 1:length(triangles)
+    for tri_idx in 1:n_triangles
         push!(root_elements, tri_idx)
     end
 
     size_criterion = SizeCriterion(h_min_val)
     criterion = AndCriterion((MaxElementsCriterion(max_triangles_per_box), size_criterion))
 
-    _subdivide_triangle_octree!(tree, triangles, 1, criterion)
+    _subdivide_triangle_octree!(tree, mesh, 1, criterion)
 
     balance_octree!(tree, size_criterion)
 
     classification, nearest_triangle = if classify_leaves
-        _classify_leaves(tree, triangles)
+        _classify_leaves(tree, mesh)
     else
         (nothing, nothing)
     end
 
-    return TriangleOctree(tree, mesh, triangles, classification, nearest_triangle)
+    return TriangleOctree(tree, mesh, classification, nearest_triangle)
 end
 
 """
@@ -381,7 +322,7 @@ function TriangleOctree(filepath::String; h_min, kwargs...)
 end
 
 """
-    _subdivide_triangle_octree!(tree, triangles, box_idx, criterion)
+    _subdivide_triangle_octree!(tree, mesh, box_idx, criterion)
 
 Recursively subdivide a box in the triangle octree.
 
@@ -393,7 +334,7 @@ For each box that needs subdivision:
 """
 function _subdivide_triangle_octree!(
         tree::SpatialOctree{Int, T},
-        triangles::StructArray,
+        mesh::SimpleMesh,
         box_idx::Int,
         criterion,
     ) where {T <: Real}
@@ -409,9 +350,7 @@ function _subdivide_triangle_octree!(
     children = tree.children[box_idx]
 
     for tri_idx in parent_triangles
-        v1 = triangles.v1[tri_idx]
-        v2 = triangles.v2[tri_idx]
-        v3 = triangles.v3[tri_idx]
+        v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
 
         for child_idx in children
             child_idx == 0 && continue
@@ -426,13 +365,13 @@ function _subdivide_triangle_octree!(
 
     for child_idx in children
         child_idx == 0 && continue
-        _subdivide_triangle_octree!(tree, triangles, child_idx, criterion)
+        _subdivide_triangle_octree!(tree, mesh, child_idx, criterion)
     end
     return
 end
 
 """
-    _classify_leaves(tree::SpatialOctree{Int,T}, triangles::StructArray) -> (Vector{Int8}, Vector{Int})
+    _classify_leaves(tree::SpatialOctree{Int,T}, mesh::SimpleMesh) -> (Vector{Int8}, Vector{Int})
 
 Classify octree leaves as exterior (0), boundary (1), or interior (2).
 
@@ -448,10 +387,7 @@ Tuple of:
 - `classification::Vector{Int8}`: Classification for each box (0=exterior, 1=boundary, 2=interior)
 - `nearest_triangle::Vector{Int}`: Index of nearest triangle for each box (0 if not computed)
 """
-function _classify_leaves(
-        tree::SpatialOctree{Int, T},
-        triangles::StructArray,
-    ) where {T <: Real}
+function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::SimpleMesh) where {T <: Real}
     n_boxes = length(tree.element_lists)
     classification = zeros(Int8, n_boxes)
     nearest_triangle = zeros(Int, n_boxes)
@@ -482,7 +418,7 @@ function _classify_leaves(
 
                     neighbor_center = box_center(tree, neighbor_idx)
                     signed_dist, closest_tri_idx =
-                        _compute_signed_distance_with_index(neighbor_center, triangles)
+                        _compute_signed_distance_with_index(neighbor_center, mesh)
 
                     distances[neighbor_idx] = signed_dist
                     nearest_triangle[neighbor_idx] = closest_tri_idx
@@ -511,7 +447,7 @@ function _classify_leaves(
 end
 
 """
-    _compute_signed_distance(point::SVector{3,T}, triangles::StructArray) -> T
+    _compute_signed_distance(point::SVector{3,T}, mesh::SimpleMesh) -> T
 
 Compute signed distance from a point to the closest triangle.
 
@@ -520,27 +456,20 @@ Returns:
 - Negative if point is on the opposite side of the normal (inside)
 - Zero if point is exactly on the surface
 """
-function _compute_signed_distance(
-        point::SVector{3, T},
-        triangles::StructArray,
-    ) where {T <: Real}
+function _compute_signed_distance(point::SVector{3, T}, mesh::SimpleMesh) where {T <: Real}
     min_dist = T(Inf)
-    closest_idx = 0
+    n = Meshes.nelements(mesh)
 
-    for i in 1:length(triangles)
-        closest_pt = closest_point_on_triangle(
-            point,
-            triangles.v1[i],
-            triangles.v2[i],
-            triangles.v3[i],
-        )
+    for i in 1:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
+        closest_pt = closest_point_on_triangle(point, v1, v2, v3)
         dist = norm(point - closest_pt)
 
         if dist < abs(min_dist)
             to_point = point - closest_pt
-            sign = dot(to_point, triangles.normal[i]) >= 0 ? 1 : -1
+            normal_i = _get_triangle_normal(mesh, i)
+            sign = dot(to_point, normal_i) >= 0 ? 1 : -1
             min_dist = sign * dist
-            closest_idx = i
         end
     end
 
@@ -548,7 +477,7 @@ function _compute_signed_distance(
 end
 
 """
-    _compute_signed_distance_with_index(point::SVector{3,T}, triangles::StructArray) -> (T, Int)
+    _compute_signed_distance_with_index(point::SVector{3,T}, mesh::SimpleMesh) -> (T, Int)
 
 Compute signed distance from a point to the closest triangle, returning both the
 distance and the index of the closest triangle.
@@ -562,23 +491,21 @@ Returns:
 """
 function _compute_signed_distance_with_index(
         point::SVector{3, T},
-        triangles::StructArray,
+        mesh::SimpleMesh,
     ) where {T <: Real}
     min_dist = T(Inf)
     closest_idx = 0
+    n = Meshes.nelements(mesh)
 
-    for i in 1:length(triangles)
-        closest_pt = closest_point_on_triangle(
-            point,
-            triangles.v1[i],
-            triangles.v2[i],
-            triangles.v3[i],
-        )
+    for i in 1:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
+        closest_pt = closest_point_on_triangle(point, v1, v2, v3)
         dist = norm(point - closest_pt)
 
         if dist < abs(min_dist)
             to_point = point - closest_pt
-            sign = dot(to_point, triangles.normal[i]) >= 0 ? 1 : -1
+            normal_i = _get_triangle_normal(mesh, i)
+            sign = dot(to_point, normal_i) >= 0 ? 1 : -1
             min_dist = sign * dist
             closest_idx = i
         end
@@ -587,9 +514,9 @@ function _compute_signed_distance_with_index(
     return min_dist, closest_idx
 end
 
-Base.length(octree::TriangleOctree) = length(octree.triangles)
+Base.length(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
 num_leaves(octree::TriangleOctree) = length(all_leaves(octree.tree))
-num_triangles(octree::TriangleOctree) = length(octree.triangles)
+num_triangles(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
 
 #=============================================================================
 Fast Spatial Queries (Layer 4)
@@ -625,7 +552,7 @@ is_inside = isinside(point, octree)  # ~0.05ms vs ~50ms brute-force
 """
 function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
     tree = octree.tree
-    triangles = octree.triangles
+    mesh = octree.mesh
 
     leaf_idx = find_leaf(tree, point)
 
@@ -646,7 +573,7 @@ function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real
         tri_indices = tree.element_lists[leaf_idx]
 
         if !isempty(tri_indices)
-            dist = _compute_local_signed_distance(point, triangles, tri_indices)
+            dist = _compute_local_signed_distance(point, mesh, tri_indices)
             return dist < 0
         else
             neighbor_triangles = Int[]
@@ -660,17 +587,17 @@ function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real
             end
 
             if !isempty(neighbor_triangles)
-                dist = _compute_local_signed_distance(point, triangles, neighbor_triangles)
+                dist = _compute_local_signed_distance(point, mesh, neighbor_triangles)
                 return dist < 0
             else
                 if !isnothing(octree.leaf_nearest_triangle)
                     tri_idx = octree.leaf_nearest_triangle[leaf_idx]
                     if tri_idx > 0
-                        dist = _compute_local_signed_distance(point, triangles, [tri_idx])
+                        dist = _compute_local_signed_distance(point, mesh, [tri_idx])
                         return dist < 0
                     end
                 end
-                dist = _compute_signed_distance(point, triangles)
+                dist = _compute_signed_distance(point, mesh)
                 @warn "Falling back to global signed distance computation - this indicates a bug"
                 return dist < 0
             end
@@ -681,7 +608,7 @@ end
 """
     _compute_local_signed_distance(
         point::SVector{3,T},
-        triangles::StructArray,
+        mesh::SimpleMesh,
         tri_indices::Vector{Int}
     ) -> T
 
@@ -694,7 +621,7 @@ Performance: Fused computation avoids redundant closest_point calculation.
 """
 function _compute_local_signed_distance(
         point::SVector{3, T},
-        triangles::StructArray,
+        mesh::SimpleMesh,
         tri_indices::Vector{Int},
     ) where {T <: Real}
     min_dist_sq = typemax(T)
@@ -702,9 +629,7 @@ function _compute_local_signed_distance(
     closest_pt = point  # Will be overwritten
 
     @inbounds for tri_idx in tri_indices
-        v1 = triangles.v1[tri_idx]
-        v2 = triangles.v2[tri_idx]
-        v3 = triangles.v3[tri_idx]
+        v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
 
         # Compute closest point on this triangle
         cp = closest_point_on_triangle(point, v1, v2, v3)
@@ -720,7 +645,8 @@ function _compute_local_signed_distance(
 
     # Compute sign using normal of closest triangle
     to_point = point - closest_pt
-    sign = dot(to_point, triangles.normal[closest_idx]) < 0 ? -1 : 1
+    normal = _get_triangle_normal(mesh, closest_idx)
+    sign = dot(to_point, normal) < 0 ? -1 : 1
 
     return sign * sqrt(min_dist_sq)
 end

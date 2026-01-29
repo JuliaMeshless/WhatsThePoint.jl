@@ -145,7 +145,7 @@ end
     )
 
     function isinside_bruteforce(point::SVector{3, T}, octree) where {T <: Real}
-        dist = WhatsThePoint._compute_signed_distance(point, octree.triangles)
+        dist = WhatsThePoint._compute_signed_distance(point, octree.mesh)
         return dist < 0
     end
 
@@ -178,8 +178,8 @@ end
             classify_leaves = true,
         )
 
-        # Compute bounding box from cached triangles
-        bbox_min, bbox_max = WhatsThePoint._compute_bbox(octree.triangles)
+        # Compute bounding box from mesh
+        bbox_min, bbox_max = WhatsThePoint._compute_bbox(octree.mesh)
 
         # Test 1: Point at mesh center should be interior
         center = SVector{3}((bbox_min + bbox_max) / 2)
