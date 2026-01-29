@@ -109,7 +109,7 @@ end
         return output, result
     end
 
-    points = Point.([(i * 1.0, 0.0, 0.0) for i in 1:25])
+    points = Point.([(i * 1.0, 0.0, 0.0) for i = 1:25])
     small_cloud = PointCloud(PointBoundary(points))
 
     output, result = capture_stdout(() -> metrics(small_cloud; k = 10))

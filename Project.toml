@@ -4,6 +4,7 @@ version = "0.1.1"
 authors = ["Kyle Beggs <beggskw@gmail.com>"]
 
 [deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 ChunkSplitters = "ae650224-84b6-46f8-82ea-d812ca08434e"
 CoordRefSystems = "b46f11dc-f210-4604-bfba-323c1ec968cb"
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
@@ -32,6 +33,7 @@ Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 WhatsThePointMakieExt = "Makie"
 
 [compat]
+CairoMakie = "0.15.8"
 ChunkSplitters = "3"
 CoordRefSystems = "0.19"
 Distances = "0.10.1"

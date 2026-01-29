@@ -13,19 +13,16 @@
 end
 
 @testitem "LogLike Spacing" setup = [TestData, CommonImports] begin
-    points =
-        Point.(
-        [
-            (0.0, 0.0, 0.0),
-            (1.0, 0.0, 0.0),
-            (0.0, 1.0, 0.0),
-            (0.0, 0.0, 1.0),
-            (1.0, 1.0, 0.0),
-            (0.0, 1.0, 1.0),
-            (1.0, 0.0, 1.0),
-            (1.0, 1.0, 1.0),
-        ]
-    )
+    points = Point.([
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 1.0, 1.0),
+        (1.0, 0.0, 1.0),
+        (1.0, 1.0, 1.0),
+    ])
     cloud = PointCloud(PointBoundary(points))
 
     base_size = 0.1m
@@ -64,8 +61,7 @@ end
 end
 
 @testitem "calculate_ninit 3D" setup = [TestData, CommonImports] begin
-    points =
-        Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
+    points = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
     cloud = PointCloud(PointBoundary(points))
     spacing = ConstantSpacing(0.1m)
 
@@ -73,7 +69,7 @@ end
     # For unit tetrahedron: extent = (1m, 1m, 1m), Δx = 0.1m
     # Expected: (ceil(1m * 10 / 0.1m), ceil(1m * 10 / 0.1m)) = (100, 100)
     ninit = WhatsThePoint.calculate_ninit(cloud, spacing)
-    @test ninit isa Tuple{Int, Int}
+    @test ninit isa Tuple{Int,Int}
     @test ninit == (100, 100)
 end
 
@@ -127,7 +123,8 @@ end
     spacing = ConstantSpacing(0.2m)
 
     cloud = @test_logs (
-        :warn, "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.",
+        :warn,
+        "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.",
     ) discretize(boundary, spacing; alg = FornbergFlyer(), max_points = 100)
     @test cloud isa PointCloud
     @test length(volume(cloud)) <= 100

@@ -13,7 +13,7 @@ function ranges_from_permutation(permutations::AbstractVector)
     num_elems = length.(permutations)
     # use cumsum here
     ends = map(i -> sum(num_elems[begin:i]), 1:length(num_elems))
-    ranges = [(e - num_elems[i] + 1):e for (i, e) in enumerate(ends)]
+    ranges = [(e-num_elems[i]+1):e for (i, e) in enumerate(ends)]
     return ranges
 end
 

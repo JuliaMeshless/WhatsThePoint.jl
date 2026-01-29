@@ -3,12 +3,12 @@
 
 A boundary of points.
 """
-struct PointBoundary{M <: Manifold, C <: CRS} <: Domain{M, C}
-    surfaces::LittleDict{Symbol, AbstractSurface{M, C}}
+struct PointBoundary{M<:Manifold,C<:CRS} <: Domain{M,C}
+    surfaces::LittleDict{Symbol,AbstractSurface{M,C}}
     function PointBoundary(
-            surfaces::LittleDict{Symbol, AbstractSurface{M, C}}
-        ) where {M <: Manifold, C <: CRS}
-        return new{M, C}(surfaces)
+        surfaces::LittleDict{Symbol,AbstractSurface{M,C}},
+    ) where {M<:Manifold,C<:CRS}
+        return new{M,C}(surfaces)
     end
 end
 
@@ -16,7 +16,7 @@ function PointBoundary(points, normals, areas)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
-    surfaces = LittleDict{Symbol, AbstractSurface{M, C}}(:surface1 => surf)
+    surfaces = LittleDict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
     return PointBoundary(surfaces)
 end
 
@@ -32,7 +32,7 @@ function PointBoundary(filepath::String)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
-    surfaces = LittleDict{Symbol, AbstractSurface{M, C}}(:surface1 => surf)
+    surfaces = LittleDict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
     return PointBoundary(surfaces)
 end
 
@@ -70,7 +70,7 @@ function Base.getindex(boundary::PointBoundary, index::Int)
     end
     offset = 0
     for surf in surfaces(boundary)
-        index <= (length(surf) + offset) && return surf[index - offset]
+        index <= (length(surf) + offset) && return surf[index-offset]
         offset += length(surf)
     end
     return
@@ -88,7 +88,7 @@ end
 Base.delete!(boundary::PointBoundary, name::Symbol) = delete!(namedsurfaces(boundary), name)
 
 # pretty printing
-function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim, T}) where {Dim, T}
+function Base.show(io::IO, ::MIME"text/plain", boundary::PointBoundary{Dim,T}) where {Dim,T}
     println(io, "PointBoundary{$Dim, $T}")
     println(io, "├─$(length(boundary)) points")
     return if !isnothing(namedsurfaces(boundary))

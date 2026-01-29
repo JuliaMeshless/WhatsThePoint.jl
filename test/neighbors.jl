@@ -34,7 +34,7 @@ end
 @testitem "search with PointCloud" setup = [TestData, CommonImports] begin
     N = 20
     circle_points =
-        Point.([(cos(θ), sin(θ)) for θ in range(0, 2π; length = N + 1)[1:(end - 1)]])
+        Point.([(cos(θ), sin(θ)) for θ in range(0, 2π; length = N + 1)[1:(end-1)]])
     cloud = PointCloud(PointBoundary(circle_points))
 
     k = 3
@@ -52,7 +52,7 @@ end
     end
 
     @testset "Self as nearest neighbor" begin
-        @test all(neighbors[i][1] == i for i in 1:N)
+        @test all(neighbors[i][1] == i for i = 1:N)
     end
 end
 
@@ -87,7 +87,7 @@ end
 @testitem "searchdists with PointCloud" setup = [TestData, CommonImports] begin
     N = 20
     circle_points =
-        Point.([(cos(θ), sin(θ)) for θ in range(0, 2π; length = N + 1)[1:(end - 1)]])
+        Point.([(cos(θ), sin(θ)) for θ in range(0, 2π; length = N + 1)[1:(end-1)]])
     cloud = PointCloud(PointBoundary(circle_points))
 
     k = 3
@@ -175,7 +175,7 @@ end
         neighbors = search(cloud, method)
 
         @test all(length(n) == 1 for n in neighbors)
-        @test all(neighbors[i][1] == i for i in 1:N)
+        @test all(neighbors[i][1] == i for i = 1:N)
 
         results = searchdists(cloud, method)
         @test all(isapprox(ds[1], 0.0m; atol = 1.0e-10m) for (_, ds) in results)
@@ -184,7 +184,7 @@ end
 
 @testitem "KNearestSearch units support" setup = [TestData, CommonImports] begin
     N = 20
-    points_with_units = [Point(rand() * m, rand() * m) for _ in 1:N]
+    points_with_units = [Point(rand() * m, rand() * m) for _ = 1:N]
     cloud = PointCloud(PointBoundary(points_with_units))
 
     k = 5
