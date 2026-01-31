@@ -556,51 +556,43 @@ function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real
 
     leaf_idx = find_leaf(tree, point)
 
-    if isnothing(octree.leaf_classification)
-        error(
-            """Cannot query without classification!
-            Rebuild TriangleOctree with classify_leaves=true to enable full isinside() queries.""",
-        )
+    # Step 1: Use classification if available (fastest - just array lookup)
+    if !isnothing(octree.leaf_classification)
+        classification = octree.leaf_classification[leaf_idx]
+        if classification == Int8(2)  # Interior
+            return true
+        elseif classification == Int8(0)  # Exterior
+            return false
+        end
+        # classification == 1 (Boundary) - fall through to signed distance computation
     end
 
-    classification = octree.leaf_classification[leaf_idx]
+    # Step 2: Compute signed distance using local triangles
+    tri_indices = tree.element_lists[leaf_idx]
 
-    if classification == Int8(2)
-        return true
-    elseif classification == Int8(0)
-        return false
+    if !isempty(tri_indices)
+        dist = _compute_local_signed_distance(point, mesh, tri_indices)
+        return dist < 0
     else
-        tri_indices = tree.element_lists[leaf_idx]
+        # Empty leaf - search neighbors
+        neighbor_triangles = Int[]
+        for direction in 1:6
+            neighbors = find_neighbor(tree, leaf_idx, direction)
+            for neighbor_idx in neighbors
+                if is_leaf(tree, neighbor_idx)
+                    append!(neighbor_triangles, tree.element_lists[neighbor_idx])
+                end
+            end
+        end
 
-        if !isempty(tri_indices)
-            dist = _compute_local_signed_distance(point, mesh, tri_indices)
+        if !isempty(neighbor_triangles)
+            dist = _compute_local_signed_distance(point, mesh, neighbor_triangles)
             return dist < 0
         else
-            neighbor_triangles = Int[]
-            for direction in 1:6
-                neighbors = find_neighbor(tree, leaf_idx, direction)
-                for neighbor_idx in neighbors
-                    if is_leaf(tree, neighbor_idx)
-                        append!(neighbor_triangles, tree.element_lists[neighbor_idx])
-                    end
-                end
-            end
-
-            if !isempty(neighbor_triangles)
-                dist = _compute_local_signed_distance(point, mesh, neighbor_triangles)
-                return dist < 0
-            else
-                if !isnothing(octree.leaf_nearest_triangle)
-                    tri_idx = octree.leaf_nearest_triangle[leaf_idx]
-                    if tri_idx > 0
-                        dist = _compute_local_signed_distance(point, mesh, [tri_idx])
-                        return dist < 0
-                    end
-                end
-                dist = _compute_signed_distance(point, mesh)
-                @warn "Falling back to global signed distance computation - this indicates a bug"
-                return dist < 0
-            end
+            # Absolute fallback - global computation
+            dist = _compute_signed_distance(point, mesh)
+            @warn "Falling back to global signed distance computation - this may be slow"
+            return dist < 0
         end
     end
 end

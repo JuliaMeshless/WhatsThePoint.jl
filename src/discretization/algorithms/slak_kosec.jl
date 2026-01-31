@@ -97,16 +97,16 @@ function _discretize_volume(
             if inside
                 _, dist = searchdists(c, search_method)
                 if first(dist) > r
+                    if i >= max_points
+                        @warn "discretization stopping early, reached max points ($max_points)"
+                        return PointVolume(new_points)
+                    end
                     push!(seeds, c)
                     push!(new_points, c)
                     search_method = KNearestSearch(seeds, 1)
                     i += 1
                 end
             end
-        end
-        if i > max_points
-            @warn "discretization stopping early, reached max points ($max_points)"
-            break
         end
     end
 

@@ -166,7 +166,6 @@ end
 
 @testitem "TriangleOctree isinside - Real STL" setup = [CommonImports, TestData] begin
     using Random
-    using GeoIO
 
     # Load box.stl (46,786 triangles)
     if isfile(TestData.BOX_PATH)

@@ -33,7 +33,7 @@ function PointBoundary(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
     surfaces = LittleDict{Symbol, AbstractSurface{M, C}}(:surface1 => surf)
-    return PointBoundary(surfaces)
+    return PointBoundary(surfaces, NoMesh())
 end
 
 function PointBoundary(points)
