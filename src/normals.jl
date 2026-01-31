@@ -138,7 +138,7 @@ function orient_normals!(surf::PointSurface{𝔼{N}, C}; k::Int = 5) where {N, C
 end
 
 function orient_normals!(cloud::PointCloud{𝔼{N}, C}; k::Int = 5) where {N, C <: CRS}
-    for surf in surfaces(cloud)
+    for surf in cloud
         orient_normals!(surf; k = k)
     end
     return
