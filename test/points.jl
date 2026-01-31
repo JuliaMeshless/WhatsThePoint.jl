@@ -1,7 +1,6 @@
 @testitem "emptyspace" setup = [TestData, CommonImports] begin
     square2D = Point.([(0, 0), (1, 1), (0, 1), (1, 0)])
-    square3D =
-        Point.(
+    square3D = Point.(
         [
             (0, 0, 0),
             (1, 1, 0),

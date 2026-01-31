@@ -100,7 +100,15 @@ function SpatialOctree{T, C}(
     coords[1] = SVector{4, Int}(0, 0, 0, 1)
     num_boxes = Ref(1)
 
-    return SpatialOctree{T, C}(parent, children, coords, origin, size, element_lists, num_boxes)
+    return SpatialOctree{T, C}(
+        parent,
+        children,
+        coords,
+        origin,
+        size,
+        element_lists,
+        num_boxes,
+    )
 end
 
 #=============================================================================

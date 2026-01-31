@@ -35,7 +35,8 @@ function isinside(testpoint::AbstractVector, surf::PointSurface{𝔼{Dim}}) wher
 end
 
 function isinside(
-        testpoint::Point{𝔼{N}}, cloud::Union{PointCloud{𝔼{N}}, PointBoundary{𝔼{N}}}
+        testpoint::Point{𝔼{N}},
+        cloud::Union{PointCloud{𝔼{N}}, PointBoundary{𝔼{N}}},
     ) where {N}
     g = mapreduce(s -> _greens(testpoint, s), +, surfaces(cloud))
     # include the -4π missing from _greens in the inequality here

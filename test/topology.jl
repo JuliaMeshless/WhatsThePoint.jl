@@ -144,9 +144,8 @@ end
     @test contains(output, "KNNTopology")
 end
 
-@testitem "Backwards compatibility - PointCloud without topology" setup = [
-    TestData, CommonImports,
-] begin
+@testitem "Backwards compatibility - PointCloud without topology" setup =
+    [TestData, CommonImports] begin
     using WhatsThePoint: boundary
     # Ensure old code patterns still work
     N = 10

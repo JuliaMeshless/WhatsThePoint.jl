@@ -8,7 +8,11 @@ using Unitful: ustrip
 using Makie: Makie, Figure, Axis3, meshscatter!
 
 function WhatsThePoint.visualize(
-        cloud::PointCloud{𝔼{3}, C}; size = (1000, 1000), azimuth = 1.275π, elevation = π / 8, kwargs...
+        cloud::PointCloud{𝔼{3}, C};
+        size = (1000, 1000),
+        azimuth = 1.275π,
+        elevation = π / 8,
+        kwargs...,
     ) where {C}
     fig = Figure(; size = size)
     ax = Axis3(fig[1, 1]; azimuth = azimuth, elevation = elevation)
@@ -162,7 +166,9 @@ function WhatsThePoint.visualize(
             kwargs...,
         )
         Makie.Colorbar(
-            fig[1, 2]; limits = (1, Ns), colormap = Makie.cgrad(:Spectral, Ns; categorical = true)
+            fig[1, 2];
+            limits = (1, Ns),
+            colormap = Makie.cgrad(:Spectral, Ns; categorical = true),
         )
     else
         labels = ones(Int, N)
