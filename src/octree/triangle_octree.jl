@@ -158,19 +158,23 @@ Uses component-wise comparison for consistent ordering.
 end
 
 """
-    has_consistent_normals(mesh::SimpleMesh; alignment_threshold=-0.3) -> Bool
+    has_consistent_normals(mesh::SimpleMesh) -> Bool
 
-Check if triangle normals are consistently oriented.
+Check if triangle faces are consistently oriented (manifold orientation test).
 
-Checks if edge-adjacent triangles (sharing 2 vertices) have normals pointing
-in similar directions. Inconsistent normals indicate a mesh quality issue that
-can cause incorrect inside/outside queries.
+This function verifies that all shared edges between adjacent triangles are
+traversed in OPPOSITE directions, which is the geometric requirement for a
+properly oriented manifold surface. This test is independent of surface curvature.
 
-# Arguments
-- `mesh::SimpleMesh`: Meshes.jl SimpleMesh to check
-- `alignment_threshold::Float64=-0.3`: Minimum dot product for consistent normals.
-  - `-1.0` to `1.0` range: `-1.0` = opposite directions, `1.0` = same direction
-  - Default `-0.3` allows some surface curvature while detecting major flips
+# Algorithm
+For each shared edge between two triangles:
+- Triangle A has edge v1→v2
+- Triangle B (adjacent) must have edge v2→v1 (opposite direction)
+- If both traverse in the same direction → faces are incorrectly oriented
+
+# Returns
+- `true` if all triangles are correctly oriented (manifold surface)
+- `false` if any triangles have flipped faces (orientation errors)
 
 # Performance
 O(n) complexity using edge hash map instead of O(n²) pairwise comparison.
@@ -179,39 +183,49 @@ O(n) complexity using edge hash map instead of O(n²) pairwise comparison.
 ```julia
 octree = TriangleOctree("model.stl"; h_min=0.01)
 if !has_consistent_normals(octree.mesh)
-    @warn "Mesh has inconsistent normals - may need repair"
+    @warn "Mesh has flipped triangles - will cause incorrect isinside() results"
 end
 ```
+
+# Note
+This test uses GEOMETRIC edge orientation, not algebraic normal dot products.
+It will correctly validate meshes with high curvature (sharp edges, creases).
 """
-function has_consistent_normals(mesh::SimpleMesh; alignment_threshold::Float64 = -0.3)
+function has_consistent_normals(mesh::SimpleMesh)
     n = Meshes.nelements(mesh)
     n <= 1 && return true
 
-    # Build edge → (triangle index, normal) map in O(n)
-    # When we encounter an edge again, check normal alignment immediately
-    edge_map =
-        Dict{Tuple{SVector{3, Float64}, SVector{3, Float64}}, Tuple{Int, SVector{3, Float64}}}()
+    # Build edge → (triangle index, edge vertices) map in O(n)
+    # When we encounter an edge again, check if it's traversed in opposite direction
+    edge_map = Dict{Tuple{SVector{3, Float64}, SVector{3, Float64}},
+                    Tuple{Int, SVector{3, Float64}, SVector{3, Float64}}}()
     sizehint!(edge_map, 3 * n)  # Each triangle has 3 edges
 
     for i in 1:n
         v1, v2, v3 = _get_triangle_vertices(mesh, i)
-        normal_i = _get_triangle_normal(mesh, i)
 
         # Process each edge of triangle i
-        for (ea, eb) in ((v1, v2), (v2, v3), (v3, v1))
-            key = _edge_key(ea, eb)
+        for (va, vb) in ((v1, v2), (v2, v3), (v3, v1))
+            key = _edge_key(va, vb)
             existing = get(edge_map, key, nothing)
 
             if existing !== nothing
-                # Edge shared with another triangle - check alignment
-                _, existing_normal = existing
-                alignment = dot(normal_i, existing_normal)
-                if alignment < alignment_threshold
+                # Edge shared with another triangle - check orientation
+                (_, other_va, other_vb) = existing
+
+                # For correct manifold orientation, the edge should be traversed
+                # in OPPOSITE directions: if this triangle goes va→vb,
+                # the other should go vb→va
+                same_direction = (va ≈ other_va && vb ≈ other_vb)
+
+                if same_direction
+                    # Both triangles traverse edge in SAME direction → FLIPPED FACE!
                     return false
                 end
+                # If opposite direction → correct orientation, continue
             else
-                # First time seeing this edge - store index and normal
-                edge_map[key] = (i, normal_i)
+                # First time seeing this edge - store triangle index and edge vertices
+                edge_map[key] = (i, va, vb)
             end
         end
     end
@@ -266,10 +280,13 @@ function TriangleOctree(
 
     if verify_orientation && !has_consistent_normals(mesh)
         @warn """
-        Triangle mesh has inconsistent normal orientations!
+        Triangle mesh has orientation errors (flipped faces)!
 
-        Some triangles may have normals pointing inward while others point outward.
-        This can lead to incorrect isinside() and signed distance calculations.
+        Some triangles have their faces oriented incorrectly (shared edges
+        traversed in the same direction instead of opposite directions).
+        This will cause incorrect isinside() and signed distance calculations.
+
+        The mesh needs to be repaired before use with the octree.
         """
     end
 
