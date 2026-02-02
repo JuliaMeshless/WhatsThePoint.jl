@@ -13,8 +13,7 @@
 end
 
 @testitem "LogLike Spacing" setup = [TestData, CommonImports] begin
-    points =
-        Point.(
+    points = Point.(
         [
             (0.0, 0.0, 0.0),
             (1.0, 0.0, 0.0),
@@ -64,8 +63,7 @@ end
 end
 
 @testitem "calculate_ninit 3D" setup = [TestData, CommonImports] begin
-    points =
-        Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
+    points = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
     cloud = PointCloud(PointBoundary(points))
     spacing = ConstantSpacing(0.1m)
 
@@ -127,7 +125,8 @@ end
     spacing = ConstantSpacing(0.2m)
 
     cloud = @test_logs (
-        :warn, "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.",
+        :warn,
+        "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it.",
     ) discretize(boundary, spacing; alg = FornbergFlyer(), max_points = 100)
     @test cloud isa PointCloud
     @test length(volume(cloud)) <= 100
@@ -185,4 +184,50 @@ end
     max_pts = 20
     cloud = discretize(boundary, spacing; alg = SlakKosec(), max_points = max_pts)
     @test length(volume(cloud)) <= max_pts
+end
+
+@testitem "discretize with bare Unitful.Length" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: boundary
+    bnd = PointBoundary(TestData.BOX_PATH)
+
+    # Test PointBoundary overload
+    cloud1 = discretize(bnd, 0.5m; max_points = 50)
+    @test cloud1 isa PointCloud
+    @test length(volume(cloud1)) <= 50
+    @test length(boundary(cloud1)) == length(bnd)
+
+    # Test PointCloud overload
+    cloud2 = PointCloud(bnd)
+    cloud2 = discretize(cloud2, 0.5m; max_points = 50)
+    @test cloud2 isa PointCloud
+    @test length(volume(cloud2)) <= 50
+end
+
+@testitem "discretize with use_octree" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: boundary
+    bnd = PointBoundary(TestData.BOX_PATH)
+
+    # use_octree=true builds octree from boundary's source mesh
+    cloud = discretize(bnd, 5.0m; use_octree = true, max_points = 50)
+    @test cloud isa PointCloud
+    @test length(volume(cloud)) <= 50
+    @test length(boundary(cloud)) == length(bnd)
+end
+
+@testitem "discretize use_octree requires source mesh" setup = [TestData, CommonImports] begin
+    # Boundary from points has no source mesh
+    pts = Point.([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
+    bnd = PointBoundary(pts)
+
+    @test_throws ArgumentError discretize(bnd, 0.5m; use_octree = true, max_points = 10)
+end
+
+@testitem "discretize use_octree with explicit h_min" setup = [TestData, CommonImports] begin
+    using WhatsThePoint: boundary
+    bnd = PointBoundary(TestData.BOX_PATH)
+
+    # Explicit octree_h_min
+    cloud = discretize(bnd, 5.0m; use_octree = true, octree_h_min = 1.0, max_points = 50)
+    @test cloud isa PointCloud
+    @test length(volume(cloud)) <= 50
 end

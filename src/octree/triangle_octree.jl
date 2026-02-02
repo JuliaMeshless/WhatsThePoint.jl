@@ -1,138 +1,231 @@
 """
-    TriangleOctree{T<:Real}
+    TriangleOctree{M<:Manifold, C<:CRS, T<:Real}
 
 An octree-based spatial index for efficient triangle mesh queries.
 
 # Fields
 - `tree::SpatialOctree{Int,T}`: Underlying octree storing triangle indices
-- `mesh::TriangleMesh{T}`: Triangle mesh being indexed
+- `mesh::SimpleMesh{M,C}`: Original Meshes.jl mesh (single source of truth for triangle data)
 - `leaf_classification::Union{Nothing, Vector{Int8}}`: Classification of empty leaves
   - `0`: Exterior (outside mesh)
-  - `1`: Boundary (contains triangles)
+  - `1`: Boundary (near surface but empty)
   - `2`: Interior (inside mesh)
+- `leaf_nearest_triangle::Union{Nothing, Vector{Int}}`: Index of nearest triangle for each leaf.
+  Used by boundary leaves (classification == 1) that have no local triangles to avoid
+  expensive global signed distance computation at query time.
 
 # Performance
 For a mesh with M triangles:
 - Construction: O(M log M) - distribute triangles to boxes
 - Query: O(log M + k) where k ≈ 10-50 triangles per leaf
-- Memory: O(M) for triangle storage + O(N) for octree nodes
+- Memory: O(N) for octree nodes (mesh data accessed on-the-fly)
 
 # Example
 ```julia
-# Load mesh and build octree
-mesh = TriangleMesh("model.stl")
-octree = TriangleOctree(mesh; h_min=0.01, max_triangles_per_box=50)
+# Option 1: From STL file (simplest)
+octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
+
+# Option 2: From SimpleMesh
+mesh = GeoIO.load("model.stl").geometry
+octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
 
 # Fast queries (100-1000x speedup over brute force)
 point = SVector(0.5, 0.5, 0.5)
 is_inside = isinside(point, octree)
-distance = signed_distance(point, octree)
 ```
 """
-struct TriangleOctree{T <: Real}
+struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
     tree::SpatialOctree{Int, T}
-    mesh::TriangleMesh{T}
+    mesh::SimpleMesh{M, C}
     leaf_classification::Union{Nothing, Vector{Int8}}
+    leaf_nearest_triangle::Union{Nothing, Vector{Int}}
 end
 
 """
-    has_consistent_normals(mesh::TriangleMesh{T}; alignment_threshold::T=T(-0.3)) -> Bool
+    _normalize_normal(n_vec::Vec) -> SVector{3,Float64}
 
-Check if triangle normals in the mesh are consistently oriented.
+Extract and normalize a Meshes.jl Vec normal to a unit SVector{3,Float64}.
+"""
+@inline function _normalize_normal(n_vec)
+    # Direct component access avoids tuple overhead
+    n = SVector{3, Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
+    n_mag = norm(n)
+    if n_mag < eps(Float64) * 100
+        error("Degenerate triangle: zero normal")
+    end
+    return n / n_mag
+end
 
-Checks if edge-adjacent triangles (sharing 2 vertices) have normals pointing
-in similar directions. Inconsistent normals indicate a mesh quality issue that
-can cause incorrect inside/outside queries.
+"""
+    _extract_vertex(vert) -> SVector{3,Float64}
 
-# Arguments
-- `mesh::TriangleMesh{T}`: Triangle mesh to check
-- `alignment_threshold::T=-0.3`: Minimum dot product for consistent normals.
-  - `-1.0` to `1.0` range: `-1.0` = opposite directions, `1.0` = same direction
-  - Default `-0.3` allows some surface curvature while detecting major flips
-  - Use stricter values (e.g., `0.0`) for smoother surfaces
-  - Use looser values (e.g., `-0.5`) for highly curved surfaces
+Extract coordinates from a Meshes.jl vertex to an SVector{3,Float64}.
+"""
+@inline function _extract_vertex(vert)
+    coords = Meshes.to(vert)
+    return SVector{3, Float64}(ustrip(coords[1]), ustrip(coords[2]), ustrip(coords[3]))
+end
+
+"""
+    _get_triangle_vertices(mesh::SimpleMesh, tri_idx::Int) -> (SVector{3}, SVector{3}, SVector{3})
+
+Extract triangle vertices from mesh as SVectors. Accesses mesh data on-the-fly.
+"""
+@inline function _get_triangle_vertices(mesh::SimpleMesh, tri_idx::Int)
+    elem = mesh[tri_idx]
+    verts = Meshes.vertices(elem)
+    v1 = _extract_vertex(verts[1])
+    v2 = _extract_vertex(verts[2])
+    v3 = _extract_vertex(verts[3])
+    return v1, v2, v3
+end
+
+"""
+    _get_triangle_normal(mesh::SimpleMesh, tri_idx::Int) -> SVector{3,Float64}
+
+Extract and normalize triangle normal from mesh. Accesses mesh data on-the-fly.
+"""
+@inline function _get_triangle_normal(mesh::SimpleMesh, tri_idx::Int)
+    elem = mesh[tri_idx]
+    return _normalize_normal(Meshes.normal(elem))
+end
+
+"""
+    _compute_bbox(mesh::SimpleMesh) -> (bbox_min, bbox_max)
+
+Compute bounding box from mesh triangle data.
+
+Performance: Single-pass min/max accumulation over all triangles.
+"""
+function _compute_bbox(mesh::SimpleMesh)
+    T = Float64
+    n = Meshes.nelements(mesh)
+
+    # Initialize with first triangle's vertices
+    v1, v2, v3 = _get_triangle_vertices(mesh, 1)
+    min_x = min(v1[1], v2[1], v3[1])
+    min_y = min(v1[2], v2[2], v3[2])
+    min_z = min(v1[3], v2[3], v3[3])
+    max_x = max(v1[1], v2[1], v3[1])
+    max_y = max(v1[2], v2[2], v3[2])
+    max_z = max(v1[3], v2[3], v3[3])
+
+    # Single-pass accumulation over all triangles
+    for i in 2:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
+
+        min_x = min(min_x, v1[1], v2[1], v3[1])
+        min_y = min(min_y, v1[2], v2[2], v3[2])
+        min_z = min(min_z, v1[3], v2[3], v3[3])
+        max_x = max(max_x, v1[1], v2[1], v3[1])
+        max_y = max(max_y, v1[2], v2[2], v3[2])
+        max_z = max(max_z, v1[3], v2[3], v3[3])
+    end
+
+    # Handle degenerate cases (zero extent in any dimension)
+    eps_val = max(eps(T) * 100, T(1.0e-10))
+    if min_x == max_x
+        min_x -= eps_val
+        max_x += eps_val
+    end
+    if min_y == max_y
+        min_y -= eps_val
+        max_y += eps_val
+    end
+    if min_z == max_z
+        min_z -= eps_val
+        max_z += eps_val
+    end
+
+    return SVector{3, T}(min_x, min_y, min_z), SVector{3, T}(max_x, max_y, max_z)
+end
+
+"""
+    _edge_key(v1::SVector{3,T}, v2::SVector{3,T}) where {T} -> Tuple
+
+Create a canonical edge key from two vertices (order-independent).
+Uses component-wise comparison for consistent ordering.
+"""
+@inline function _edge_key(v1::SVector{3, T}, v2::SVector{3, T}) where {T}
+    # Order vertices lexicographically for canonical key
+    if v1[1] < v2[1] ||
+            (v1[1] == v2[1] && v1[2] < v2[2]) ||
+            (v1[1] == v2[1] && v1[2] == v2[2] && v1[3] < v2[3])
+        return (v1, v2)
+    else
+        return (v2, v1)
+    end
+end
+
+"""
+    has_consistent_normals(mesh::SimpleMesh) -> Bool
+
+Check if triangle faces are consistently oriented (manifold orientation test).
+
+This function verifies that all shared edges between adjacent triangles are
+traversed in OPPOSITE directions, which is the geometric requirement for a
+properly oriented manifold surface. This test is independent of surface curvature.
 
 # Algorithm
-1. For each triangle, identify its 3 edges
-2. Find other triangles that share each edge (2 common vertices)
-3. Check if edge-adjacent triangles have aligned normals (dot product > threshold)
-4. Return false if any edge-adjacent pair has opposing normals
+For each shared edge between two triangles:
+- Triangle A has edge v1→v2
+- Triangle B (adjacent) must have edge v2→v1 (opposite direction)
+- If both traverse in the same direction → faces are incorrectly oriented
 
-# Note
-This checks **topological** adjacency (shared edges), not spatial proximity.
-A mesh can have geometrically close triangles that aren't connected, such as
-in U-turns or folds. Only edge-adjacent triangles are compared.
+# Returns
+- `true` if all triangles are correctly oriented (manifold surface)
+- `false` if any triangles have flipped faces (orientation errors)
 
-Catches common problems like:
-- Flipped triangles in STL files
-- Inconsistent winding order
-- Inside-out patches
+# Performance
+O(n) complexity using edge hash map instead of O(n²) pairwise comparison.
 
 # Examples
 ```julia
-mesh = TriangleMesh("model.stl")
-
-# Default threshold (-0.3)
-if !has_consistent_normals(mesh)
-    @warn "Mesh has inconsistent normals - may need repair"
-end
-
-# Stricter check for smooth surfaces
-if !has_consistent_normals(mesh; alignment_threshold=0.0)
-    @warn "Mesh has normals with high variation"
-end
-
-# Looser check for highly curved surfaces
-if !has_consistent_normals(mesh; alignment_threshold=-0.5)
-    @warn "Mesh has severely misaligned normals"
+octree = TriangleOctree("model.stl"; h_min=0.01)
+if !has_consistent_normals(octree.mesh)
+    @warn "Mesh has flipped triangles - will cause incorrect isinside() results"
 end
 ```
+
+# Note
+This test uses GEOMETRIC edge orientation, not algebraic normal dot products.
+It will correctly validate meshes with high curvature (sharp edges, creases).
 """
-function has_consistent_normals(
-        mesh::TriangleMesh{T};
-        alignment_threshold::T = T(-0.3),
-    ) where {T <: Real}
-    length(mesh) <= 1 && return true
+function has_consistent_normals(mesh::SimpleMesh)
+    n = Meshes.nelements(mesh)
+    n <= 1 && return true
 
-    # Check each triangle against all others for edge adjacency
-    for i in 1:length(mesh)
-        tri_i = mesh.triangles[i]
+    # Build edge → (triangle index, edge vertices) map in O(n)
+    # When we encounter an edge again, check if it's traversed in opposite direction
+    edge_map = Dict{Tuple{SVector{3, Float64}, SVector{3, Float64}},
+                    Tuple{Int, SVector{3, Float64}, SVector{3, Float64}}}()
+    sizehint!(edge_map, 3 * n)  # Each triangle has 3 edges
 
-        # Get the 3 edges of triangle i
-        edges_i = [
-            Set([tri_i.v1, tri_i.v2]),
-            Set([tri_i.v2, tri_i.v3]),
-            Set([tri_i.v3, tri_i.v1]),
-        ]
+    for i in 1:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
 
-        # Check against all subsequent triangles
-        for j in (i + 1):length(mesh)
-            tri_j = mesh.triangles[j]
+        # Process each edge of triangle i
+        for (va, vb) in ((v1, v2), (v2, v3), (v3, v1))
+            key = _edge_key(va, vb)
+            existing = get(edge_map, key, nothing)
 
-            # Get the 3 edges of triangle j
-            edges_j = [
-                Set([tri_j.v1, tri_j.v2]),
-                Set([tri_j.v2, tri_j.v3]),
-                Set([tri_j.v3, tri_j.v1]),
-            ]
+            if existing !== nothing
+                # Edge shared with another triangle - check orientation
+                (_, other_va, other_vb) = existing
 
-            shares_edge = false
-            for edge_i in edges_i
-                for edge_j in edges_j
-                    if edge_i == edge_j
-                        shares_edge = true
-                        break
-                    end
-                end
-                shares_edge && break
-            end
+                # For correct manifold orientation, the edge should be traversed
+                # in OPPOSITE directions: if this triangle goes va→vb,
+                # the other should go vb→va
+                same_direction = (va ≈ other_va && vb ≈ other_vb)
 
-            if shares_edge
-                alignment = dot(tri_i.normal, tri_j.normal)
-
-                if alignment < alignment_threshold
+                if same_direction
+                    # Both triangles traverse edge in SAME direction → FLIPPED FACE!
                     return false
                 end
+                # If opposite direction → correct orientation, continue
+            else
+                # First time seeing this edge - store triangle index and edge vertices
+                edge_map[key] = (i, va, vb)
             end
         end
     end
@@ -141,20 +234,20 @@ function has_consistent_normals(
 end
 
 """
-    TriangleOctree(mesh::TriangleMesh{T};
-                   h_min::T,
+    TriangleOctree(mesh::SimpleMesh{M,C};
+                   h_min,
                    max_triangles_per_box::Int=50,
                    classify_leaves::Bool=true,
-                   verify_orientation::Bool=true) -> TriangleOctree{T}
+                   verify_orientation::Bool=true) -> TriangleOctree{M,C,Float64}
 
-Build an octree spatial index for a triangle mesh.
+Build an octree spatial index for a SimpleMesh.
 
 # Arguments
-- `mesh::TriangleMesh{T}`: Triangle mesh to index
-- `h_min::T`: Minimum octree box size (stopping criterion)
+- `mesh::SimpleMesh{M,C}`: Meshes.jl SimpleMesh to index
+- `h_min`: Minimum octree box size (stopping criterion)
 - `max_triangles_per_box::Int=50`: Maximum triangles per leaf before subdivision
 - `classify_leaves::Bool=true`: Whether to classify empty leaves as interior/exterior
-- `verify_orientation::Bool=true`: Check if triangle normals are consistently oriented (warns if not)
+- `verify_orientation::Bool=true`: Check if triangle normals are consistently oriented
 
 # Algorithm
 1. (Optional) Verify triangle normal consistency
@@ -165,68 +258,84 @@ Build an octree spatial index for a triangle mesh.
 6. (Optional) Classify empty leaves via BFS from boundary
 
 # Returns
-`TriangleOctree{T}` ready for fast spatial queries
+`TriangleOctree{M,C,Float64}` ready for fast spatial queries
 
 # Example
 ```julia
-mesh = TriangleMesh("box.stl")
+mesh = GeoIO.load("box.stl").geometry
 octree = TriangleOctree(mesh; h_min=0.01, max_triangles_per_box=50)
-println("Built octree with ", length(all_leaves(octree.tree)), " leaves")
+println("Built octree with ", num_leaves(octree), " leaves")
 ```
-
-# Note on Normal Orientation
-For accurate inside/outside queries, triangle normals should consistently point outward
-(or consistently inward). Use `verify_orientation=true` to check this. If normals are
-inconsistent, you may get incorrect isinside() results near the affected triangles.
 """
 function TriangleOctree(
-        mesh::TriangleMesh{T};
-        h_min::T,
+        mesh::SimpleMesh{M, C};
+        h_min,
         max_triangles_per_box::Int = 50,
         classify_leaves::Bool = true,
         verify_orientation::Bool = true,
-    ) where {T <: Real}
-    # 1. Verify normal consistency (optional but recommended)
+    ) where {M <: Manifold, C <: CRS}
+    T = Float64
+    h_min_val = T(ustrip(h_min))
+    n_triangles = Meshes.nelements(mesh)
+
     if verify_orientation && !has_consistent_normals(mesh)
         @warn """
-        Triangle mesh has inconsistent normal orientations!
+        Triangle mesh has orientation errors (flipped faces)!
 
-        Some triangles may have normals pointing inward while others point outward.
-        This can lead to incorrect isinside() and signed distance calculations.
+        Some triangles have their faces oriented incorrectly (shared edges
+        traversed in the same direction instead of opposite directions).
+        This will cause incorrect isinside() and signed distance calculations.
+
+        The mesh needs to be repaired before use with the octree.
         """
     end
 
-    # 2. Create root octree covering mesh bounding box
-    bbox_sz = bbox_size(mesh)
-    root_size = maximum(bbox_sz)  # Use largest dimension for cubic root
+    bbox_min, bbox_max = _compute_bbox(mesh)
+    bbox_sz = bbox_max - bbox_min
+    root_size = maximum(bbox_sz)
 
-    # Estimate initial capacity based on mesh size
-    # Rule of thumb: ~8 boxes per subdivision level, need log2(n_triangles) levels
-    estimated_boxes = max(1000, length(mesh) * 2)  # Conservative estimate
-    tree =
-        SpatialOctree{Int, T}(mesh.bbox_min, root_size; initial_capacity = estimated_boxes)
+    estimated_boxes = max(1000, n_triangles * 2)
+    tree = SpatialOctree{Int, T}(bbox_min, root_size; initial_capacity = estimated_boxes)
 
-    # 3. Distribute triangles to root box
-    # The root is always box index 1
     root_elements = tree.element_lists[1]
-    for tri_idx in 1:length(mesh.triangles)
+    for tri_idx in 1:n_triangles
         push!(root_elements, tri_idx)
     end
 
-    # 4. Define subdivision criteria
-    size_criterion = SizeCriterion(h_min)
+    size_criterion = SizeCriterion(h_min_val)
     criterion = AndCriterion((MaxElementsCriterion(max_triangles_per_box), size_criterion))
 
-    # 5. Recursively subdivide
     _subdivide_triangle_octree!(tree, mesh, 1, criterion)
 
-    # 6. Balance octree (ensure 2:1 refinement constraint)
     balance_octree!(tree, size_criterion)
 
-    # 7. Optional: Classify empty leaves
-    classification = classify_leaves ? _classify_leaves(tree, mesh) : nothing
+    classification, nearest_triangle = if classify_leaves
+        _classify_leaves(tree, mesh)
+    else
+        (nothing, nothing)
+    end
 
-    return TriangleOctree(tree, mesh, classification)
+    return TriangleOctree(tree, mesh, classification, nearest_triangle)
+end
+
+"""
+    TriangleOctree(filepath::String; h_min, kwargs...) -> TriangleOctree
+
+Build an octree spatial index from an STL file.
+
+# Arguments
+- `filepath::String`: Path to STL file
+- `h_min`: Minimum octree box size
+- `kwargs...`: Additional arguments passed to TriangleOctree(mesh; ...)
+
+# Example
+```julia
+octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
+```
+"""
+function TriangleOctree(filepath::String; h_min, kwargs...)
+    geo = GeoIO.load(filepath)
+    return TriangleOctree(geo.geometry; h_min, kwargs...)
 end
 
 """
@@ -242,45 +351,35 @@ For each box that needs subdivision:
 """
 function _subdivide_triangle_octree!(
         tree::SpatialOctree{Int, T},
-        mesh::TriangleMesh{T},
+        mesh::SimpleMesh,
         box_idx::Int,
         criterion,
     ) where {T <: Real}
-    # Check if this box needs subdivision
     if !should_subdivide(criterion, tree, box_idx)
         return
     end
 
-    # Get parent triangles
     parent_triangles = tree.element_lists[box_idx]
     isempty(parent_triangles) && return
 
-    # Subdivide the box (creates 8 children)
     subdivide!(tree, box_idx)
 
-    # Get child boxes
     children = tree.children[box_idx]
 
-    # Distribute triangles to children
     for tri_idx in parent_triangles
-        tri = mesh.triangles[tri_idx]
+        v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
 
-        # Find which child boxes this triangle intersects
-        # We need to check all 8 children individually
         for child_idx in children
-            child_idx == 0 && continue  # Skip if child doesn't exist
+            child_idx == 0 && continue
 
-            # Get child box bounds
             child_min, child_max = box_bounds(tree, child_idx)
 
-            # Check intersection
-            if triangle_box_intersection(tri.v1, tri.v2, tri.v3, child_min, child_max)
+            if triangle_box_intersection(v1, v2, v3, child_min, child_max)
                 push!(tree.element_lists[child_idx], tri_idx)
             end
         end
     end
 
-    # Recursively subdivide children
     for child_idx in children
         child_idx == 0 && continue
         _subdivide_triangle_octree!(tree, mesh, child_idx, criterion)
@@ -289,217 +388,172 @@ function _subdivide_triangle_octree!(
 end
 
 """
-    _classify_leaves(tree::SpatialOctree{Int,T}, mesh::TriangleMesh{T}) -> Vector{Int8}
+    _classify_leaves(tree::SpatialOctree{Int,T}, mesh::SimpleMesh) -> (Vector{Int8}, Vector{Int})
 
 Classify octree leaves as exterior (0), boundary (1), or interior (2).
 
-# Algorithm
-1. Mark leaves containing triangles as boundary (1)
-2. Breadth-first propagation from boundary leaves
-3. Compute signed distance at empty leaf centers
-4. Classify based on sign: negative = interior (2), positive = exterior (0)
+Single-pass brute-force classification: compute signed distance for all empty leaves.
+Construction is O(N×M) but happens once; queries are O(log M + k) with no fallbacks.
 
 # Returns
-Vector of Int8 classifications, indexed by box_idx
+Tuple of:
+- `classification::Vector{Int8}`: Classification for each box (0=exterior, 1=boundary, 2=interior)
+- `nearest_triangle::Vector{Int}`: Index of nearest triangle for each box
 """
-function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::TriangleMesh{T}) where {T <: Real}
+function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::SimpleMesh) where {T <: Real}
     n_boxes = length(tree.element_lists)
     classification = zeros(Int8, n_boxes)
-    distances = fill(T(Inf), n_boxes)
-    visited = falses(n_boxes)
+    nearest_triangle = zeros(Int, n_boxes)
 
-    # Layer 0: Mark boundary leaves (contain triangles)
-    queue = Int[]
     for leaf_idx in all_leaves(tree)
-        if !isempty(tree.element_lists[leaf_idx])
-            classification[leaf_idx] = 1  # Boundary
-            distances[leaf_idx] = T(1.0e-6)  # Small positive (on surface)
-            visited[leaf_idx] = true
-            push!(queue, leaf_idx)
-        end
-    end
+        triangles_in_leaf = tree.element_lists[leaf_idx]
 
-    # BFS from boundary leaves
-    while !isempty(queue)
-        next_queue = Int[]
+        if !isempty(triangles_in_leaf)
+            classification[leaf_idx] = 1
+            nearest_triangle[leaf_idx] = first(triangles_in_leaf)
+        else
+            leaf_center = box_center(tree, leaf_idx)
+            signed_dist, closest_tri_idx =
+                _compute_signed_distance_with_index(leaf_center, mesh)
+            nearest_triangle[leaf_idx] = closest_tri_idx
 
-        for box_idx in queue
-            # Check all 6 neighbors (±x, ±y, ±z)
-            for direction in 1:6
-                neighbors = find_neighbor(tree, box_idx, direction)
-
-                for neighbor_idx in neighbors
-                    # Skip if already visited or not a leaf
-                    (visited[neighbor_idx] || !is_leaf(tree, neighbor_idx)) && continue
-
-                    # Compute signed distance at neighbor's center
-                    neighbor_center = box_center(tree, neighbor_idx)
-                    signed_dist = _compute_signed_distance(neighbor_center, mesh)
-
-                    # Store distance and mark visited
-                    distances[neighbor_idx] = signed_dist
-                    visited[neighbor_idx] = true
-
-                    # Classify: negative = interior, positive = exterior
-                    cell_radius = box_size(tree, neighbor_idx) * sqrt(3) / 2
-                    if abs(signed_dist) < cell_radius
-                        #close to surface, treat as boundary
-                        classification[neighbor_idx] = 1  # Boundary
-                    elseif signed_dist < 0
-                        classification[neighbor_idx] = 2  # Interior
-                    else
-                        classification[neighbor_idx] = 0  # Exterior
-                    end
-
-                    # Add to next layer if close to surface
-                    if abs(signed_dist) < 10 * box_size(tree, neighbor_idx)
-                        push!(next_queue, neighbor_idx)
-                    end
-                end
+            leaf_radius = box_size(tree, leaf_idx) * sqrt(3) / 2
+            if abs(signed_dist) < leaf_radius
+                classification[leaf_idx] = 1
+            elseif signed_dist < 0
+                classification[leaf_idx] = 2
+            else
+                classification[leaf_idx] = 0
             end
         end
-
-        queue = next_queue
     end
 
-    return classification
+    return classification, nearest_triangle
 end
 
 """
-    _compute_signed_distance(point::SVector{3,T}, mesh::TriangleMesh{T}) -> T
+    _compute_signed_distance(point::SVector{3,T}, mesh::SimpleMesh) -> T
 
-Compute signed distance from a point to the closest triangle in the mesh.
+Compute signed distance from a point to the closest triangle.
 
 Returns:
 - Positive if point is on the side of the normal (outside)
 - Negative if point is on the opposite side of the normal (inside)
 - Zero if point is exactly on the surface
 """
-function _compute_signed_distance(
-        point::SVector{3, T},
-        mesh::TriangleMesh{T},
-    ) where {T <: Real}
+function _compute_signed_distance(point::SVector{3, T}, mesh::SimpleMesh) where {T <: Real}
     min_dist = T(Inf)
-    closest_tri = nothing
+    n = Meshes.nelements(mesh)
 
-    # Find closest triangle (brute force over all triangles)
-    for tri in mesh.triangles
-        closest_pt = closest_point_on_triangle(point, tri.v1, tri.v2, tri.v3)
+    for i in 1:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
+        closest_pt = closest_point_on_triangle(point, v1, v2, v3)
         dist = norm(point - closest_pt)
 
         if dist < abs(min_dist)
-            # Determine sign from normal
             to_point = point - closest_pt
-            sign = dot(to_point, tri.normal) >= 0 ? 1 : -1
+            normal_i = _get_triangle_normal(mesh, i)
+            sign = dot(to_point, normal_i) >= 0 ? 1 : -1
             min_dist = sign * dist
-            closest_tri = tri
         end
     end
 
     return min_dist
 end
 
-# Convenience accessors
-Base.length(octree::TriangleOctree) = length(octree.mesh)
+"""
+    _compute_signed_distance_with_index(point::SVector{3,T}, mesh::SimpleMesh) -> (T, Int)
+
+Compute signed distance from a point to the closest triangle, returning both the
+distance and the index of the closest triangle.
+
+Returns:
+- `(distance, closest_idx)` tuple where:
+  - `distance > 0`: point is on the side of the normal (outside)
+  - `distance < 0`: point is on the opposite side of the normal (inside)
+  - `distance == 0`: point is exactly on the surface
+  - `closest_idx`: 1-based index of the nearest triangle
+"""
+function _compute_signed_distance_with_index(
+        point::SVector{3, T},
+        mesh::SimpleMesh,
+    ) where {T <: Real}
+    min_dist = T(Inf)
+    closest_idx = 0
+    n = Meshes.nelements(mesh)
+
+    for i in 1:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
+        closest_pt = closest_point_on_triangle(point, v1, v2, v3)
+        dist = norm(point - closest_pt)
+
+        if dist < abs(min_dist)
+            to_point = point - closest_pt
+            normal_i = _get_triangle_normal(mesh, i)
+            sign = dot(to_point, normal_i) >= 0 ? 1 : -1
+            min_dist = sign * dist
+            closest_idx = i
+        end
+    end
+
+    return min_dist, closest_idx
+end
+
+Base.length(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
 num_leaves(octree::TriangleOctree) = length(all_leaves(octree.tree))
-num_triangles(octree::TriangleOctree) = length(octree.mesh)
+num_triangles(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
 
 #=============================================================================
 Fast Spatial Queries (Layer 4)
 =============================================================================#
 
 """
-    isinside(point::SVector{3,T}, octree::TriangleOctree{T}) -> Bool
+    isinside(point::SVector{3,T}, octree::TriangleOctree) -> Bool
 
 Fast interior/exterior test using octree spatial index.
 
 Returns `true` if point is inside the closed surface defined by the mesh.
 
-# Algorithm
-1. Find leaf box containing point (O(log M) via octree traversal)
-2. If leaf contains triangles: compute signed distance to k local triangles
-3. If leaf is empty: use pre-computed classification (O(1) lookup)
-4. Return: distance < 0 indicates interior
-
 # Performance
 - Complexity: O(log M + k) where M = number of triangles, k ≈ 10-50
 - Speedup: 100-1000× faster than brute-force O(M) approach
-- Amortized: Build octree once (~1.5s), query many times (~0.05ms/query)
 
 # Example
 ```julia
 using WhatsThePoint, StaticArrays
 
-mesh = TriangleMesh("model.stl")
-octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
+octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
 
-# Fast query
 point = SVector(0.5, 0.5, 0.5)
-is_inside = isinside(point, octree)  # ~0.05ms vs ~50ms brute-force
+is_inside = isinside(point, octree)
 ```
-
-# Note
-Requires `classify_leaves=true` during construction for empty leaf queries.
-If octree was built without classification, only boundary leaf queries work.
 """
-function isinside(point::SVector{3, T}, octree::TriangleOctree{T}) where {T <: Real}
-    tree = octree.tree
-    mesh = octree.mesh
+function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
+    isnothing(octree.leaf_classification) &&
+        error("TriangleOctree must be built with classify_leaves=true")
 
-    # Step 1: Find leaf containing point (O(log M))
-    leaf_idx = find_leaf(tree, point)
-
-    # Step 2: Check classification first
-    if isnothing(octree.leaf_classification)
-        error(
-            """Cannot query without classification!
-            Rebuild TriangleOctree with classify_leaves=true to enable full isinside() queries.""",
-        )
-    end
-
+    leaf_idx = find_leaf(octree.tree, point)
     classification = octree.leaf_classification[leaf_idx]
 
-    # Step 3: Handle based on classification
-    if classification == Int8(2)  # Interior
-        return true
-    elseif classification == Int8(0)  # Exterior
-        return false
-    else  # Boundary (classification == 1)
-        # Get triangles in this leaf
-        tri_indices = tree.element_lists[leaf_idx]
+    classification == Int8(2) && return true
+    classification == Int8(0) && return false
 
-        if !isempty(tri_indices)
-            # Compute distance to local triangles
-            dist = _compute_local_signed_distance(point, mesh, tri_indices)
-            return dist < 0
-        else
-            # Boundary leaf but empty - search neighbors
-            neighbor_triangles = Int[]
-            for direction in 1:6
-                neighbors = find_neighbor(tree, leaf_idx, direction)
-                for neighbor_idx in neighbors
-                    if is_leaf(tree, neighbor_idx)
-                        append!(neighbor_triangles, tree.element_lists[neighbor_idx])
-                    end
-                end
-            end
+    triangles_in_leaf = octree.tree.element_lists[leaf_idx]
 
-            if !isempty(neighbor_triangles)
-                dist = _compute_local_signed_distance(point, mesh, neighbor_triangles)
-                return dist < 0
-            else
-                dist = _compute_signed_distance(point, mesh)
-                @warn "WARNING (critical): Falling back to global signed distance computation!"
-                return dist < 0
-            end
-        end
+    if !isempty(triangles_in_leaf)
+        signed_dist = _compute_local_signed_distance(point, octree.mesh, triangles_in_leaf)
+        return signed_dist < 0
+    else
+        nearest_tri_idx = octree.leaf_nearest_triangle[leaf_idx]
+        signed_dist = _compute_signed_distance_to_triangle(point, octree.mesh, nearest_tri_idx)
+        return signed_dist < 0
     end
 end
 
 """
     _compute_local_signed_distance(
         point::SVector{3,T},
-        mesh::TriangleMesh{T},
+        mesh::SimpleMesh,
         tri_indices::Vector{Int}
     ) -> T
 
@@ -508,52 +562,65 @@ Compute signed distance from point to nearest triangle in the local set.
 This is the key performance optimization: instead of checking all M triangles,
 we only check the k≈10-50 triangles in the point's octree leaf.
 
-# Arguments
-- `point`: Query point
-- `mesh`: Triangle mesh
-- `tri_indices`: Indices of triangles to check (from octree leaf)
-
-# Returns
-Signed distance (negative = interior, positive = exterior)
+Performance: Fused computation avoids redundant closest_point calculation.
 """
 function _compute_local_signed_distance(
         point::SVector{3, T},
-        mesh::TriangleMesh{T},
+        mesh::SimpleMesh,
         tri_indices::Vector{Int},
     ) where {T <: Real}
-    min_dist = typemax(T)
-    closest_tri = nothing
+    min_dist_sq = typemax(T)
+    closest_idx = 0
+    closest_pt = point
 
-    # Find closest triangle among candidates (k << M triangles)
-    for tri_idx in tri_indices
-        tri = mesh.triangles[tri_idx]
+    @inbounds for tri_idx in tri_indices
+        v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
+        cp = closest_point_on_triangle(point, v1, v2, v3)
+        diff = point - cp
+        dist_sq = dot(diff, diff)
 
-        # Compute unsigned distance
-        dist = distance_point_triangle(point, tri.v1, tri.v2, tri.v3)
-
-        if dist < abs(min_dist)
-            min_dist = dist
-            closest_tri = tri
+        if dist_sq < min_dist_sq
+            min_dist_sq = dist_sq
+            closest_idx = tri_idx
+            closest_pt = cp
         end
     end
 
-    # Determine sign from normal of closest triangle
-    closest_pt =
-        closest_point_on_triangle(point, closest_tri.v1, closest_tri.v2, closest_tri.v3)
     to_point = point - closest_pt
+    normal = _get_triangle_normal(mesh, closest_idx)
+    sign = dot(to_point, normal) < 0 ? -1 : 1
 
-    # Negative = interior (opposite to normal direction)
-    sign = dot(to_point, closest_tri.normal) < 0 ? -1 : 1
-
-    return sign * min_dist
+    return sign * sqrt(min_dist_sq)
 end
 
 """
-    isinside(points::Vector{SVector{3,T}}, octree::TriangleOctree{T}) -> Vector{Bool}
+    _compute_signed_distance_to_triangle(
+        point::SVector{3,T},
+        mesh::SimpleMesh,
+        tri_idx::Int
+    ) -> T
+
+Compute signed distance from point to a single triangle.
+"""
+function _compute_signed_distance_to_triangle(
+        point::SVector{3, T},
+        mesh::SimpleMesh,
+        tri_idx::Int,
+    ) where {T <: Real}
+    v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
+    closest_pt = closest_point_on_triangle(point, v1, v2, v3)
+
+    to_point = point - closest_pt
+    normal = _get_triangle_normal(mesh, tri_idx)
+    sign = dot(to_point, normal) < 0 ? -1 : 1
+
+    return sign * norm(to_point)
+end
+
+"""
+    isinside(points::Vector{SVector{3,T}}, octree::TriangleOctree) -> Vector{Bool}
 
 Batch interior test for multiple points.
-
-More efficient than individual queries for many points (can be parallelized in future).
 
 # Example
 ```julia
@@ -561,8 +628,6 @@ test_points = [SVector(randn(3)...) for _ in 1:1000]
 results = isinside(test_points, octree)  # Returns Vector{Bool}
 ```
 """
-function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree{T}) where {T <: Real}
+function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}
     return [isinside(p, octree) for p in points]
-    # TODO: Add @threads for parallelization:
-    # return ThreadsX.map(p -> isinside(p, octree), points)
 end

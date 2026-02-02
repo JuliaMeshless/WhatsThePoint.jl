@@ -1,51 +1,41 @@
 # Layer 4: Fast isinside queries using TriangleOctree
 
 @testitem "TriangleOctree isinside - Basic" setup = [CommonImports] begin
-    # Helper function to create unit cube mesh
-    function create_unit_cube_mesh()
-        # 12 triangles forming a cube from (0,0,0) to (1,1,1)
-        vertices = [
-            SVector(0.0, 0.0, 0.0),  # 1
-            SVector(1.0, 0.0, 0.0),  # 2
-            SVector(1.0, 1.0, 0.0),  # 3
-            SVector(0.0, 1.0, 0.0),  # 4
-            SVector(0.0, 0.0, 1.0),  # 5
-            SVector(1.0, 0.0, 1.0),  # 6
-            SVector(1.0, 1.0, 1.0),  # 7
-            SVector(0.0, 1.0, 1.0),  # 8
-        ]
+    # Create unit cube mesh
+    pts = [
+        Point(0.0, 0.0, 0.0),  # 1
+        Point(1.0, 0.0, 0.0),  # 2
+        Point(1.0, 1.0, 0.0),  # 3
+        Point(0.0, 1.0, 0.0),  # 4
+        Point(0.0, 0.0, 1.0),  # 5
+        Point(1.0, 0.0, 1.0),  # 6
+        Point(1.0, 1.0, 1.0),  # 7
+        Point(0.0, 1.0, 1.0),  # 8
+    ]
 
-        # Define triangles (2 per face, counterclockwise when viewed from outside)
-        triangle_indices = [
-            # Bottom face (z=0)
-            (1, 3, 2),
-            (1, 4, 3),
-            # Top face (z=1)
-            (5, 6, 7),
-            (5, 7, 8),
-            # Front face (y=0)
-            (1, 2, 6),
-            (1, 6, 5),
-            # Back face (y=1)
-            (3, 4, 8),
-            (3, 8, 7),
-            # Left face (x=0)
-            (1, 5, 8),
-            (1, 8, 4),
-            # Right face (x=1)
-            (2, 3, 7),
-            (2, 7, 6),
-        ]
+    # Define triangles (2 per face, counterclockwise when viewed from outside)
+    connec = [
+        # Bottom face (z=0)
+        connect((1, 3, 2), Meshes.Triangle),
+        connect((1, 4, 3), Meshes.Triangle),
+        # Top face (z=1)
+        connect((5, 6, 7), Meshes.Triangle),
+        connect((5, 7, 8), Meshes.Triangle),
+        # Front face (y=0)
+        connect((1, 2, 6), Meshes.Triangle),
+        connect((1, 6, 5), Meshes.Triangle),
+        # Back face (y=1)
+        connect((3, 4, 8), Meshes.Triangle),
+        connect((3, 8, 7), Meshes.Triangle),
+        # Left face (x=0)
+        connect((1, 5, 8), Meshes.Triangle),
+        connect((1, 8, 4), Meshes.Triangle),
+        # Right face (x=1)
+        connect((2, 3, 7), Meshes.Triangle),
+        connect((2, 7, 6), Meshes.Triangle),
+    ]
 
-        triangles = [
-            Triangle(vertices[i], vertices[j], vertices[k]) for
-                (i, j, k) in triangle_indices
-        ]
-
-        return TriangleMesh(triangles)
-    end
-
-    mesh = create_unit_cube_mesh()
+    mesh = SimpleMesh(pts, connec)
     octree = TriangleOctree(
         mesh;
         h_min = 0.05,
@@ -74,40 +64,32 @@
 end
 
 @testitem "TriangleOctree isinside - Error Handling" setup = [CommonImports] begin
-    # Helper function to create unit cube mesh
-    function create_unit_cube_mesh()
-        vertices = [
-            SVector(0.0, 0.0, 0.0),
-            SVector(1.0, 0.0, 0.0),
-            SVector(1.0, 1.0, 0.0),
-            SVector(0.0, 1.0, 0.0),
-            SVector(0.0, 0.0, 1.0),
-            SVector(1.0, 0.0, 1.0),
-            SVector(1.0, 1.0, 1.0),
-            SVector(0.0, 1.0, 1.0),
-        ]
-        triangle_indices = [
-            (1, 3, 2),
-            (1, 4, 3),
-            (5, 6, 7),
-            (5, 7, 8),
-            (1, 2, 6),
-            (1, 6, 5),
-            (3, 4, 8),
-            (3, 8, 7),
-            (1, 5, 8),
-            (1, 8, 4),
-            (2, 3, 7),
-            (2, 7, 6),
-        ]
-        triangles = [
-            Triangle(vertices[i], vertices[j], vertices[k]) for
-                (i, j, k) in triangle_indices
-        ]
-        return TriangleMesh(triangles)
-    end
-
-    mesh = create_unit_cube_mesh()
+    # Create unit cube mesh
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 0.0, 1.0),
+        Point(1.0, 0.0, 1.0),
+        Point(1.0, 1.0, 1.0),
+        Point(0.0, 1.0, 1.0),
+    ]
+    connec = [
+        connect((1, 3, 2), Meshes.Triangle),
+        connect((1, 4, 3), Meshes.Triangle),
+        connect((5, 6, 7), Meshes.Triangle),
+        connect((5, 7, 8), Meshes.Triangle),
+        connect((1, 2, 6), Meshes.Triangle),
+        connect((1, 6, 5), Meshes.Triangle),
+        connect((3, 4, 8), Meshes.Triangle),
+        connect((3, 8, 7), Meshes.Triangle),
+        connect((1, 5, 8), Meshes.Triangle),
+        connect((1, 8, 4), Meshes.Triangle),
+        connect((2, 3, 7), Meshes.Triangle),
+        connect((2, 7, 6), Meshes.Triangle),
+    ]
+    mesh = SimpleMesh(pts, connec)
 
     # Build octree WITHOUT classification
     octree_no_class = TriangleOctree(
@@ -128,51 +110,44 @@ end
 @testitem "TriangleOctree isinside - Correctness" setup = [CommonImports] begin
     using Random
 
-    # Helper functions
-    function create_unit_cube_mesh()
-        vertices = [
-            SVector(0.0, 0.0, 0.0),
-            SVector(1.0, 0.0, 0.0),
-            SVector(1.0, 1.0, 0.0),
-            SVector(0.0, 1.0, 0.0),
-            SVector(0.0, 0.0, 1.0),
-            SVector(1.0, 0.0, 1.0),
-            SVector(1.0, 1.0, 1.0),
-            SVector(0.0, 1.0, 1.0),
-        ]
-        triangle_indices = [
-            (1, 3, 2),
-            (1, 4, 3),
-            (5, 6, 7),
-            (5, 7, 8),
-            (1, 2, 6),
-            (1, 6, 5),
-            (3, 4, 8),
-            (3, 8, 7),
-            (1, 5, 8),
-            (1, 8, 4),
-            (2, 3, 7),
-            (2, 7, 6),
-        ]
-        triangles = [
-            Triangle(vertices[i], vertices[j], vertices[k]) for
-                (i, j, k) in triangle_indices
-        ]
-        return TriangleMesh(triangles)
-    end
+    # Create unit cube mesh
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 0.0, 1.0),
+        Point(1.0, 0.0, 1.0),
+        Point(1.0, 1.0, 1.0),
+        Point(0.0, 1.0, 1.0),
+    ]
+    connec = [
+        connect((1, 3, 2), Meshes.Triangle),
+        connect((1, 4, 3), Meshes.Triangle),
+        connect((5, 6, 7), Meshes.Triangle),
+        connect((5, 7, 8), Meshes.Triangle),
+        connect((1, 2, 6), Meshes.Triangle),
+        connect((1, 6, 5), Meshes.Triangle),
+        connect((3, 4, 8), Meshes.Triangle),
+        connect((3, 8, 7), Meshes.Triangle),
+        connect((1, 5, 8), Meshes.Triangle),
+        connect((1, 8, 4), Meshes.Triangle),
+        connect((2, 3, 7), Meshes.Triangle),
+        connect((2, 7, 6), Meshes.Triangle),
+    ]
+    mesh = SimpleMesh(pts, connec)
 
-    function isinside_bruteforce(point::SVector{3, T}, mesh::TriangleMesh{T}) where {T <: Real}
-        dist = WhatsThePoint._compute_signed_distance(point, mesh)
-        return dist < 0
-    end
-
-    mesh = create_unit_cube_mesh()
     octree = TriangleOctree(
         mesh;
         h_min = 0.05,
         max_triangles_per_box = 5,
         classify_leaves = true,
     )
+
+    function isinside_bruteforce(point::SVector{3, T}, octree) where {T <: Real}
+        dist = WhatsThePoint._compute_signed_distance(point, octree.mesh)
+        return dist < 0
+    end
 
     # Test random points
     Random.seed!(42)
@@ -183,7 +158,7 @@ end
         point = SVector(rand(3)...) .* 2.0 .- 0.5
 
         octree_result = isinside(point, octree)
-        brute_result = isinside_bruteforce(point, mesh)
+        brute_result = isinside_bruteforce(point, octree)
 
         @test octree_result == brute_result
     end
@@ -191,26 +166,26 @@ end
 
 @testitem "TriangleOctree isinside - Real STL" setup = [CommonImports, TestData] begin
     using Random
-    using GeoIO
 
     # Load box.stl (46,786 triangles)
     if isfile(TestData.BOX_PATH)
-        # Use TriangleMesh constructor to load STL
-        mesh = TriangleMesh(TestData.BOX_PATH)
-
+        # Use TriangleOctree file path constructor
         octree = TriangleOctree(
-            mesh;
+            TestData.BOX_PATH;
             h_min = 0.1,
             max_triangles_per_box = 50,
             classify_leaves = true,
         )
 
+        # Compute bounding box from mesh
+        bbox_min, bbox_max = WhatsThePoint._compute_bbox(octree.mesh)
+
         # Test 1: Point at mesh center should be interior
-        center = SVector{3}((mesh.bbox_min + mesh.bbox_max) / 2)
+        center = SVector{3}((bbox_min + bbox_max) / 2)
         @test isinside(center, octree) == true
 
         # Test 2: Point outside bounding box should be exterior
-        outside = SVector{3}(mesh.bbox_max + SVector(1.0, 1.0, 1.0))
+        outside = SVector{3}(bbox_max + SVector(1.0, 1.0, 1.0))
         @test isinside(outside, octree) == false
 
         # Test 3: Random points within bounding box
@@ -218,7 +193,7 @@ end
         for _ in 1:20
             # Random point in bounding box
             t = rand(3)
-            point = SVector{3}(mesh.bbox_min .+ t .* (mesh.bbox_max - mesh.bbox_min))
+            point = SVector{3}(bbox_min .+ t .* (bbox_max - bbox_min))
 
             # Just verify no errors (correctness hard to verify without ground truth)
             result = isinside(point, octree)
@@ -230,40 +205,33 @@ end
 end
 
 @testitem "TriangleOctree isinside - Batch Queries" setup = [CommonImports] begin
-    # Helper function
-    function create_unit_cube_mesh()
-        vertices = [
-            SVector(0.0, 0.0, 0.0),
-            SVector(1.0, 0.0, 0.0),
-            SVector(1.0, 1.0, 0.0),
-            SVector(0.0, 1.0, 0.0),
-            SVector(0.0, 0.0, 1.0),
-            SVector(1.0, 0.0, 1.0),
-            SVector(1.0, 1.0, 1.0),
-            SVector(0.0, 1.0, 1.0),
-        ]
-        triangle_indices = [
-            (1, 3, 2),
-            (1, 4, 3),
-            (5, 6, 7),
-            (5, 7, 8),
-            (1, 2, 6),
-            (1, 6, 5),
-            (3, 4, 8),
-            (3, 8, 7),
-            (1, 5, 8),
-            (1, 8, 4),
-            (2, 3, 7),
-            (2, 7, 6),
-        ]
-        triangles = [
-            Triangle(vertices[i], vertices[j], vertices[k]) for
-                (i, j, k) in triangle_indices
-        ]
-        return TriangleMesh(triangles)
-    end
+    # Create unit cube mesh
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 0.0, 1.0),
+        Point(1.0, 0.0, 1.0),
+        Point(1.0, 1.0, 1.0),
+        Point(0.0, 1.0, 1.0),
+    ]
+    connec = [
+        connect((1, 3, 2), Meshes.Triangle),
+        connect((1, 4, 3), Meshes.Triangle),
+        connect((5, 6, 7), Meshes.Triangle),
+        connect((5, 7, 8), Meshes.Triangle),
+        connect((1, 2, 6), Meshes.Triangle),
+        connect((1, 6, 5), Meshes.Triangle),
+        connect((3, 4, 8), Meshes.Triangle),
+        connect((3, 8, 7), Meshes.Triangle),
+        connect((1, 5, 8), Meshes.Triangle),
+        connect((1, 8, 4), Meshes.Triangle),
+        connect((2, 3, 7), Meshes.Triangle),
+        connect((2, 7, 6), Meshes.Triangle),
+    ]
+    mesh = SimpleMesh(pts, connec)
 
-    mesh = create_unit_cube_mesh()
     octree = TriangleOctree(
         mesh;
         h_min = 0.05,
@@ -296,40 +264,33 @@ end
 end
 
 @testitem "TriangleOctree isinside - Edge Cases" setup = [CommonImports] begin
-    # Helper function
-    function create_unit_cube_mesh()
-        vertices = [
-            SVector(0.0, 0.0, 0.0),
-            SVector(1.0, 0.0, 0.0),
-            SVector(1.0, 1.0, 0.0),
-            SVector(0.0, 1.0, 0.0),
-            SVector(0.0, 0.0, 1.0),
-            SVector(1.0, 0.0, 1.0),
-            SVector(1.0, 1.0, 1.0),
-            SVector(0.0, 1.0, 1.0),
-        ]
-        triangle_indices = [
-            (1, 3, 2),
-            (1, 4, 3),
-            (5, 6, 7),
-            (5, 7, 8),
-            (1, 2, 6),
-            (1, 6, 5),
-            (3, 4, 8),
-            (3, 8, 7),
-            (1, 5, 8),
-            (1, 8, 4),
-            (2, 3, 7),
-            (2, 7, 6),
-        ]
-        triangles = [
-            Triangle(vertices[i], vertices[j], vertices[k]) for
-                (i, j, k) in triangle_indices
-        ]
-        return TriangleMesh(triangles)
-    end
+    # Create unit cube mesh
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 0.0, 1.0),
+        Point(1.0, 0.0, 1.0),
+        Point(1.0, 1.0, 1.0),
+        Point(0.0, 1.0, 1.0),
+    ]
+    connec = [
+        connect((1, 3, 2), Meshes.Triangle),
+        connect((1, 4, 3), Meshes.Triangle),
+        connect((5, 6, 7), Meshes.Triangle),
+        connect((5, 7, 8), Meshes.Triangle),
+        connect((1, 2, 6), Meshes.Triangle),
+        connect((1, 6, 5), Meshes.Triangle),
+        connect((3, 4, 8), Meshes.Triangle),
+        connect((3, 8, 7), Meshes.Triangle),
+        connect((1, 5, 8), Meshes.Triangle),
+        connect((1, 8, 4), Meshes.Triangle),
+        connect((2, 3, 7), Meshes.Triangle),
+        connect((2, 7, 6), Meshes.Triangle),
+    ]
+    mesh = SimpleMesh(pts, connec)
 
-    mesh = create_unit_cube_mesh()
     octree = TriangleOctree(
         mesh;
         h_min = 0.05,

@@ -69,7 +69,9 @@ end
         shadow_angle = atan(shadow_coords[2], shadow_coords[1])
         angle_diff = abs(orig_angle - shadow_angle)
         @test (
-            angle_diff < 1.0e-6 || abs(angle_diff - 2π) < 1.0e-6 || abs(angle_diff - π) < 1.0e-6
+            angle_diff < 1.0e-6 ||
+                abs(angle_diff - 2π) < 1.0e-6 ||
+                abs(angle_diff - π) < 1.0e-6
         )
     end
 end
