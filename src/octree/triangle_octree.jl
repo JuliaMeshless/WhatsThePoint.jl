@@ -392,72 +392,40 @@ end
 
 Classify octree leaves as exterior (0), boundary (1), or interior (2).
 
-# Algorithm
-1. Mark leaves containing triangles as boundary (1)
-2. Breadth-first propagation from boundary leaves
-3. Compute signed distance at empty leaf centers
-4. Classify based on sign: negative = interior (2), positive = exterior (0)
-5. Store nearest triangle index for each leaf (used at query time)
+Single-pass brute-force classification: compute signed distance for all empty leaves.
+Construction is O(N×M) but happens once; queries are O(log M + k) with no fallbacks.
 
 # Returns
 Tuple of:
 - `classification::Vector{Int8}`: Classification for each box (0=exterior, 1=boundary, 2=interior)
-- `nearest_triangle::Vector{Int}`: Index of nearest triangle for each box (0 if not computed)
+- `nearest_triangle::Vector{Int}`: Index of nearest triangle for each box
 """
 function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::SimpleMesh) where {T <: Real}
     n_boxes = length(tree.element_lists)
     classification = zeros(Int8, n_boxes)
     nearest_triangle = zeros(Int, n_boxes)
-    distances = fill(T(Inf), n_boxes)
-    visited = falses(n_boxes)
 
-    queue = Int[]
     for leaf_idx in all_leaves(tree)
-        tri_list = tree.element_lists[leaf_idx]
-        if !isempty(tri_list)
+        triangles_in_leaf = tree.element_lists[leaf_idx]
+
+        if !isempty(triangles_in_leaf)
             classification[leaf_idx] = 1
-            distances[leaf_idx] = T(1.0e-6)
-            nearest_triangle[leaf_idx] = first(tri_list)
-            visited[leaf_idx] = true
-            push!(queue, leaf_idx)
-        end
-    end
+            nearest_triangle[leaf_idx] = first(triangles_in_leaf)
+        else
+            leaf_center = box_center(tree, leaf_idx)
+            signed_dist, closest_tri_idx =
+                _compute_signed_distance_with_index(leaf_center, mesh)
+            nearest_triangle[leaf_idx] = closest_tri_idx
 
-    while !isempty(queue)
-        next_queue = Int[]
-
-        for box_idx in queue
-            for direction in 1:6
-                neighbors = find_neighbor(tree, box_idx, direction)
-
-                for neighbor_idx in neighbors
-                    (visited[neighbor_idx] || !is_leaf(tree, neighbor_idx)) && continue
-
-                    neighbor_center = box_center(tree, neighbor_idx)
-                    signed_dist, closest_tri_idx =
-                        _compute_signed_distance_with_index(neighbor_center, mesh)
-
-                    distances[neighbor_idx] = signed_dist
-                    nearest_triangle[neighbor_idx] = closest_tri_idx
-                    visited[neighbor_idx] = true
-
-                    cell_radius = box_size(tree, neighbor_idx) * sqrt(3) / 2
-                    if abs(signed_dist) < cell_radius
-                        classification[neighbor_idx] = 1
-                    elseif signed_dist < 0
-                        classification[neighbor_idx] = 2
-                    else
-                        classification[neighbor_idx] = 0
-                    end
-
-                    if abs(signed_dist) < 10 * box_size(tree, neighbor_idx)
-                        push!(next_queue, neighbor_idx)
-                    end
-                end
+            leaf_radius = box_size(tree, leaf_idx) * sqrt(3) / 2
+            if abs(signed_dist) < leaf_radius
+                classification[leaf_idx] = 1
+            elseif signed_dist < 0
+                classification[leaf_idx] = 2
+            else
+                classification[leaf_idx] = 0
             end
         end
-
-        queue = next_queue
     end
 
     return classification, nearest_triangle
@@ -546,12 +514,6 @@ Fast interior/exterior test using octree spatial index.
 
 Returns `true` if point is inside the closed surface defined by the mesh.
 
-# Algorithm
-1. Find leaf box containing point (O(log M) via octree traversal)
-2. If leaf contains triangles: compute signed distance to k local triangles
-3. If leaf is empty: use pre-computed classification (O(1) lookup)
-4. Return: distance < 0 indicates interior
-
 # Performance
 - Complexity: O(log M + k) where M = number of triangles, k ≈ 10-50
 - Speedup: 100-1000× faster than brute-force O(M) approach
@@ -562,55 +524,29 @@ using WhatsThePoint, StaticArrays
 
 octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
 
-# Fast query
 point = SVector(0.5, 0.5, 0.5)
-is_inside = isinside(point, octree)  # ~0.05ms vs ~50ms brute-force
+is_inside = isinside(point, octree)
 ```
 """
 function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
-    tree = octree.tree
-    mesh = octree.mesh
+    isnothing(octree.leaf_classification) &&
+        error("TriangleOctree must be built with classify_leaves=true")
 
-    leaf_idx = find_leaf(tree, point)
+    leaf_idx = find_leaf(octree.tree, point)
+    classification = octree.leaf_classification[leaf_idx]
 
-    # Step 1: Use classification if available (fastest - just array lookup)
-    if !isnothing(octree.leaf_classification)
-        classification = octree.leaf_classification[leaf_idx]
-        if classification == Int8(2)  # Interior
-            return true
-        elseif classification == Int8(0)  # Exterior
-            return false
-        end
-        # classification == 1 (Boundary) - fall through to signed distance computation
-    end
+    classification == Int8(2) && return true
+    classification == Int8(0) && return false
 
-    # Step 2: Compute signed distance using local triangles
-    tri_indices = tree.element_lists[leaf_idx]
+    triangles_in_leaf = octree.tree.element_lists[leaf_idx]
 
-    if !isempty(tri_indices)
-        dist = _compute_local_signed_distance(point, mesh, tri_indices)
-        return dist < 0
+    if !isempty(triangles_in_leaf)
+        signed_dist = _compute_local_signed_distance(point, octree.mesh, triangles_in_leaf)
+        return signed_dist < 0
     else
-        # Empty leaf - search neighbors
-        neighbor_triangles = Int[]
-        for direction in 1:6
-            neighbors = find_neighbor(tree, leaf_idx, direction)
-            for neighbor_idx in neighbors
-                if is_leaf(tree, neighbor_idx)
-                    append!(neighbor_triangles, tree.element_lists[neighbor_idx])
-                end
-            end
-        end
-
-        if !isempty(neighbor_triangles)
-            dist = _compute_local_signed_distance(point, mesh, neighbor_triangles)
-            return dist < 0
-        else
-            # Absolute fallback - global computation
-            dist = _compute_signed_distance(point, mesh)
-            @warn "Falling back to global signed distance computation - this may be slow"
-            return dist < 0
-        end
+        nearest_tri_idx = octree.leaf_nearest_triangle[leaf_idx]
+        signed_dist = _compute_signed_distance_to_triangle(point, octree.mesh, nearest_tri_idx)
+        return signed_dist < 0
     end
 end
 
@@ -635,15 +571,13 @@ function _compute_local_signed_distance(
     ) where {T <: Real}
     min_dist_sq = typemax(T)
     closest_idx = 0
-    closest_pt = point  # Will be overwritten
+    closest_pt = point
 
     @inbounds for tri_idx in tri_indices
         v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
-
-        # Compute closest point on this triangle
         cp = closest_point_on_triangle(point, v1, v2, v3)
         diff = point - cp
-        dist_sq = dot(diff, diff)  # Squared distance avoids sqrt
+        dist_sq = dot(diff, diff)
 
         if dist_sq < min_dist_sq
             min_dist_sq = dist_sq
@@ -652,12 +586,35 @@ function _compute_local_signed_distance(
         end
     end
 
-    # Compute sign using normal of closest triangle
     to_point = point - closest_pt
     normal = _get_triangle_normal(mesh, closest_idx)
     sign = dot(to_point, normal) < 0 ? -1 : 1
 
     return sign * sqrt(min_dist_sq)
+end
+
+"""
+    _compute_signed_distance_to_triangle(
+        point::SVector{3,T},
+        mesh::SimpleMesh,
+        tri_idx::Int
+    ) -> T
+
+Compute signed distance from point to a single triangle.
+"""
+function _compute_signed_distance_to_triangle(
+        point::SVector{3, T},
+        mesh::SimpleMesh,
+        tri_idx::Int,
+    ) where {T <: Real}
+    v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
+    closest_pt = closest_point_on_triangle(point, v1, v2, v3)
+
+    to_point = point - closest_pt
+    normal = _get_triangle_normal(mesh, tri_idx)
+    sign = dot(to_point, normal) < 0 ? -1 : 1
+
+    return sign * norm(to_point)
 end
 
 """
