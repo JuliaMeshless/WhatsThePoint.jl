@@ -34,11 +34,11 @@ point = SVector(0.5, 0.5, 0.5)
 is_inside = isinside(point, octree)
 ```
 """
-struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
-    tree::SpatialOctree{Int, T}
-    mesh::SimpleMesh{M, C}
-    leaf_classification::Union{Nothing, Vector{Int8}}
-    leaf_nearest_triangle::Union{Nothing, Vector{Int}}
+struct TriangleOctree{M<:Manifold,C<:CRS,T<:Real}
+    tree::SpatialOctree{Int,T}
+    mesh::SimpleMesh{M,C}
+    leaf_classification::Union{Nothing,Vector{Int8}}
+    leaf_nearest_triangle::Union{Nothing,Vector{Int}}
 end
 
 """
@@ -48,7 +48,7 @@ Extract and normalize a Meshes.jl Vec normal to a unit SVector{3,Float64}.
 """
 @inline function _normalize_normal(n_vec)
     # Direct component access avoids tuple overhead
-    n = SVector{3, Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
+    n = SVector{3,Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
     n_mag = norm(n)
     if n_mag < eps(Float64) * 100
         error("Degenerate triangle: zero normal")
@@ -63,7 +63,7 @@ Extract coordinates from a Meshes.jl vertex to an SVector{3,Float64}.
 """
 @inline function _extract_vertex(vert)
     coords = Meshes.to(vert)
-    return SVector{3, Float64}(ustrip(coords[1]), ustrip(coords[2]), ustrip(coords[3]))
+    return SVector{3,Float64}(ustrip(coords[1]), ustrip(coords[2]), ustrip(coords[3]))
 end
 
 """
@@ -137,7 +137,7 @@ function _compute_bbox(mesh::SimpleMesh)
         max_z += eps_val
     end
 
-    return SVector{3, T}(min_x, min_y, min_z), SVector{3, T}(max_x, max_y, max_z)
+    return SVector{3,T}(min_x, min_y, min_z), SVector{3,T}(max_x, max_y, max_z)
 end
 
 """
@@ -146,11 +146,11 @@ end
 Create a canonical edge key from two vertices (order-independent).
 Uses component-wise comparison for consistent ordering.
 """
-@inline function _edge_key(v1::SVector{3, T}, v2::SVector{3, T}) where {T}
+@inline function _edge_key(v1::SVector{3,T}, v2::SVector{3,T}) where {T}
     # Order vertices lexicographically for canonical key
     if v1[1] < v2[1] ||
-            (v1[1] == v2[1] && v1[2] < v2[2]) ||
-            (v1[1] == v2[1] && v1[2] == v2[2] && v1[3] < v2[3])
+       (v1[1] == v2[1] && v1[2] < v2[2]) ||
+       (v1[1] == v2[1] && v1[2] == v2[2] && v1[3] < v2[3])
         return (v1, v2)
     else
         return (v2, v1)
@@ -197,8 +197,8 @@ function has_consistent_normals(mesh::SimpleMesh)
 
     # Build edge → (triangle index, edge vertices) map in O(n)
     # When we encounter an edge again, check if it's traversed in opposite direction
-    edge_map = Dict{Tuple{SVector{3, Float64}, SVector{3, Float64}},
-                    Tuple{Int, SVector{3, Float64}, SVector{3, Float64}}}()
+    edge_map = Dict{Tuple{SVector{3,Float64},SVector{3,Float64}},
+        Tuple{Int,SVector{3,Float64},SVector{3,Float64}}}()
     sizehint!(edge_map, 3 * n)  # Each triangle has 3 edges
 
     for i in 1:n
@@ -268,12 +268,12 @@ println("Built octree with ", num_leaves(octree), " leaves")
 ```
 """
 function TriangleOctree(
-        mesh::SimpleMesh{M, C};
-        h_min,
-        max_triangles_per_box::Int = 50,
-        classify_leaves::Bool = true,
-        verify_orientation::Bool = true,
-    ) where {M <: Manifold, C <: CRS}
+    mesh::SimpleMesh{M,C};
+    h_min,
+    max_triangles_per_box::Int=50,
+    classify_leaves::Bool=true,
+    verify_orientation::Bool=true,
+) where {M<:Manifold,C<:CRS}
     T = Float64
     h_min_val = T(ustrip(h_min))
     n_triangles = Meshes.nelements(mesh)
@@ -295,7 +295,7 @@ function TriangleOctree(
     root_size = maximum(bbox_sz)
 
     estimated_boxes = max(1000, n_triangles * 2)
-    tree = SpatialOctree{Int, T}(bbox_min, root_size; initial_capacity = estimated_boxes)
+    tree = SpatialOctree{Int,T}(bbox_min, root_size; initial_capacity=estimated_boxes)
 
     root_elements = tree.element_lists[1]
     for tri_idx in 1:n_triangles
@@ -307,8 +307,22 @@ function TriangleOctree(
 
     _subdivide_triangle_octree!(tree, mesh, 1, criterion)
 
+    # Preliminary classification to identify boundary leaves
+    prelim_classification, prelim_nearest = if classify_leaves
+        _classify_leaves(tree, mesh)
+    else
+        (nothing, nothing)
+    end
+
+    # Refine neighbors of boundary leaves to match boundary resolution
+    if classify_leaves
+        _refine_boundary_neighbors!(tree, mesh, prelim_classification, size_criterion)
+    end
+
+    # Balance octree after boundary neighbor refinement
     balance_octree!(tree, size_criterion)
 
+    # Final classification after refinement and balancing
     classification, nearest_triangle = if classify_leaves
         _classify_leaves(tree, mesh)
     else
@@ -350,11 +364,11 @@ For each box that needs subdivision:
 4. Recursively subdivide children if they meet criteria
 """
 function _subdivide_triangle_octree!(
-        tree::SpatialOctree{Int, T},
-        mesh::SimpleMesh,
-        box_idx::Int,
-        criterion,
-    ) where {T <: Real}
+    tree::SpatialOctree{Int,T},
+    mesh::SimpleMesh,
+    box_idx::Int,
+    criterion,
+) where {T<:Real}
     if !should_subdivide(criterion, tree, box_idx)
         return
     end
@@ -388,6 +402,131 @@ function _subdivide_triangle_octree!(
 end
 
 """
+    _refine_boundary_neighbors!(
+        tree::SpatialOctree{Int,T},
+        mesh::SimpleMesh,
+        classification::Vector{Int8},
+        size_criterion
+    ) where {T<:Real}
+
+Refine interior and exterior leaves that neighbor boundary leaves to match boundary resolution.
+
+This creates a thick layer of fine boxes around the boundary, ensuring smooth classification
+and preventing large leaves from spanning the boundary.
+
+# Algorithm
+1. Find all boundary leaves (classification == 1)
+2. For each boundary leaf, find all face neighbors
+3. If neighbor is interior/exterior AND coarser than boundary leaf, subdivide it
+4. Recursively distribute triangles to subdivided boxes
+"""
+function _refine_boundary_neighbors!(
+    tree::SpatialOctree{Int,T},
+    mesh::SimpleMesh,
+    classification::Vector{Int8},
+    size_criterion,
+) where {T<:Real}
+    # Find all boundary leaves
+    boundary_leaves = Int[]
+    for leaf_idx in all_leaves(tree)
+        if classification[leaf_idx] == Int8(1)
+            push!(boundary_leaves, leaf_idx)
+        end
+    end
+
+    # Track which boxes need refinement
+    boxes_to_refine = Set{Int}()
+
+    # For each boundary leaf, check its neighbors
+    for boundary_leaf in boundary_leaves
+        boundary_size = box_size(tree, boundary_leaf)
+
+        # Check all 6 face neighbors
+        for direction in 1:6
+            neighbor_indices = find_neighbor(tree, boundary_leaf, direction)
+
+            for neighbor_idx in neighbor_indices
+                neighbor_idx == 0 && continue
+
+                # Skip if already a leaf with triangles (likely also boundary)
+                !is_leaf(tree, neighbor_idx) && continue
+
+                neighbor_class = classification[neighbor_idx]
+
+                # Only refine interior (2) or exterior (0) neighbors
+                if neighbor_class == Int8(2) || neighbor_class == Int8(0)
+                    neighbor_size = box_size(tree, neighbor_idx)
+
+                    # If neighbor is coarser than boundary, mark for refinement
+                    if neighbor_size > boundary_size * 1.01  # Small tolerance for FP errors
+                        push!(boxes_to_refine, neighbor_idx)
+                    end
+                end
+            end
+        end
+    end
+
+    # Refine marked boxes
+    for box_idx in boxes_to_refine
+        # Only refine if still a leaf (might have been refined as child of another box)
+        if is_leaf(tree, box_idx)
+            _refine_box_recursive!(tree, mesh, box_idx, size_criterion)
+        end
+    end
+
+    return nothing
+end
+
+"""
+    _refine_box_recursive!(tree, mesh, box_idx, size_criterion)
+
+Recursively subdivide a box and distribute triangles to children, stopping at size criterion.
+"""
+function _refine_box_recursive!(
+    tree::SpatialOctree{Int,T},
+    mesh::SimpleMesh,
+    box_idx::Int,
+    size_criterion,
+) where {T<:Real}
+    # Check if box meets size criterion (too small to subdivide)
+    if !should_subdivide(size_criterion, tree, box_idx)
+        return
+    end
+
+    parent_triangles = tree.element_lists[box_idx]
+    isempty(parent_triangles) && return
+
+    # Subdivide
+    subdivide!(tree, box_idx)
+    children = tree.children[box_idx]
+
+    # Distribute triangles to children
+    for tri_idx in parent_triangles
+        v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
+
+        for child_idx in children
+            child_idx == 0 && continue
+
+            child_min, child_max = box_bounds(tree, child_idx)
+
+            if triangle_box_intersection(v1, v2, v3, child_min, child_max)
+                push!(tree.element_lists[child_idx], tri_idx)
+            end
+        end
+    end
+
+    # Recursively refine children if they still exceed size criterion
+    for child_idx in children
+        child_idx == 0 && continue
+        if is_leaf(tree, child_idx)
+            _refine_box_recursive!(tree, mesh, child_idx, size_criterion)
+        end
+    end
+
+    return nothing
+end
+
+"""
     _classify_leaves(tree::SpatialOctree{Int,T}, mesh::SimpleMesh) -> (Vector{Int8}, Vector{Int})
 
 Classify octree leaves as exterior (0), boundary (1), or interior (2).
@@ -400,7 +539,7 @@ Tuple of:
 - `classification::Vector{Int8}`: Classification for each box (0=exterior, 1=boundary, 2=interior)
 - `nearest_triangle::Vector{Int}`: Index of nearest triangle for each box
 """
-function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::SimpleMesh) where {T <: Real}
+function _classify_leaves(tree::SpatialOctree{Int,T}, mesh::SimpleMesh) where {T<:Real}
     n_boxes = length(tree.element_lists)
     classification = zeros(Int8, n_boxes)
     nearest_triangle = zeros(Int, n_boxes)
@@ -417,7 +556,10 @@ function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::SimpleMesh) where {
                 _compute_signed_distance_with_index(leaf_center, mesh)
             nearest_triangle[leaf_idx] = closest_tri_idx
 
-            leaf_radius = box_size(tree, leaf_idx) * sqrt(3) / 2
+            # Use a tight boundary zone: only mark as boundary if very close to surface
+            # With boundary neighbor refinement creating uniform resolution near boundaries,
+            # we can use a tighter threshold (0.3) to minimize false positives
+            leaf_radius = box_size(tree, leaf_idx) * 0.5
             if abs(signed_dist) < leaf_radius
                 classification[leaf_idx] = 1
             elseif signed_dist < 0
@@ -441,7 +583,7 @@ Returns:
 - Negative if point is on the opposite side of the normal (inside)
 - Zero if point is exactly on the surface
 """
-function _compute_signed_distance(point::SVector{3, T}, mesh::SimpleMesh) where {T <: Real}
+function _compute_signed_distance(point::SVector{3,T}, mesh::SimpleMesh) where {T<:Real}
     min_dist = T(Inf)
     n = Meshes.nelements(mesh)
 
@@ -467,6 +609,9 @@ end
 Compute signed distance from a point to the closest triangle, returning both the
 distance and the index of the closest triangle.
 
+**BRUTE FORCE VERSION**: Checks all triangles in mesh. O(M) complexity.
+Use the octree-accelerated variant when available for O(log M + k) performance.
+
 Returns:
 - `(distance, closest_idx)` tuple where:
   - `distance > 0`: point is on the side of the normal (outside)
@@ -475,9 +620,9 @@ Returns:
   - `closest_idx`: 1-based index of the nearest triangle
 """
 function _compute_signed_distance_with_index(
-        point::SVector{3, T},
-        mesh::SimpleMesh,
-    ) where {T <: Real}
+    point::SVector{3,T},
+    mesh::SimpleMesh,
+) where {T<:Real}
     min_dist = T(Inf)
     closest_idx = 0
     n = Meshes.nelements(mesh)
@@ -528,7 +673,7 @@ point = SVector(0.5, 0.5, 0.5)
 is_inside = isinside(point, octree)
 ```
 """
-function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
+function isinside(point::SVector{3,T}, octree::TriangleOctree) where {T<:Real}
     isnothing(octree.leaf_classification) &&
         error("TriangleOctree must be built with classify_leaves=true")
 
@@ -544,8 +689,22 @@ function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real
         signed_dist = _compute_local_signed_distance(point, octree.mesh, triangles_in_leaf)
         return signed_dist < 0
     else
-        nearest_tri_idx = octree.leaf_nearest_triangle[leaf_idx]
-        signed_dist = _compute_signed_distance_to_triangle(point, octree.mesh, nearest_tri_idx)
+        # Boundary leaf with no local triangles - search neighboring leaves
+        # Since boundary neighbor refinement ensures uniform resolution near boundaries,
+        # a shallow search (depth=2) should suffice for most cases
+        nearby_triangles = _collect_nearby_triangles(octree.tree, leaf_idx, 2)
+
+        if isempty(nearby_triangles)
+            error("""
+                Cannot compute signed distance: no triangles found in leaf or neighbors.
+                Point: $point, Leaf: $leaf_idx
+
+                This can occur in edge cases with very coarse meshes or complex geometry.
+                Try reducing h_min for finer octree resolution.
+                """)
+        end
+
+        signed_dist = _compute_local_signed_distance(point, octree.mesh, nearby_triangles)
         return signed_dist < 0
     end
 end
@@ -565,10 +724,10 @@ we only check the k≈10-50 triangles in the point's octree leaf.
 Performance: Fused computation avoids redundant closest_point calculation.
 """
 function _compute_local_signed_distance(
-        point::SVector{3, T},
-        mesh::SimpleMesh,
-        tri_indices::Vector{Int},
-    ) where {T <: Real}
+    point::SVector{3,T},
+    mesh::SimpleMesh,
+    tri_indices::Vector{Int},
+) where {T<:Real}
     min_dist_sq = typemax(T)
     closest_idx = 0
     closest_pt = point
@@ -603,10 +762,10 @@ end
 Compute signed distance from point to a single triangle.
 """
 function _compute_signed_distance_to_triangle(
-        point::SVector{3, T},
-        mesh::SimpleMesh,
-        tri_idx::Int,
-    ) where {T <: Real}
+    point::SVector{3,T},
+    mesh::SimpleMesh,
+    tri_idx::Int,
+) where {T<:Real}
     v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
     closest_pt = closest_point_on_triangle(point, v1, v2, v3)
 
@@ -615,6 +774,65 @@ function _compute_signed_distance_to_triangle(
     sign = dot(to_point, normal) < 0 ? -1 : 1
 
     return sign * norm(to_point)
+end
+
+"""
+    _collect_nearby_triangles(
+        tree::SpatialOctree,
+        leaf_idx::Int,
+        max_depth::Int=2
+    ) -> Vector{Int}
+
+Collect all triangles from the given leaf and its neighbors up to max_depth levels.
+
+This function searches the leaf and neighboring leaves to build a local set of
+triangles for accurate signed distance computation near boundaries.
+
+# Arguments
+- `tree`: The spatial octree structure
+- `leaf_idx`: Index of the leaf to start from
+- `max_depth`: How many neighbor levels to search (1=face neighbors, 2=face+edge+corner)
+
+# Returns
+Vector of unique triangle indices from nearby leaves
+"""
+function _collect_nearby_triangles(
+    tree::SpatialOctree{Int,T},
+    leaf_idx::Int,
+    max_depth::Int=2,
+) where {T<:Real}
+    triangles = Set{Int}()
+    visited = Set{Int}()
+    to_visit = [(leaf_idx, 0)]  # (leaf_idx, depth)
+
+    while !isempty(to_visit)
+        current_idx, depth = popfirst!(to_visit)
+
+        current_idx ∈ visited && continue
+        push!(visited, current_idx)
+
+        # Only collect triangles from leaf nodes (internal nodes may have stale triangle lists)
+        if is_leaf(tree, current_idx)
+            for tri_idx in tree.element_lists[current_idx]
+                push!(triangles, tri_idx)
+            end
+        end
+
+        # If not at max depth, add neighbors
+        if depth < max_depth
+            # Check all 6 face neighbors (±x, ±y, ±z)
+            for direction in 1:6
+                neighbor_indices = find_neighbor(tree, current_idx, direction)
+                for neighbor_idx in neighbor_indices
+                    if neighbor_idx != 0 && neighbor_idx ∉ visited
+                        push!(to_visit, (neighbor_idx, depth + 1))
+                    end
+                end
+            end
+        end
+    end
+
+    return collect(triangles)
 end
 
 """
@@ -628,6 +846,6 @@ test_points = [SVector(randn(3)...) for _ in 1:1000]
 results = isinside(test_points, octree)  # Returns Vector{Bool}
 ```
 """
-function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}
+function isinside(points::Vector{SVector{3,T}}, octree::TriangleOctree) where {T<:Real}
     return [isinside(p, octree) for p in points]
 end

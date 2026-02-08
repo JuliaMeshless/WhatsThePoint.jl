@@ -28,7 +28,7 @@ export Point, coords, isinside, centroid, boundingbox, points
 export KNearestSearch, BallSearch, MetricBall, search, searchdists
 
 const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-const Angle{T} = Union{Quantity{T, NoDims, typeof(u"rad")}, Quantity{T, NoDims, typeof(u"°")}}
+const Angle{T} = Union{Quantity{T,NoDims,typeof(u"rad")},Quantity{T,NoDims,typeof(u"°")}}
 
 include("utils.jl")
 export metrics
@@ -71,7 +71,6 @@ export PointVolume
 
 include("boundary.jl")
 export PointBoundary, surfaces, namedsurfaces, names, normals, areas, hassurface
-export source_mesh, has_source_mesh, NoMesh
 
 include("cloud.jl")
 export PointCloud, boundary, volume, topology
@@ -114,9 +113,10 @@ using PrecompileTools
 @setup_workload begin
     using Unitful: m, °
     @compile_workload begin
-        b = PointBoundary(joinpath(@__DIR__, "precompile_tools_dummy.stl"))
+        mesh = GeoIO.load(joinpath(@__DIR__, "precompile_tools_dummy.stl")).geometry
+        b = PointBoundary(mesh)
         split_surface!(b, 75°)
-        cloud = discretize(b, ConstantSpacing(1m); alg = VanDerSandeFornberg())
+        cloud = discretize(b, ConstantSpacing(1m); alg=VanDerSandeFornberg())
     end
 end
 

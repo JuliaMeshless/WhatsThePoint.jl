@@ -1,34 +1,15 @@
-"""
-    import_surface(filepath::String)
-
-Import a surface mesh. Re-uses code from MeshBridge.jl, did not use their package because I needed to calculate face centers which they do not do.
-"""
-function import_surface(filepath::String)
-    geo = GeoIO.load(filepath)
-    mesh = geo.geometry
-    points = map(centroid, elements(mesh))
-    n = try
-        geo.normal
-    catch
-        compute_normals(points)
-    end
-    normals = map(x -> ustrip.(x / norm(x)), n)
-    area = map(Meshes.area, elements(mesh))
-    return points, normals, area, mesh
-end
-
 function export_cloud(filename::String, cloud::PointCloud)
     exportvtk(filename, to(boundary(cloud)), [normal(cloud)], ["normals"])
     return nothing
 end
 
 function exportvtk(
-        filename::String,
-        points::AbstractVector{V},
-        data::AbstractVector,
-        names::Vector;
-        triangulate = false,
-    ) where {V <: AbstractVector}
+    filename::String,
+    points::AbstractVector{V},
+    data::AbstractVector,
+    names::Vector;
+    triangulate=false,
+) where {V<:AbstractVector}
     # Strip units from points for VTK compatibility
     p = reduce(hcat, map(pt -> ustrip.(pt), points))
     cells = createvtkcells(p, triangulate)
@@ -40,7 +21,7 @@ function exportvtk(
     return nothing
 end
 
-function createvtkcells(coords, triangulate = true, nonconvex = false)
+function createvtkcells(coords, triangulate=true, nonconvex=false)
     # only save as points/vertexes
     return [MeshCell(VTKCellTypes.VTK_VERTEX, (i,)) for i in 1:size(coords, 2)]
 end
