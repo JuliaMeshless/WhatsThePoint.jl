@@ -90,7 +90,7 @@ include("discretization/spacings.jl")
 export AbstractSpacing, ConstantSpacing, LogLike, Power
 
 include("discretization/discretization.jl")
-export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer
+export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, OctreeRandom
 export discretize
 
 include("repel.jl")

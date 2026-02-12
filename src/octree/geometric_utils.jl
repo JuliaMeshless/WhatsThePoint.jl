@@ -41,11 +41,11 @@ Point on triangle surface closest to P (may be on edge or vertex).
 Ericson, "Real-Time Collision Detection", Chapter 5.1.5
 """
 function closest_point_on_triangle(
-        P::SVector{3, T},
-        v1::SVector{3, T},
-        v2::SVector{3, T},
-        v3::SVector{3, T},
-    ) where {T <: Real}
+    P::SVector{3,T},
+    v1::SVector{3,T},
+    v2::SVector{3,T},
+    v3::SVector{3,T},
+) where {T<:Real}
     # Triangle vertices
     a = v1
     b = v2
@@ -156,12 +156,12 @@ d = distance_point_triangle(P, v1, v2, v3, normal)
 ```
 """
 function distance_point_triangle(
-        P::SVector{3, T},
-        v1::SVector{3, T},
-        v2::SVector{3, T},
-        v3::SVector{3, T},
-        normal::SVector{3, T},
-    ) where {T <: Real}
+    P::SVector{3,T},
+    v1::SVector{3,T},
+    v2::SVector{3,T},
+    v3::SVector{3,T},
+    normal::SVector{3,T},
+) where {T<:Real}
     # Find closest point on triangle
     Q = closest_point_on_triangle(P, v1, v2, v3)
 
@@ -193,11 +193,11 @@ Compute unsigned distance from point P to triangle (v1, v2, v3).
 Unsigned distance (always positive or zero)
 """
 function distance_point_triangle(
-        P::SVector{3, T},
-        v1::SVector{3, T},
-        v2::SVector{3, T},
-        v3::SVector{3, T},
-    ) where {T <: Real}
+    P::SVector{3,T},
+    v1::SVector{3,T},
+    v2::SVector{3,T},
+    v3::SVector{3,T},
+) where {T<:Real}
     # Find closest point on triangle
     Q = closest_point_on_triangle(P, v1, v2, v3)
 
@@ -232,12 +232,12 @@ overlap along the given axis.
 `true` if intervals overlap (potential intersection), `false` if separated
 """
 @inline function _triangle_axis_test(
-        axis::SVector{3, T},
-        v0::SVector{3, T},
-        v1::SVector{3, T},
-        v2::SVector{3, T},
-        half::SVector{3, T},
-    ) where {T <: Real}
+    axis::SVector{3,T},
+    v0::SVector{3,T},
+    v1::SVector{3,T},
+    v2::SVector{3,T},
+    half::SVector{3,T},
+) where {T<:Real}
     # Project triangle vertices onto axis
     p0 = dot(v0, axis)
     p1 = dot(v1, axis)
@@ -281,12 +281,12 @@ If any axis separates the triangle and box, they don't intersect.
 Optimized with early-out tests. Average case is much faster than worst case.
 """
 function triangle_box_intersection(
-        v1::SVector{3, T},
-        v2::SVector{3, T},
-        v3::SVector{3, T},
-        box_min::SVector{3, T},
-        box_max::SVector{3, T},
-    ) where {T <: Real}
+    v1::SVector{3,T},
+    v2::SVector{3,T},
+    v3::SVector{3,T},
+    box_min::SVector{3,T},
+    box_max::SVector{3,T},
+) where {T<:Real}
     # Box center and half-extents
     box_center = (box_min + box_max) / 2
     box_half = (box_max - box_min) / 2
@@ -339,49 +339,49 @@ function triangle_box_intersection(
 
     # Test 3: Edge-edge cross products (9 tests)
     # X-axis × triangle edges
-    axis = SVector{3, T}(0, -e0[3], e0[2])
+    axis = SVector{3,T}(0, -e0[3], e0[2])
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
 
-    axis = SVector{3, T}(0, -e1[3], e1[2])
+    axis = SVector{3,T}(0, -e1[3], e1[2])
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
 
-    axis = SVector{3, T}(0, -e2[3], e2[2])
+    axis = SVector{3,T}(0, -e2[3], e2[2])
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
 
     # Y-axis × triangle edges
-    axis = SVector{3, T}(e0[3], 0, -e0[1])
+    axis = SVector{3,T}(e0[3], 0, -e0[1])
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
 
-    axis = SVector{3, T}(e1[3], 0, -e1[1])
+    axis = SVector{3,T}(e1[3], 0, -e1[1])
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
 
-    axis = SVector{3, T}(e2[3], 0, -e2[1])
+    axis = SVector{3,T}(e2[3], 0, -e2[1])
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
 
     # Z-axis × triangle edges
-    axis = SVector{3, T}(-e0[2], e0[1], 0)
+    axis = SVector{3,T}(-e0[2], e0[1], 0)
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
 
-    axis = SVector{3, T}(-e1[2], e1[1], 0)
+    axis = SVector{3,T}(-e1[2], e1[1], 0)
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
 
-    axis = SVector{3, T}(-e2[2], e2[1], 0)
+    axis = SVector{3,T}(-e2[2], e2[1], 0)
     if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
         return false
     end
@@ -429,21 +429,21 @@ boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
 ```
 """
 function boxes_intersected_by_triangle(
-        v1::SVector{3, T},
-        v2::SVector{3, T},
-        v3::SVector{3, T},
-        parent_min::SVector{3, T},
-        parent_size::T,
-        subdivision::Int = 2,
-    ) where {T <: Real}
+    v1::SVector{3,T},
+    v2::SVector{3,T},
+    v3::SVector{3,T},
+    parent_min::SVector{3,T},
+    parent_size::T,
+    subdivision::Int=2,
+) where {T<:Real}
     child_size = parent_size / subdivision
-    intersected = NTuple{3, Int}[]
+    intersected = NTuple{3,Int}[]
 
     # Check each child box
-    for k in 0:(subdivision - 1), j in 0:(subdivision - 1), i in 0:(subdivision - 1)
+    for k in 0:(subdivision-1), j in 0:(subdivision-1), i in 0:(subdivision-1)
         # Child box bounds
-        box_min = parent_min + SVector{3, T}(i, j, k) * child_size
-        box_max = box_min + SVector{3, T}(child_size, child_size, child_size)
+        box_min = parent_min + SVector{3,T}(i, j, k) * child_size
+        box_max = box_min + SVector{3,T}(child_size, child_size, child_size)
 
         # Test intersection
         if triangle_box_intersection(v1, v2, v3, box_min, box_max)
@@ -452,102 +452,4 @@ function boxes_intersected_by_triangle(
     end
 
     return intersected
-end
-
-#=============================================================================
-Ray-Triangle Intersection
-=============================================================================#
-
-"""
-    ray_triangle_intersection(
-        ray_origin::SVector{3,T},
-        ray_direction::SVector{3,T},
-        v1::SVector{3,T},
-        v2::SVector{3,T},
-        v3::SVector{3,T}
-    ) where {T<:Real} -> Union{T, Nothing}
-
-Test if a ray intersects a triangle using the Möller-Trumbore algorithm.
-
-# Arguments
-- `ray_origin`: Starting point of the ray
-- `ray_direction`: Direction vector of the ray (should be normalized)
-- `v1, v2, v3`: Triangle vertices in counterclockwise order
-
-# Returns
-- Distance `t` from ray origin to intersection point if ray intersects triangle (t ≥ 0)
-- `nothing` if no intersection
-
-# Algorithm
-Uses Möller-Trumbore algorithm for fast ray-triangle intersection.
-The intersection point is: `ray_origin + t * ray_direction`
-
-# References
-Möller & Trumbore, "Fast, Minimum Storage Ray-Triangle Intersection" (1997)
-
-# Example
-```julia
-using StaticArrays
-
-# Triangle
-v1 = SVector(0.0, 0.0, 0.0)
-v2 = SVector(1.0, 0.0, 0.0)
-v3 = SVector(0.0, 1.0, 0.0)
-
-# Ray pointing at triangle
-origin = SVector(0.25, 0.25, -1.0)
-direction = SVector(0.0, 0.0, 1.0)
-
-t = ray_triangle_intersection(origin, direction, v1, v2, v3)
-# t ≈ 1.0 (intersection at z = 0)
-```
-"""
-function ray_triangle_intersection(
-        ray_origin::SVector{3, T},
-        ray_direction::SVector{3, T},
-        v1::SVector{3, T},
-        v2::SVector{3, T},
-        v3::SVector{3, T},
-    ) where {T <: Real}
-    # Tolerance for parallel ray/triangle check
-    EPSILON = T(1e-8)
-
-    # Edge vectors
-    edge1 = v2 - v1
-    edge2 = v3 - v1
-
-    # Begin calculating determinant - also used to calculate u parameter
-    h = cross(ray_direction, edge2)
-    a = dot(edge1, h)
-
-    # If determinant is near zero, ray is parallel to triangle
-    if abs(a) < EPSILON
-        return nothing
-    end
-
-    f = 1 / a
-    s = ray_origin - v1
-
-    # Calculate u parameter and test bounds
-    u = f * dot(s, h)
-    if u < 0 || u > 1
-        return nothing
-    end
-
-    # Calculate v parameter and test bounds
-    q = cross(s, edge1)
-    v = f * dot(ray_direction, q)
-    if v < 0 || u + v > 1
-        return nothing
-    end
-
-    # Calculate t to find intersection point
-    t = f * dot(edge2, q)
-
-    # Ray intersection (t >= 0 means intersection ahead of ray origin)
-    if t >= EPSILON
-        return t
-    else
-        return nothing
-    end
 end

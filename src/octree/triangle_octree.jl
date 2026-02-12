@@ -41,6 +41,12 @@ struct TriangleOctree{M<:Manifold,C<:CRS,T<:Real}
     leaf_classification::Union{Nothing,Vector{Int8}}
 end
 
+# Leaf classification tags
+const LEAF_UNKNOWN::Int8 = -1
+const LEAF_EXTERIOR::Int8 = 0
+const LEAF_BOUNDARY::Int8 = 1
+const LEAF_INTERIOR::Int8 = 2
+
 #=============================================================================
 UTILITIES
 =============================================================================#
@@ -240,10 +246,8 @@ end
 #=============================================================================
 CONSTRUCTION (BUILD-TIME ONLY)
 
-Ray casting is used here to classify original leaves before balancing.
-Performance is acceptable because this happens once during octree build.
-The implementation uses AABB-ray intersection to filter candidate triangles
-from ~70k to ~200 per ray.
+Signed-distance classification is used for empty leaf labeling.
+Classification is performed on the final balanced tree for correctness.
 =============================================================================#
 
 """
@@ -268,7 +272,7 @@ Build an octree spatial index for a SimpleMesh.
 3. Distribute triangles to boxes using SAT intersection tests
 4. Recursively subdivide boxes exceeding triangle threshold
 5. Balance octree to ensure 2:1 refinement constraint
-6. (Optional) Classify empty leaves via BFS from boundary
+6. (Optional) Classify empty leaves via signed-distance tests
 
 # Returns
 `TriangleOctree{M,C,Float64}` ready for fast spatial queries
@@ -329,21 +333,14 @@ function TriangleOctree(
 
     _subdivide_triangle_octree!(tree, mesh, 1, criterion)
 
-    # Classify leaves BEFORE balancing (only the original leaves from subdivision)
-    pre_balance_classification = if classify_leaves
-        _classify_leaves(tree, mesh)
-    else
-        nothing
-    end
-
     # Balance octree to ensure 2:1 refinement constraint
-    # This will subdivide some leaves, creating new empty leaves
+    # This may subdivide leaves and create new empty leaves.
     balance_octree!(tree, size_criterion)
 
-    # After balancing: propagate classification from parent to new children
-    # This avoids expensive ray casting for the 23k+ new empty leaves!
+    # Classify FINAL leaves after balancing for correctness.
+    # (More expensive than propagation, but robust.)
     classification = if classify_leaves
-        _propagate_classification_after_balance(tree, pre_balance_classification)
+        _classify_leaves(tree, mesh)
     else
         nothing
     end
@@ -420,171 +417,208 @@ function _subdivide_triangle_octree!(
     return
 end
 
+@inline function _point_box_distance_sq(
+    point::SVector{3,T},
+    bbox_min::SVector{3,T},
+    bbox_max::SVector{3,T},
+) where {T<:Real}
+    dx = point[1] < bbox_min[1] ? (bbox_min[1] - point[1]) :
+         (point[1] > bbox_max[1] ? (point[1] - bbox_max[1]) : zero(T))
+    dy = point[2] < bbox_min[2] ? (bbox_min[2] - point[2]) :
+         (point[2] > bbox_max[2] ? (point[2] - bbox_max[2]) : zero(T))
+    dz = point[3] < bbox_min[3] ? (bbox_min[3] - point[3]) :
+         (point[3] > bbox_max[3] ? (point[3] - bbox_max[3]) : zero(T))
+    return dx * dx + dy * dy + dz * dz
+end
 
-"""
-    _collect_triangles_along_ray!(
-        candidate_triangles::Set{Int},
-        tree::SpatialOctree{Int,T},
-        point::SVector{3,T},
-        ray_direction::SVector{3,T}
-    ) where {T<:Real} -> Nothing
+@inline function _leaf_class_from_signed_distance(sd, tol)
+    if abs(sd) <= tol
+        return LEAF_BOUNDARY
+    end
+    return sd < 0 ? LEAF_INTERIOR : LEAF_EXTERIOR
+end
 
-Collect candidate triangles along a ray path using octree spatial acceleration.
-Mutates the `candidate_triangles` set to avoid allocations.
+@inline function _update_closest_triangle!(
+    point::SVector{3,T},
+    mesh::SimpleMesh,
+    tri_idx::Int,
+    best_dist_sq::Base.RefValue{T},
+    closest_idx::Base.RefValue{Int},
+    closest_pt::Base.RefValue{SVector{3,T}},
+) where {T<:Real}
+    v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
+    cp = closest_point_on_triangle(point, v1, v2, v3)
+    dvec = point - cp
+    d2 = dot(dvec, dvec)
 
-Simplified for construction-time use (called once during octree build).
-"""
-function _collect_triangles_along_ray!(
-        candidate_triangles::Set{Int},
-        tree::SpatialOctree{Int, T},
-        point::SVector{3, T},
-        ray_direction::SVector{3, T},
-    ) where {T <: Real}
-    empty!(candidate_triangles)
-
-    # Check each leaf box for ray intersection
-    @inbounds for leaf_idx in all_leaves(tree)
-        bbox_min, bbox_max = box_bounds(tree, leaf_idx)
-
-        # Fast AABB-ray intersection test using slab method
-        t_min = typemin(T)
-        t_max = typemax(T)
-
-        # Check each axis
-        for axis in 1:3
-            if abs(ray_direction[axis]) > T(1e-10)
-                t1 = (bbox_min[axis] - point[axis]) / ray_direction[axis]
-                t2 = (bbox_max[axis] - point[axis]) / ray_direction[axis]
-
-                if t1 > t2
-                    t1, t2 = t2, t1
-                end
-
-                t_min = max(t_min, t1)
-                t_max = min(t_max, t2)
-
-                if t_min > t_max
-                    @goto next_box
-                end
-            else
-                # Ray parallel to axis - check bounds
-                if point[axis] < bbox_min[axis] || point[axis] > bbox_max[axis]
-                    @goto next_box
-                end
-            end
-        end
-
-        # Ray intersects box if t_max >= 0
-        if t_max >= 0
-            for tri_idx in tree.element_lists[leaf_idx]
-                push!(candidate_triangles, tri_idx)
-            end
-        end
-
-        @label next_box
+    if d2 < best_dist_sq[]
+        best_dist_sq[] = d2
+        closest_idx[] = tri_idx
+        closest_pt[] = cp
     end
 
     return nothing
 end
 
-"""
-    _classify_point_ray_casting(
-        point::SVector{3,T},
-        mesh::SimpleMesh,
-        tree::SpatialOctree{Int,T}
-    ) where {T<:Real} -> Bool
+function _nearest_triangle_octree!(
+    point::SVector{3,T},
+    tree::SpatialOctree{Int,T},
+    mesh::SimpleMesh,
+    box_idx::Int,
+    visited::BitVector,
+    best_dist_sq::Base.RefValue{T},
+    closest_idx::Base.RefValue{Int},
+    closest_pt::Base.RefValue{SVector{3,T}},
+) where {T<:Real}
+    bbox_min, bbox_max = box_bounds(tree, box_idx)
+    _point_box_distance_sq(point, bbox_min, bbox_max) > best_dist_sq[] && return
 
-Classify a point as inside (true) or outside (false) using ray casting.
+    if is_leaf(tree, box_idx)
+        @inbounds for tri_idx in tree.element_lists[box_idx]
+            visited[tri_idx] && continue
+            visited[tri_idx] = true
 
-Simplified for construction-time use (called once during octree build).
-Uses ray casting for robust classification that handles thin features,
-high curvature, and concave geometry.
-
-# Algorithm
-1. Cast ray from point in +X direction
-2. Collect candidate triangles along ray using octree acceleration
-3. Count ray-triangle intersections: odd = inside, even = outside
-"""
-function _classify_point_ray_casting(
-        point::SVector{3, T},
-        mesh::SimpleMesh,
-        tree::SpatialOctree{Int, T},
-    ) where {T <: Real}
-    # Ray direction (along +X axis for simplicity)
-    ray_direction = SVector{3, T}(1, 0, 0)
-
-    # Collect candidate triangles using octree acceleration
-    candidate_triangles = Set{Int}()
-    _collect_triangles_along_ray!(candidate_triangles, tree, point, ray_direction)
-
-    # Count ray-triangle intersections
-    intersection_count = 0
-
-    @inbounds for tri_idx in candidate_triangles
-        v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
-        t = ray_triangle_intersection(point, ray_direction, v1, v2, v3)
-
-        if t !== nothing
-            intersection_count += 1
+            _update_closest_triangle!(
+                point,
+                mesh,
+                tri_idx,
+                best_dist_sq,
+                closest_idx,
+                closest_pt,
+            )
         end
+        return
     end
 
-    # Odd count = inside, even count = outside
-    return isodd(intersection_count)
+    # For efficiency, recurse first into children that are closer to the query point.
+    child_data = Tuple{T,Int}[]
+    children = tree.children[box_idx]
+    @inbounds for child_idx in children
+        child_idx == 0 && continue
+        cmin, cmax = box_bounds(tree, child_idx)
+        d2 = _point_box_distance_sq(point, cmin, cmax)
+        d2 <= best_dist_sq[] && push!(child_data, (d2, child_idx))
+    end
+
+    sort!(child_data; by=first)
+    @inbounds for (_, child_idx) in child_data
+        _nearest_triangle_octree!(
+            point,
+            tree,
+            mesh,
+            child_idx,
+            visited,
+            best_dist_sq,
+            closest_idx,
+            closest_pt,
+        )
+    end
 end
 
 """
-    _propagate_classification_after_balance(
-        tree::SpatialOctree{Int,T},
-        pre_balance_classification::Vector{Int8}
-    ) -> Vector{Int8}
+    _compute_signed_distance_octree(point, mesh, tree) -> T
 
-After octree balancing, propagate classification from parents to newly created children.
+Compute signed distance to the closest triangle using octree branch-and-bound.
 
-# Key Insight
-When balancing subdivides a leaf, new empty children inherit the parent's classification:
-- Interior parent → interior children
-- Exterior parent → exterior children
-- Only leaves that GAIN triangles become boundary leaves
-
-This simple inheritance rule eliminates expensive ray casting for ~23k new empty leaves!
-
-# Algorithm
-For each new leaf:
-- Contains triangles → boundary (1)
-- Empty → inherit parent classification (0 or 2)
+This avoids global O(M) triangle scans by searching only relevant octree regions.
 """
-function _propagate_classification_after_balance(
-        tree::SpatialOctree{Int, T},
-        pre_balance_classification::Vector{Int8},
-    ) where {T <: Real}
-    n_boxes = length(tree.element_lists)
-    classification = zeros(Int8, n_boxes)
+function _compute_signed_distance_octree(
+    point::SVector{3,T},
+    mesh::SimpleMesh,
+    tree::SpatialOctree{Int,T},
+) where {T<:Real}
+    n_triangles = Meshes.nelements(mesh)
+    visited = falses(n_triangles)
 
-    # Copy pre-balance classifications
-    n_pre_balance = length(pre_balance_classification)
-    classification[1:n_pre_balance] .= pre_balance_classification
+    best_dist_sq = Ref(typemax(T))
+    closest_idx = Ref(0)
+    closest_pt = Ref(point)
 
-    # Classify new leaves created during balancing
-    for leaf_idx in all_leaves(tree)
-        if leaf_idx <= n_pre_balance
-            # Old leaf - already classified
-            continue
-        end
+    _nearest_triangle_octree!(
+        point,
+        tree,
+        mesh,
+        1,
+        visited,
+        best_dist_sq,
+        closest_idx,
+        closest_pt,
+    )
 
-        triangles_in_leaf = tree.element_lists[leaf_idx]
-
-        if !isempty(triangles_in_leaf)
-            # Gained triangles → boundary
-            classification[leaf_idx] = 1
-        else
-            # Empty leaf → inherit from parent
-            parent_idx = tree.parent[leaf_idx]
-            classification[leaf_idx] = pre_balance_classification[parent_idx]
-        end
+    if closest_idx[] == 0
+        # Degenerate case: no triangles found
+        return typemax(T)
     end
 
-    return classification
+    n = _get_triangle_normal(mesh, closest_idx[])
+    sign = dot(point - closest_pt[], n) < 0 ? -one(T) : one(T)
+    return sign * sqrt(best_dist_sq[])
+end
+
+"""
+    _classify_empty_leaf_conservative(tree, mesh, leaf_idx) -> Int8
+
+Conservative classification for empty leaves.
+
+- `2` (interior): center and all 8 corners classify inside
+- `0` (exterior): center and all 8 corners classify outside
+- `1` (boundary): mixed results
+
+This avoids falsely labeling a partially-outside leaf as interior.
+
+Implementation uses octree-accelerated signed distance, not ray casting.
+"""
+function _classify_empty_leaf_conservative(
+    tree::SpatialOctree{Int,T},
+    mesh::SimpleMesh,
+    leaf_idx::Int,
+) where {T<:Real}
+    bbox_min, bbox_max = box_bounds(tree, leaf_idx)
+    h = box_size(tree, leaf_idx)
+    δ = max(T(1e-9), h * T(1e-6))
+    tol = max(T(1e-8), h * T(1e-6))
+
+    center = box_center(tree, leaf_idx)
+    sd_center = _compute_signed_distance_octree(center, mesh, tree)
+
+    # If center is far enough from the surface, classify directly using Lipschitz bound.
+    half_diag = (sqrt(T(3)) * h) / T(2)
+    if abs(sd_center) > half_diag + tol
+        return _leaf_class_from_signed_distance(sd_center, tol)
+    end
+
+    # Slightly inset corners to reduce exact-on-surface degeneracy
+    x0, x1 = bbox_min[1] + δ, bbox_max[1] - δ
+    y0, y1 = bbox_min[2] + δ, bbox_max[2] - δ
+    z0, z1 = bbox_min[3] + δ, bbox_max[3] - δ
+
+    probes = SVector{3,T}[
+        center,
+        SVector{3,T}(x0, y0, z0),
+        SVector{3,T}(x1, y0, z0),
+        SVector{3,T}(x0, y1, z0),
+        SVector{3,T}(x1, y1, z0),
+        SVector{3,T}(x0, y0, z1),
+        SVector{3,T}(x1, y0, z1),
+        SVector{3,T}(x0, y1, z1),
+        SVector{3,T}(x1, y1, z1),
+    ]
+
+    first_class = _leaf_class_from_signed_distance(
+        _compute_signed_distance_octree(probes[1], mesh, tree),
+        tol,
+    )
+    first_class == LEAF_BOUNDARY && return LEAF_BOUNDARY
+
+    @inbounds for i in 2:length(probes)
+        cls_i = _leaf_class_from_signed_distance(
+            _compute_signed_distance_octree(probes[i], mesh, tree),
+            tol,
+        )
+        cls_i != first_class && return LEAF_BOUNDARY
+    end
+
+    return first_class
 end
 
 """
@@ -592,28 +626,28 @@ end
 
 Classify octree leaves as exterior (0), boundary (1), or interior (2).
 
-Uses ray casting for robust classification that handles thin features,
-high curvature, and concave geometry.
+Uses octree-accelerated signed distance for robust classification.
 
 # Returns
-- `classification::Vector{Int8}`: Classification for each box (0=exterior, 1=boundary, 2=interior)
+- `classification::Vector{Int8}`: Classification for each box
+    - `-1`: Internal node (not a leaf, unclassified)
+    - `0`: Exterior leaf
+    - `1`: Boundary leaf
+    - `2`: Interior leaf
 """
 function _classify_leaves(tree::SpatialOctree{Int,T}, mesh::SimpleMesh) where {T<:Real}
     n_boxes = length(tree.element_lists)
-    classification = zeros(Int8, n_boxes)
+    classification = fill(LEAF_UNKNOWN, n_boxes)
 
     for leaf_idx in all_leaves(tree)
         triangles_in_leaf = tree.element_lists[leaf_idx]
 
         if !isempty(triangles_in_leaf)
             # Leaf contains triangles → boundary
-            classification[leaf_idx] = 1
+            classification[leaf_idx] = LEAF_BOUNDARY
         else
-            # Empty leaf → classify using ray casting
-            leaf_center = box_center(tree, leaf_idx)
-            is_inside = _classify_point_ray_casting(leaf_center, mesh, tree)
-
-            classification[leaf_idx] = is_inside ? Int8(2) : Int8(0)
+            # Empty leaf → conservative center+corner classification
+            classification[leaf_idx] = _classify_empty_leaf_conservative(tree, mesh, leaf_idx)
         end
     end
 
@@ -630,7 +664,7 @@ num_triangles(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
 QUERIES (RUN-TIME, PERFORMANCE CRITICAL)
 
 isinside() is called thousands of times during discretization.
-CRITICAL: NO ray casting here! Only cached classification + local signed distance.
+Common path uses cached classification or local signed distance.
 
 Performance:
 - Exterior/interior leaves: O(1) - single array lookup
@@ -672,10 +706,10 @@ function isinside(point::SVector{3,T}, octree::TriangleOctree) where {T<:Real}
     classification = octree.leaf_classification[leaf_idx]
 
     # Use leaf classification for clear cases
-    classification == Int8(0) && return false  # Exterior
-    classification == Int8(2) && return true   # Interior
+    classification == LEAF_EXTERIOR && return false
+    classification == LEAF_INTERIOR && return true
 
-    # For boundary leaves (classification == 1), compute signed distance
+    # For boundary leaves, compute signed distance
     # This is fast because boundary leaves contain only ~10-50 triangles
     triangles_in_leaf = octree.tree.element_lists[leaf_idx]
     if !isempty(triangles_in_leaf)
@@ -683,8 +717,9 @@ function isinside(point::SVector{3,T}, octree::TriangleOctree) where {T<:Real}
         return signed_dist < 0
     end
 
-    # Shouldn't reach here, but default to false
-    return false
+    # Empty boundary leaf (conservative mixed classification):
+    # use signed-distance fallback for this query point.
+    return _compute_signed_distance_octree(point, octree.mesh, octree.tree) < 0
 end
 
 """
@@ -706,28 +741,28 @@ function _compute_local_signed_distance(
     mesh::SimpleMesh,
     tri_indices::Vector{Int},
 ) where {T<:Real}
-    min_dist_sq = typemax(T)
-    closest_idx = 0
-    closest_pt = point
+    best_dist_sq = Ref(typemax(T))
+    closest_idx = Ref(0)
+    closest_pt = Ref(point)
 
     @inbounds for tri_idx in tri_indices
-        v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
-        cp = closest_point_on_triangle(point, v1, v2, v3)
-        diff = point - cp
-        dist_sq = dot(diff, diff)
-
-        if dist_sq < min_dist_sq
-            min_dist_sq = dist_sq
-            closest_idx = tri_idx
-            closest_pt = cp
-        end
+        _update_closest_triangle!(
+            point,
+            mesh,
+            tri_idx,
+            best_dist_sq,
+            closest_idx,
+            closest_pt,
+        )
     end
 
-    to_point = point - closest_pt
-    normal = _get_triangle_normal(mesh, closest_idx)
+    closest_idx[] == 0 && return typemax(T)
+
+    to_point = point - closest_pt[]
+    normal = _get_triangle_normal(mesh, closest_idx[])
     sign = dot(to_point, normal) < 0 ? -1 : 1
 
-    return sign * sqrt(min_dist_sq)
+    return sign * sqrt(best_dist_sq[])
 end
 
 
