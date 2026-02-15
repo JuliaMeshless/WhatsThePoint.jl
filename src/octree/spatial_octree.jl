@@ -500,7 +500,6 @@ function find_boxes_at_coords(
             return [current]
         end
     end
-    return
 end
 
 #=============================================================================
