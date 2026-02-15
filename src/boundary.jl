@@ -35,6 +35,15 @@ function PointBoundary(points)
     return PointBoundary(points, normals, areas)
 end
 
+function PointBoundary(filepath::String)
+    points, normals, areas, _ = import_surface(filepath)
+    surf = PointSurface(points, normals, areas)
+    M = manifold(surf)
+    C = crs(surf)
+    surfaces = LittleDict{Symbol,AbstractSurface{M,C}}(:surface1 => surf)
+    return PointBoundary(surfaces)
+end
+
 """
     PointBoundary(mesh::SimpleMesh)
 Create a `PointBoundary` from a `SimpleMesh` 

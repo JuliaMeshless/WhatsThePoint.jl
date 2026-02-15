@@ -1,3 +1,17 @@
+function import_surface(filepath::String)
+    geo = GeoIO.load(filepath)
+    mesh = geo.geometry
+    points = map(centroid, elements(mesh))
+    n = try
+        geo.normal
+    catch
+        compute_normals(points)
+    end
+    normals = map(x -> ustrip.(x / norm(x)), n)
+    area = map(Meshes.area, elements(mesh))
+    return points, normals, area, mesh
+end
+
 function export_cloud(filename::String, cloud::PointCloud)
     exportvtk(filename, to(boundary(cloud)), [normal(cloud)], ["normals"])
     return nothing

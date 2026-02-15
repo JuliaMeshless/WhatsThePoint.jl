@@ -36,6 +36,7 @@
 
     # Test orient_normals! with PointCloud
     cloud = PointCloud(PointBoundary(circle2D))
+    orient_normals!(cloud; k=k)  # Orient first to get consistent starting state
     original_normals = copy(normal(cloud[:surface1]))
 
     normals_ref = normal(cloud[:surface1])
@@ -94,6 +95,7 @@ end
 
     # Test orient_normals! with PointCloud
     cloud = PointCloud(PointBoundary(sphere3d))
+    orient_normals!(cloud; k=k)  # Orient first to get consistent starting state
     original_normals = copy(normal(cloud[:surface1]))
 
     normals_ref = normal(cloud[:surface1])

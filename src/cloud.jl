@@ -23,6 +23,7 @@ function PointCloud(boundary::PointBoundary{M, C}) where {M, C}
     return PointCloud(deepcopy(boundary), vol, NoTopology())
 end
 
+PointCloud(filepath::String) = PointCloud(PointBoundary(filepath))
 
 Base.length(cloud::PointCloud) = length(boundary(cloud)) + length(volume(cloud))
 Base.size(cloud::PointCloud) = (length(cloud),)
