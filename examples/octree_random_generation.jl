@@ -4,6 +4,7 @@ using Printf
 using GeoIO
 using StaticArrays
 using Meshes
+using GLMakie
 
 # This example demonstrates the OctreeRandom node generation algorithm
 # which uses octree classification to efficiently generate random points
