@@ -2,6 +2,7 @@
 # These test triangle-point distance and triangle-box intersection
 
 @testitem "Closest Point on Triangle" setup = [CommonImports] begin
+    using WhatsThePoint: closest_point_on_triangle
     # Test 1: Point directly above triangle center
     v1 = SVector(0.0, 0.0, 0.0)
     v2 = SVector(1.0, 0.0, 0.0)
@@ -49,6 +50,7 @@
 end
 
 @testitem "Distance Point to Triangle" setup = [CommonImports] begin
+    using WhatsThePoint: distance_point_triangle
     # Simple triangle in xy-plane
     v1 = SVector(0.0, 0.0, 0.0)
     v2 = SVector(1.0, 0.0, 0.0)
@@ -66,6 +68,7 @@ end
 end
 
 @testitem "Triangle-Box Intersection" setup = [CommonImports] begin
+    using WhatsThePoint: triangle_box_intersection
     # Box: [0,1]³
     box_min = SVector(0.0, 0.0, 0.0)
     box_max = SVector(1.0, 1.0, 1.0)
@@ -84,6 +87,7 @@ end
 end
 
 @testitem "Boxes Intersected by Triangle" setup = [CommonImports] begin
+    using WhatsThePoint: boxes_intersected_by_triangle
     # Parent box: [0,10]³ subdivided into 2³ = 8 children
     parent_min = SVector(0.0, 0.0, 0.0)
     parent_size = 10.0
@@ -125,6 +129,7 @@ end
 end
 
 @testitem "Signed Distance Point to Triangle" setup = [CommonImports] begin
+    using WhatsThePoint: distance_point_triangle
     # Triangle in xy-plane
     v1 = SVector(0.0, 0.0, 0.0)
     v2 = SVector(1.0, 0.0, 0.0)

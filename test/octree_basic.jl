@@ -1,10 +1,8 @@
 # Basic tests for generic spatial octree implementation
 
-using WhatsThePoint
-using StaticArrays
-using Test
+@testitem "SpatialOctree Construction" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, is_leaf, has_children
 
-@testset "SpatialOctree Construction" begin
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -15,7 +13,9 @@ using Test
     @test !has_children(octree, 1)
 end
 
-@testset "Box Geometry" begin
+@testitem "SpatialOctree Box Geometry" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, box_center, box_size, box_bounds
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -29,7 +29,9 @@ end
     @test max_corner ≈ SVector(10.0, 10.0, 10.0)
 end
 
-@testset "Subdivision" begin
+@testitem "SpatialOctree Subdivision" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, is_leaf, has_children, box_size, box_center
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -56,7 +58,9 @@ end
     @test center_last ≈ SVector(7.5, 7.5, 7.5)
 end
 
-@testset "Point Query" begin
+@testitem "SpatialOctree Point Query" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, find_leaf, is_leaf
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -84,7 +88,9 @@ end
     @test is_leaf(octree, leaf)
 end
 
-@testset "Neighbor Finding" begin
+@testitem "SpatialOctree Neighbor Finding" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, find_neighbor
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -108,7 +114,9 @@ end
     @test isempty(neighbors_boundary)
 end
 
-@testset "Element Storage" begin
+@testitem "SpatialOctree Element Storage" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, num_elements
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -135,7 +143,10 @@ end
     @test length(octree.element_lists[1]) == 0
 end
 
-@testset "Subdivision Criteria" begin
+@testitem "SpatialOctree Subdivision Criteria" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, should_subdivide,
+        MaxElementsCriterion, SizeCriterion, AndCriterion
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -166,7 +177,9 @@ end
     @test should_subdivide(criterion6, octree, 1) == false
 end
 
-@testset "Leaf Iteration" begin
+@testitem "SpatialOctree Leaf Iteration" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, all_leaves, is_leaf, has_children
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -190,7 +203,10 @@ end
     @test !any(has_children(octree, idx) for idx in leaves)
 end
 
-@testset "Octree Balancing" begin
+@testitem "SpatialOctree Balancing" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, all_leaves, balance_octree!,
+        SizeCriterion, needs_balancing
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -217,7 +233,9 @@ end
     end
 end
 
-@testset "Bounding Box" begin
+@testitem "SpatialOctree Bounding Box" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, bounding_box
+
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
@@ -225,5 +243,3 @@ end
     @test min_corner ≈ SVector(0.0, 0.0, 0.0)
     @test max_corner ≈ SVector(10.0, 10.0, 10.0)
 end
-
-println("✓ All basic octree tests passed!")
