@@ -465,7 +465,6 @@ function _nearest_triangle_octree!(
     tree::SpatialOctree{Int,T},
     mesh::SimpleMesh,
     box_idx::Int,
-    visited::BitVector,
     best_dist_sq::Base.RefValue{T},
     closest_idx::Base.RefValue{Int},
     closest_pt::Base.RefValue{SVector{3,T}},
@@ -475,9 +474,6 @@ function _nearest_triangle_octree!(
 
     if is_leaf(tree, box_idx)
         @inbounds for tri_idx in tree.element_lists[box_idx]
-            visited[tri_idx] && continue
-            visited[tri_idx] = true
-
             _update_closest_triangle!(
                 point,
                 mesh,
@@ -490,29 +486,68 @@ function _nearest_triangle_octree!(
         return
     end
 
-    # For efficiency, recurse first into children that are closer to the query point.
-    child_data = Tuple{T,Int}[]
+    # Collect children with distances into stack-allocated buffer (max 8 children).
     children = tree.children[box_idx]
+    dists = MVector{8,T}(ntuple(_ -> typemax(T), Val(8)))
+    idxs = MVector{8,Int}(ntuple(_ -> 0, Val(8)))
+    n_valid = 0
     @inbounds for child_idx in children
         child_idx == 0 && continue
         cmin, cmax = box_bounds(tree, child_idx)
         d2 = _point_box_distance_sq(point, cmin, cmax)
-        d2 <= best_dist_sq[] && push!(child_data, (d2, child_idx))
+        if d2 <= best_dist_sq[]
+            n_valid += 1
+            # Insertion sort into sorted position
+            pos = n_valid
+            while pos > 1 && d2 < dists[pos - 1]
+                dists[pos] = dists[pos - 1]
+                idxs[pos] = idxs[pos - 1]
+                pos -= 1
+            end
+            dists[pos] = d2
+            idxs[pos] = child_idx
+        end
     end
 
-    sort!(child_data; by=first)
-    @inbounds for (_, child_idx) in child_data
+    @inbounds for i in 1:n_valid
         _nearest_triangle_octree!(
             point,
             tree,
             mesh,
-            child_idx,
-            visited,
+            idxs[i],
             best_dist_sq,
             closest_idx,
             closest_pt,
         )
     end
+end
+
+"""
+    _compute_signed_distance(point::SVector{3,T}, mesh::SimpleMesh) -> T
+
+Brute-force signed distance from a point to the closest triangle in the mesh.
+Positive if outside (on the side of the normal), negative if inside.
+
+Used as ground-truth reference in tests. O(M) complexity.
+"""
+function _compute_signed_distance(point::SVector{3,T}, mesh::SimpleMesh) where {T<:Real}
+    min_dist = T(Inf)
+    n = Meshes.nelements(mesh)
+
+    for i in 1:n
+        v1, v2, v3 = _get_triangle_vertices(mesh, i)
+        closest_pt = closest_point_on_triangle(point, v1, v2, v3)
+        dist = norm(point - closest_pt)
+
+        if dist < abs(min_dist)
+            to_point = point - closest_pt
+            normal_i = _get_triangle_normal(mesh, i)
+            sign = dot(to_point, normal_i) >= 0 ? 1 : -1
+            min_dist = sign * dist
+        end
+    end
+
+    return min_dist
 end
 
 """
@@ -527,9 +562,6 @@ function _compute_signed_distance_octree(
     mesh::SimpleMesh,
     tree::SpatialOctree{Int,T},
 ) where {T<:Real}
-    n_triangles = Meshes.nelements(mesh)
-    visited = falses(n_triangles)
-
     best_dist_sq = Ref(typemax(T))
     closest_idx = Ref(0)
     closest_pt = Ref(point)
@@ -539,7 +571,6 @@ function _compute_signed_distance_octree(
         tree,
         mesh,
         1,
-        visited,
         best_dist_sq,
         closest_idx,
         closest_pt,
@@ -693,13 +724,15 @@ is_inside = isinside(point, octree)
 ```
 """
 function isinside(point::SVector{3,T}, octree::TriangleOctree) where {T<:Real}
-    isnothing(octree.leaf_classification) &&
-        error("TriangleOctree must be built with classify_leaves=true")
-
     # Fast rejection: if point is outside bounding box, it's definitely outside
     bbox_min, bbox_max = box_bounds(octree.tree, 1)
     if any(point .< bbox_min) || any(point .> bbox_max)
         return false
+    end
+
+    # Without leaf classification, fall back to octree-accelerated signed distance
+    if isnothing(octree.leaf_classification)
+        return _compute_signed_distance_octree(point, octree.mesh, octree.tree) < 0
     end
 
     leaf_idx = find_leaf(octree.tree, point)
@@ -779,5 +812,5 @@ results = isinside(test_points, octree)  # Returns Vector{Bool}
 ```
 """
 function isinside(points::Vector{SVector{3,T}}, octree::TriangleOctree) where {T<:Real}
-    return [isinside(p, octree) for p in points]
+    return tmap(p -> isinside(p, octree), points)
 end

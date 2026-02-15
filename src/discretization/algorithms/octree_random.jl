@@ -164,11 +164,11 @@ function _discretize_volume(
     for leaf_idx in all_leaves(alg.octree.tree)
         classification = alg.octree.leaf_classification[leaf_idx]
 
-        if classification == Int8(2)  # Interior
+        if classification == LEAF_INTERIOR
             push!(interior_leaves, leaf_idx)
             box_sz = box_size(alg.octree.tree, leaf_idx)
             push!(interior_volumes, box_sz^3)
-        elseif classification == Int8(1)  # Boundary
+        elseif classification == LEAF_BOUNDARY
             push!(boundary_leaves, leaf_idx)
             box_sz = box_size(alg.octree.tree, leaf_idx)
             push!(boundary_volumes, box_sz^3)
