@@ -1,8 +1,8 @@
 @testsnippet CommonImports begin
     using WhatsThePoint
     using WhatsThePoint: volume, surfaces, topology
-    using Meshes
-    using Meshes: Euclidean
+    import Meshes
+    using Meshes: Euclidean, 🌐, Vec, SimpleMesh, connect, Box, PointSet, Geometry, to
     using Random
     using FileIO
     using Unitful
