@@ -4,21 +4,19 @@
 # spatial tree implementations. Designed for future extraction to
 # standalone SpatialTrees.jl package.
 
-using StaticArrays
-
 #=============================================================================
 Abstract Types
 =============================================================================#
 
 """
-    AbstractSpatialTree{N,T,C}
+    AbstractSpatialTree{N,E,T}
 
 Abstract type for N-dimensional spatial trees.
 
 # Type Parameters
 - `N::Int`: Spatial dimensionality (2 for quadtree, 3 for octree)
-- `T`: Element type stored in tree (e.g., Int for indices)
-- `C<:Real`: Coordinate numeric type (Float64, Float32, etc.)
+- `E`: Element type stored in tree (e.g., Int for indices)
+- `T<:Real`: Coordinate numeric type (Float64, Float32, etc.)
 
 # Interface Requirements
 
@@ -31,14 +29,14 @@ Optional:
 - `find_neighbors(tree, box_idx, direction)` - Neighbor queries
 - `balance!(tree)` - Enforce refinement constraints
 """
-abstract type AbstractSpatialTree{N, T, C <: Real} end
+abstract type AbstractSpatialTree{N, E, T <: Real} end
 
 """
-    AbstractOctree{T,C} = AbstractSpatialTree{3,T,C}
+    AbstractOctree{E,T} = AbstractSpatialTree{3,E,T}
 
 Convenience alias for 3D spatial trees (octrees).
 """
-const AbstractOctree{T, C} = AbstractSpatialTree{3, T, C}
+const AbstractOctree{E, T} = AbstractSpatialTree{3, E, T}
 
 #=============================================================================
 Tree Construction Traits
@@ -79,27 +77,27 @@ struct MaxElementsCriterion <: SubdivisionCriterion
 end
 
 """
-    SizeCriterion{C<:Real} <: SubdivisionCriterion
+    SizeCriterion{T<:Real} <: SubdivisionCriterion
 
 Subdivide box if size exceeds threshold.
 
 # Fields
-- `h_min::C`: Minimum box size (stop subdividing when reached)
+- `h_min::T`: Minimum box size (stop subdividing when reached)
 """
-struct SizeCriterion{C <: Real} <: SubdivisionCriterion
-    h_min::C
+struct SizeCriterion{T <: Real} <: SubdivisionCriterion
+    h_min::T
 end
 
 """
-    AndCriterion <: SubdivisionCriterion
+    AndCriterion{T<:Tuple} <: SubdivisionCriterion
 
 Combine multiple criteria - all must be satisfied for subdivision.
 
 # Fields
-- `criteria::Tuple{Vararg{SubdivisionCriterion}}`: Criteria to combine
+- `criteria::T`: Tuple of criteria to combine (parametrized for type stability)
 """
-struct AndCriterion <: SubdivisionCriterion
-    criteria::Tuple{Vararg{SubdivisionCriterion}}
+struct AndCriterion{T <: Tuple} <: SubdivisionCriterion
+    criteria::T
 end
 
 # Convenience constructor

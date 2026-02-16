@@ -12,11 +12,12 @@ generate random points inside the mesh. It's much faster than rejection sampling
 # Fields
 - `octree::TriangleOctree` - Pre-built octree with leaf classification
 - `boundary_oversampling::Float64` - Oversampling factor for boundary boxes (default: 2.0)
+- `verify_interior::Bool` - Per-point signed distance verification for interior leaves (default: false)
 
 # Constructors
 ```julia
-OctreeRandom(octree::TriangleOctree)                    # Default oversampling = 2.0
-OctreeRandom(octree::TriangleOctree, oversampling)      # Custom oversampling factor
+OctreeRandom(octree::TriangleOctree)                                        # Default oversampling = 2.0
+OctreeRandom(octree::TriangleOctree, oversampling; verify_interior=false)   # Custom oversampling factor
 ```
 
 # Performance
@@ -67,13 +68,13 @@ cloud = discretize(boundary, 1.0u"m"; alg=alg, max_points=10_000)
 
 # When to Use
 
-✅ **Good for**:
+**Good for**:
 - Quick initial discretization
 - Uniform random distributions
 - Maximum point count targets
 - Testing and prototyping
 
-❌ **Not ideal for**:
+**Not ideal for**:
 - Spacing-controlled discretization (use SlakKosec instead)
 - Adaptive refinement
 - Smooth point distributions
@@ -81,12 +82,23 @@ cloud = discretize(boundary, 1.0u"m"; alg=alg, max_points=10_000)
 struct OctreeRandom{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
     octree::TriangleOctree{M, C, T}
     boundary_oversampling::Float64
+    verify_interior::Bool
+end
+
+@inline function _rand_point_in_box(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
+    return bbox_min + rand(SVector{3, T}) .* (bbox_max - bbox_min)
 end
 
 OctreeRandom(octree::TriangleOctree{M, C, T}) where {M, C, T} =
-    OctreeRandom{M, C, T}(octree, 2.0)
-OctreeRandom(octree::TriangleOctree{M, C, T}, oversampling::Real) where {M, C, T} =
-    OctreeRandom{M, C, T}(octree, Float64(oversampling))
+    OctreeRandom{M, C, T}(octree, 2.0, false)
+function OctreeRandom(
+        octree::TriangleOctree{M, C, T},
+        oversampling::Real;
+        verify_interior::Bool = false,
+    ) where {M, C, T}
+    oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive, got $oversampling"))
+    return OctreeRandom{M, C, T}(octree, Float64(oversampling), verify_interior)
+end
 
 """
     _allocate_counts_by_volume(volumes, total_count; ensure_one=false)
@@ -141,40 +153,48 @@ function _allocate_counts_by_volume(
     return counts
 end
 
+"""
+    _collect_classified_leaves(octree::TriangleOctree)
+
+Collect interior and boundary leaves with their volumes from a classified octree.
+
+Returns `(interior_leaves, interior_volumes, boundary_leaves, boundary_volumes)`.
+"""
+function _collect_classified_leaves(octree::TriangleOctree)
+    T = Float64
+    interior_leaves = Int[]
+    boundary_leaves = Int[]
+    interior_volumes = T[]
+    boundary_volumes = T[]
+
+    for leaf_idx in all_leaves(octree.tree)
+        classification = octree.leaf_classification[leaf_idx]
+
+        if classification == LEAF_INTERIOR
+            push!(interior_leaves, leaf_idx)
+            push!(interior_volumes, box_size(octree.tree, leaf_idx)^3)
+        elseif classification == LEAF_BOUNDARY
+            push!(boundary_leaves, leaf_idx)
+            push!(boundary_volumes, box_size(octree.tree, leaf_idx)^3)
+        end
+    end
+
+    return interior_leaves, interior_volumes, boundary_leaves, boundary_volumes
+end
+
 function _discretize_volume(
         cloud::PointCloud{𝔼{3}, C},
         spacing::AbstractSpacing,  # Not used - random distribution
         alg::OctreeRandom;
         max_points = 1_000,
     ) where {C}
-    # Note: cloud and spacing parameters are required by the interface but not used
-    # This algorithm generates random points directly from octree classification
-
     isnothing(alg.octree.leaf_classification) &&
         error("TriangleOctree must be built with classify_leaves=true")
 
     T = Float64
 
-    # Collect interior and boundary leaves with their volumes
-    interior_leaves = Int[]
-    boundary_leaves = Int[]
-    interior_volumes = T[]
-    boundary_volumes = T[]
-
-    for leaf_idx in all_leaves(alg.octree.tree)
-        classification = alg.octree.leaf_classification[leaf_idx]
-
-        if classification == LEAF_INTERIOR
-            push!(interior_leaves, leaf_idx)
-            box_sz = box_size(alg.octree.tree, leaf_idx)
-            push!(interior_volumes, box_sz^3)
-        elseif classification == LEAF_BOUNDARY
-            push!(boundary_leaves, leaf_idx)
-            box_sz = box_size(alg.octree.tree, leaf_idx)
-            push!(boundary_volumes, box_sz^3)
-        end
-        # Skip exterior leaves (classification == 0)
-    end
+    interior_leaves, interior_volumes, boundary_leaves, boundary_volumes =
+        _collect_classified_leaves(alg.octree)
 
     # Calculate total volume
     total_interior_volume = sum(interior_volumes; init = zero(T))
@@ -205,8 +225,8 @@ function _discretize_volume(
     sizehint!(raw_points, max_points)
 
     # Generate points in interior leaves.
-    # We still validate each point with signed distance to prevent
-    # occasional false positives from box-level classification.
+    # Conservative classification already ensures correctness; per-point signed
+    # distance check is optional and expensive.
     if !isempty(interior_leaves)
         for (leaf_idx, n_leaf_points) in zip(interior_leaves, interior_counts)
             n_leaf_points == 0 && continue
@@ -214,13 +234,13 @@ function _discretize_volume(
             bbox_min, bbox_max = box_bounds(alg.octree.tree, leaf_idx)
 
             for _ in 1:n_leaf_points
-                # Random point in box
-                x = bbox_min[1] + rand(T) * (bbox_max[1] - bbox_min[1])
-                y = bbox_min[2] + rand(T) * (bbox_max[2] - bbox_min[2])
-                z = bbox_min[3] + rand(T) * (bbox_max[3] - bbox_min[3])
-                pt = SVector{3, T}(x, y, z)
+                pt = _rand_point_in_box(bbox_min, bbox_max)
 
-                if _compute_signed_distance_octree(pt, alg.octree.mesh, alg.octree.tree) < 0
+                if alg.verify_interior
+                    if _compute_signed_distance_octree(pt, alg.octree.mesh, alg.octree.tree) < 0
+                        push!(raw_points, pt)
+                    end
+                else
                     push!(raw_points, pt)
                 end
             end
@@ -238,12 +258,7 @@ function _discretize_volume(
             bbox_min, bbox_max = box_bounds(alg.octree.tree, leaf_idx)
 
             for _ in 1:n_leaf_samples
-                # Random point in box
-                x = bbox_min[1] + rand(T) * (bbox_max[1] - bbox_min[1])
-                y = bbox_min[2] + rand(T) * (bbox_max[2] - bbox_min[2])
-                z = bbox_min[3] + rand(T) * (bbox_max[3] - bbox_min[3])
-
-                push!(boundary_candidates, SVector{3, T}(x, y, z))
+                push!(boundary_candidates, _rand_point_in_box(bbox_min, bbox_max))
             end
         end
 
@@ -273,12 +288,14 @@ function _discretize_volume(
             leaf_idx = interior_leaves[idx]
 
             bbox_min, bbox_max = box_bounds(alg.octree.tree, leaf_idx)
-            x = bbox_min[1] + rand(T) * (bbox_max[1] - bbox_min[1])
-            y = bbox_min[2] + rand(T) * (bbox_max[2] - bbox_min[2])
-            z = bbox_min[3] + rand(T) * (bbox_max[3] - bbox_min[3])
-            pt = SVector{3, T}(x, y, z)
-            _compute_signed_distance_octree(pt, alg.octree.mesh, alg.octree.tree) < 0 &&
+            pt = _rand_point_in_box(bbox_min, bbox_max)
+
+            if alg.verify_interior
+                _compute_signed_distance_octree(pt, alg.octree.mesh, alg.octree.tree) < 0 &&
+                    push!(raw_points, pt)
+            else
                 push!(raw_points, pt)
+            end
         end
     end
 

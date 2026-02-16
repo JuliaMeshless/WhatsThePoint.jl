@@ -1,36 +1,29 @@
 # Tests for OctreeRandom discretization algorithm and helpers
 
-@testitem "OctreeRandom constructors" setup = [CommonImports] begin
-    pts = [
-        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 1.0), Point(1.0, 0.0, 1.0),
-        Point(1.0, 1.0, 1.0), Point(0.0, 1.0, 1.0),
-    ]
-    connec = [
-        connect((1, 3, 2), Meshes.Triangle), connect((1, 4, 3), Meshes.Triangle),
-        connect((5, 6, 7), Meshes.Triangle), connect((5, 7, 8), Meshes.Triangle),
-        connect((1, 2, 6), Meshes.Triangle), connect((1, 6, 5), Meshes.Triangle),
-        connect((3, 4, 8), Meshes.Triangle), connect((3, 8, 7), Meshes.Triangle),
-        connect((1, 5, 8), Meshes.Triangle), connect((1, 8, 4), Meshes.Triangle),
-        connect((2, 3, 7), Meshes.Triangle), connect((2, 7, 6), Meshes.Triangle),
-    ]
-    mesh = SimpleMesh(pts, connec)
+@testitem "OctreeRandom constructors" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
     octree = TriangleOctree(mesh; h_min=0.05, max_triangles_per_box=5, classify_leaves=true)
 
-    # Default oversampling = 2.0
+    # Default oversampling = 2.0 and verify_interior = false
     alg1 = OctreeRandom(octree)
     @test alg1 isa OctreeRandom
     @test alg1.boundary_oversampling == 2.0
+    @test alg1.verify_interior == false
     @test alg1.octree === octree
 
     # Custom oversampling
     alg2 = OctreeRandom(octree, 3.5)
     @test alg2.boundary_oversampling == 3.5
+    @test alg2.verify_interior == false
 
     # Integer oversampling gets converted to Float64
     alg3 = OctreeRandom(octree, 4)
     @test alg3.boundary_oversampling === 4.0
+
+    # verify_interior can be enabled
+    alg4 = OctreeRandom(octree, 2.0; verify_interior=true)
+    @test alg4.verify_interior == true
+    @test alg4.boundary_oversampling == 2.0
 
     # Type parameters propagate from octree
     @test alg1 isa OctreeRandom{Meshes.𝔼{3}}
@@ -112,25 +105,11 @@ end
     @test result[1] > result[2]
 end
 
-@testitem "discretize with OctreeRandom (unit cube)" setup = [CommonImports] begin
+@testitem "discretize with OctreeRandom (unit cube)" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(42)
 
-    pts = [
-        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 1.0), Point(1.0, 0.0, 1.0),
-        Point(1.0, 1.0, 1.0), Point(0.0, 1.0, 1.0),
-    ]
-    connec = [
-        connect((1, 3, 2), Meshes.Triangle), connect((1, 4, 3), Meshes.Triangle),
-        connect((5, 6, 7), Meshes.Triangle), connect((5, 7, 8), Meshes.Triangle),
-        connect((1, 2, 6), Meshes.Triangle), connect((1, 6, 5), Meshes.Triangle),
-        connect((3, 4, 8), Meshes.Triangle), connect((3, 8, 7), Meshes.Triangle),
-        connect((1, 5, 8), Meshes.Triangle), connect((1, 8, 4), Meshes.Triangle),
-        connect((2, 3, 7), Meshes.Triangle), connect((2, 7, 6), Meshes.Triangle),
-    ]
-    mesh = SimpleMesh(pts, connec)
+    mesh = OctreeTestData.unit_cube_mesh()
 
     bnd = PointBoundary(mesh)
     octree = TriangleOctree(mesh; h_min=0.05, max_triangles_per_box=5, classify_leaves=true)
@@ -159,22 +138,8 @@ end
     end
 end
 
-@testitem "discretize with OctreeRandom — error on unclassified octree" setup = [CommonImports] begin
-    pts = [
-        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 1.0), Point(1.0, 0.0, 1.0),
-        Point(1.0, 1.0, 1.0), Point(0.0, 1.0, 1.0),
-    ]
-    connec = [
-        connect((1, 3, 2), Meshes.Triangle), connect((1, 4, 3), Meshes.Triangle),
-        connect((5, 6, 7), Meshes.Triangle), connect((5, 7, 8), Meshes.Triangle),
-        connect((1, 2, 6), Meshes.Triangle), connect((1, 6, 5), Meshes.Triangle),
-        connect((3, 4, 8), Meshes.Triangle), connect((3, 8, 7), Meshes.Triangle),
-        connect((1, 5, 8), Meshes.Triangle), connect((1, 8, 4), Meshes.Triangle),
-        connect((2, 3, 7), Meshes.Triangle), connect((2, 7, 6), Meshes.Triangle),
-    ]
-    mesh = SimpleMesh(pts, connec)
+@testitem "discretize with OctreeRandom — error on unclassified octree" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
 
     bnd = PointBoundary(mesh)
     octree_no_class = TriangleOctree(mesh; h_min=0.05, max_triangles_per_box=5, classify_leaves=false)
@@ -216,24 +181,10 @@ end
     end
 end
 
-@testitem "OctreeRandom boundary_oversampling effect" setup = [CommonImports] begin
+@testitem "OctreeRandom boundary_oversampling effect" setup = [CommonImports, OctreeTestData] begin
     using Random
 
-    pts = [
-        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 1.0), Point(1.0, 0.0, 1.0),
-        Point(1.0, 1.0, 1.0), Point(0.0, 1.0, 1.0),
-    ]
-    connec = [
-        connect((1, 3, 2), Meshes.Triangle), connect((1, 4, 3), Meshes.Triangle),
-        connect((5, 6, 7), Meshes.Triangle), connect((5, 7, 8), Meshes.Triangle),
-        connect((1, 2, 6), Meshes.Triangle), connect((1, 6, 5), Meshes.Triangle),
-        connect((3, 4, 8), Meshes.Triangle), connect((3, 8, 7), Meshes.Triangle),
-        connect((1, 5, 8), Meshes.Triangle), connect((1, 8, 4), Meshes.Triangle),
-        connect((2, 3, 7), Meshes.Triangle), connect((2, 7, 6), Meshes.Triangle),
-    ]
-    mesh = SimpleMesh(pts, connec)
+    mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
     octree = TriangleOctree(mesh; h_min=0.05, max_triangles_per_box=5, classify_leaves=true)
 

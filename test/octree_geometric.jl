@@ -86,47 +86,6 @@ end
     @test triangle_box_intersection(v1, v2, v3, box_min, box_max) == false
 end
 
-@testitem "Boxes Intersected by Triangle" setup = [CommonImports] begin
-    using WhatsThePoint: boxes_intersected_by_triangle
-    # Parent box: [0,10]³ subdivided into 2³ = 8 children
-    parent_min = SVector(0.0, 0.0, 0.0)
-    parent_size = 10.0
-
-    # Test 1: Small triangle entirely in one child box (lower-left-front octant)
-    v1 = SVector(1.0, 1.0, 1.0)
-    v2 = SVector(2.0, 1.0, 1.0)
-    v3 = SVector(1.5, 2.0, 1.0)
-    boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
-    @test length(boxes) == 1
-    @test (0, 0, 0) ∈ boxes
-
-    # Test 2: Triangle spanning two adjacent boxes in x-direction
-    v1 = SVector(4.0, 1.0, 1.0)
-    v2 = SVector(6.0, 1.0, 1.0)
-    v3 = SVector(5.0, 3.0, 1.0)
-    boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
-    @test length(boxes) >= 2
-    @test (0, 0, 0) ∈ boxes  # Crosses from first to second octant
-    @test (1, 0, 0) ∈ boxes
-
-    # Test 3: Triangle spanning multiple boxes in xy-plane
-    v1 = SVector(0.0, 0.0, 0.0)
-    v2 = SVector(10.0, 0.0, 0.0)
-    v3 = SVector(5.0, 10.0, 0.0)
-    boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
-    @test length(boxes) == 4  # Should intersect all 4 boxes in z=0 plane
-    @test (0, 0, 0) ∈ boxes
-    @test (1, 0, 0) ∈ boxes
-    @test (0, 1, 0) ∈ boxes
-    @test (1, 1, 0) ∈ boxes
-
-    # Test 4: Triangle outside parent box
-    v1 = SVector(-5.0, -5.0, -5.0)
-    v2 = SVector(-3.0, -5.0, -5.0)
-    v3 = SVector(-4.0, -3.0, -5.0)
-    boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
-    @test length(boxes) == 0  # No intersection
-end
 
 @testitem "Signed Distance Point to Triangle" setup = [CommonImports] begin
     using WhatsThePoint: distance_point_triangle

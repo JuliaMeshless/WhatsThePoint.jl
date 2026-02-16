@@ -1,41 +1,7 @@
 # Layer 4: Fast isinside queries using TriangleOctree
 
-@testitem "TriangleOctree isinside - Basic" setup = [CommonImports] begin
-    # Create unit cube mesh
-    pts = [
-        Point(0.0, 0.0, 0.0),  # 1
-        Point(1.0, 0.0, 0.0),  # 2
-        Point(1.0, 1.0, 0.0),  # 3
-        Point(0.0, 1.0, 0.0),  # 4
-        Point(0.0, 0.0, 1.0),  # 5
-        Point(1.0, 0.0, 1.0),  # 6
-        Point(1.0, 1.0, 1.0),  # 7
-        Point(0.0, 1.0, 1.0),  # 8
-    ]
-
-    # Define triangles (2 per face, counterclockwise when viewed from outside)
-    connec = [
-        # Bottom face (z=0)
-        connect((1, 3, 2), Meshes.Triangle),
-        connect((1, 4, 3), Meshes.Triangle),
-        # Top face (z=1)
-        connect((5, 6, 7), Meshes.Triangle),
-        connect((5, 7, 8), Meshes.Triangle),
-        # Front face (y=0)
-        connect((1, 2, 6), Meshes.Triangle),
-        connect((1, 6, 5), Meshes.Triangle),
-        # Back face (y=1)
-        connect((3, 4, 8), Meshes.Triangle),
-        connect((3, 8, 7), Meshes.Triangle),
-        # Left face (x=0)
-        connect((1, 5, 8), Meshes.Triangle),
-        connect((1, 8, 4), Meshes.Triangle),
-        # Right face (x=1)
-        connect((2, 3, 7), Meshes.Triangle),
-        connect((2, 7, 6), Meshes.Triangle),
-    ]
-
-    mesh = SimpleMesh(pts, connec)
+@testitem "TriangleOctree isinside - Basic" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
     octree = TriangleOctree(
         mesh;
         h_min = 0.05,
@@ -63,33 +29,8 @@
     @test isinside(SVector(0.9, 0.9, 0.9), octree) == true
 end
 
-@testitem "TriangleOctree isinside - Error Handling" setup = [CommonImports] begin
-    # Create unit cube mesh
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 1.0),
-        Point(1.0, 0.0, 1.0),
-        Point(1.0, 1.0, 1.0),
-        Point(0.0, 1.0, 1.0),
-    ]
-    connec = [
-        connect((1, 3, 2), Meshes.Triangle),
-        connect((1, 4, 3), Meshes.Triangle),
-        connect((5, 6, 7), Meshes.Triangle),
-        connect((5, 7, 8), Meshes.Triangle),
-        connect((1, 2, 6), Meshes.Triangle),
-        connect((1, 6, 5), Meshes.Triangle),
-        connect((3, 4, 8), Meshes.Triangle),
-        connect((3, 8, 7), Meshes.Triangle),
-        connect((1, 5, 8), Meshes.Triangle),
-        connect((1, 8, 4), Meshes.Triangle),
-        connect((2, 3, 7), Meshes.Triangle),
-        connect((2, 7, 6), Meshes.Triangle),
-    ]
-    mesh = SimpleMesh(pts, connec)
+@testitem "TriangleOctree isinside - Error Handling" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
 
     # Build octree WITHOUT classification
     octree_no_class = TriangleOctree(
@@ -107,35 +48,12 @@ end
     @test result isa Bool  # Should work without error (boundary leaf has triangles)
 end
 
-@testitem "TriangleOctree isinside - Correctness" setup = [CommonImports] begin
+@testitem "TriangleOctree isinside - Correctness" setup = [CommonImports, OctreeTestData] begin
     using Random
+    using WhatsThePoint: _get_triangle_vertices, _get_triangle_normal,
+        closest_point_on_triangle
 
-    # Create unit cube mesh
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 1.0),
-        Point(1.0, 0.0, 1.0),
-        Point(1.0, 1.0, 1.0),
-        Point(0.0, 1.0, 1.0),
-    ]
-    connec = [
-        connect((1, 3, 2), Meshes.Triangle),
-        connect((1, 4, 3), Meshes.Triangle),
-        connect((5, 6, 7), Meshes.Triangle),
-        connect((5, 7, 8), Meshes.Triangle),
-        connect((1, 2, 6), Meshes.Triangle),
-        connect((1, 6, 5), Meshes.Triangle),
-        connect((3, 4, 8), Meshes.Triangle),
-        connect((3, 8, 7), Meshes.Triangle),
-        connect((1, 5, 8), Meshes.Triangle),
-        connect((1, 8, 4), Meshes.Triangle),
-        connect((2, 3, 7), Meshes.Triangle),
-        connect((2, 7, 6), Meshes.Triangle),
-    ]
-    mesh = SimpleMesh(pts, connec)
+    mesh = OctreeTestData.unit_cube_mesh()
 
     octree = TriangleOctree(
         mesh;
@@ -144,9 +62,22 @@ end
         classify_leaves = true,
     )
 
+    # Brute-force O(M) signed distance for ground-truth comparison
     function isinside_bruteforce(point::SVector{3, T}, octree) where {T <: Real}
-        dist = WhatsThePoint._compute_signed_distance(point, octree.mesh)
-        return dist < 0
+        min_dist = T(Inf)
+        n = Meshes.nelements(octree.mesh)
+        for i in 1:n
+            v1, v2, v3 = _get_triangle_vertices(T, octree.mesh, i)
+            cp = closest_point_on_triangle(point, v1, v2, v3)
+            dist = norm(point - cp)
+            if dist < abs(min_dist)
+                to_point = point - cp
+                normal_i = _get_triangle_normal(T, octree.mesh, i)
+                sign = dot(to_point, normal_i) >= 0 ? 1 : -1
+                min_dist = sign * dist
+            end
+        end
+        return min_dist < 0
     end
 
     # Test random points
@@ -178,7 +109,7 @@ end
         )
 
         # Compute bounding box from mesh
-        bbox_min, bbox_max = WhatsThePoint._compute_bbox(octree.mesh)
+        bbox_min, bbox_max = WhatsThePoint._compute_bbox(Float64, octree.mesh)
 
         # Test 1: Point at mesh center should be interior
         center = SVector{3}((bbox_min + bbox_max) / 2)
@@ -204,33 +135,8 @@ end
     end
 end
 
-@testitem "TriangleOctree isinside - Batch Queries" setup = [CommonImports] begin
-    # Create unit cube mesh
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 1.0),
-        Point(1.0, 0.0, 1.0),
-        Point(1.0, 1.0, 1.0),
-        Point(0.0, 1.0, 1.0),
-    ]
-    connec = [
-        connect((1, 3, 2), Meshes.Triangle),
-        connect((1, 4, 3), Meshes.Triangle),
-        connect((5, 6, 7), Meshes.Triangle),
-        connect((5, 7, 8), Meshes.Triangle),
-        connect((1, 2, 6), Meshes.Triangle),
-        connect((1, 6, 5), Meshes.Triangle),
-        connect((3, 4, 8), Meshes.Triangle),
-        connect((3, 8, 7), Meshes.Triangle),
-        connect((1, 5, 8), Meshes.Triangle),
-        connect((1, 8, 4), Meshes.Triangle),
-        connect((2, 3, 7), Meshes.Triangle),
-        connect((2, 7, 6), Meshes.Triangle),
-    ]
-    mesh = SimpleMesh(pts, connec)
+@testitem "TriangleOctree isinside - Batch Queries" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
 
     octree = TriangleOctree(
         mesh;
@@ -263,33 +169,8 @@ end
     end
 end
 
-@testitem "TriangleOctree isinside - Edge Cases" setup = [CommonImports] begin
-    # Create unit cube mesh
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 1.0),
-        Point(1.0, 0.0, 1.0),
-        Point(1.0, 1.0, 1.0),
-        Point(0.0, 1.0, 1.0),
-    ]
-    connec = [
-        connect((1, 3, 2), Meshes.Triangle),
-        connect((1, 4, 3), Meshes.Triangle),
-        connect((5, 6, 7), Meshes.Triangle),
-        connect((5, 7, 8), Meshes.Triangle),
-        connect((1, 2, 6), Meshes.Triangle),
-        connect((1, 6, 5), Meshes.Triangle),
-        connect((3, 4, 8), Meshes.Triangle),
-        connect((3, 8, 7), Meshes.Triangle),
-        connect((1, 5, 8), Meshes.Triangle),
-        connect((1, 8, 4), Meshes.Triangle),
-        connect((2, 3, 7), Meshes.Triangle),
-        connect((2, 7, 6), Meshes.Triangle),
-    ]
-    mesh = SimpleMesh(pts, connec)
+@testitem "TriangleOctree isinside - Edge Cases" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
 
     octree = TriangleOctree(
         mesh;
@@ -330,4 +211,25 @@ end
         result = isinside(corner, octree)
         @test result isa Bool  # Should return without error
     end
+end
+
+@testitem "TriangleOctree isinside - Point bridge" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+
+    octree = TriangleOctree(
+        mesh;
+        h_min = 0.05,
+        max_triangles_per_box = 5,
+        classify_leaves = true,
+    )
+
+    # Single Point should match SVector result
+    @test isinside(Point(0.5, 0.5, 0.5), octree) == isinside(SVector(0.5, 0.5, 0.5), octree)
+    @test isinside(Point(0.5, 0.5, 0.5), octree) == true
+    @test isinside(Point(5.0, 5.0, 5.0), octree) == false
+
+    # Batch Point query
+    pts = [Point(0.5, 0.5, 0.5), Point(5.0, 5.0, 5.0), Point(0.1, 0.1, 0.1)]
+    results = isinside(pts, octree)
+    @test results == [true, false, true]
 end

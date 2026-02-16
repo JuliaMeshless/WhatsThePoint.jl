@@ -1,16 +1,8 @@
 # Tests for TriangleOctree with SimpleMesh
 
-@testitem "TriangleOctree Simple 2-Triangle Mesh" setup = [CommonImports] begin
+@testitem "TriangleOctree Simple 2-Triangle Mesh" setup = [CommonImports, OctreeTestData] begin
     using WhatsThePoint: SpatialOctree
-    # Helper function to create a simple 2-triangle square in xy-plane
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-    ]
-    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
-    mesh = SimpleMesh(pts, connec)
+    mesh = OctreeTestData.simple_square_mesh()
 
     # Build octree
     octree = TriangleOctree(mesh; h_min = 0.1, max_triangles_per_box = 1)
@@ -93,15 +85,8 @@ end
     end
 end
 
-@testitem "TriangleOctree Leaf Classification - Disabled" setup = [CommonImports] begin
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-    ]
-    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
-    mesh = SimpleMesh(pts, connec)
+@testitem "TriangleOctree Leaf Classification - Disabled" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.simple_square_mesh()
 
     octree = TriangleOctree(
         mesh;
@@ -113,16 +98,9 @@ end
     @test octree.leaf_classification === nothing
 end
 
-@testitem "TriangleOctree Leaf Classification - Enabled" setup = [CommonImports] begin
+@testitem "TriangleOctree Leaf Classification - Enabled" setup = [CommonImports, OctreeTestData] begin
     using WhatsThePoint: all_leaves
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-    ]
-    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
-    mesh = SimpleMesh(pts, connec)
+    mesh = OctreeTestData.simple_square_mesh()
 
     octree = TriangleOctree(
         mesh;
@@ -132,7 +110,7 @@ end
     )
 
     @test octree.leaf_classification !== nothing
-    @test length(octree.leaf_classification) == length(octree.tree.element_lists)
+    @test length(octree.leaf_classification) == octree.tree.num_boxes[]
 
     # Check leaf classification values are valid (0, 1, or 2)
     for leaf_idx in all_leaves(octree.tree)
@@ -208,17 +186,8 @@ end
     @test num_leaves(octree) >= 1
 end
 
-@testitem "has_consistent_normals - Consistent Mesh" setup = [CommonImports] begin
-    # Two triangles with consistent normals (both pointing up in +z)
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-    ]
-    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
-    mesh = SimpleMesh(pts, connec)
-
+@testitem "has_consistent_normals - Consistent Mesh" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.simple_square_mesh()
     octree = TriangleOctree(mesh; h_min = 0.1, verify_orientation = false)
 
     # Both triangles have normals pointing in +z, so should be consistent
@@ -244,15 +213,15 @@ end
     octree = TriangleOctree(mesh; h_min = 0.1, verify_orientation = false)
 
     # Normals should be opposite
-    n1 = WhatsThePoint._get_triangle_normal(octree.mesh, 1)
-    n2 = WhatsThePoint._get_triangle_normal(octree.mesh, 2)
+    n1 = WhatsThePoint._get_triangle_normal(Float64, octree.mesh, 1)
+    n2 = WhatsThePoint._get_triangle_normal(Float64, octree.mesh, 2)
     @test dot(n1, n2) < 0
 
     # Should detect inconsistency
     @test !has_consistent_normals(octree.mesh)
 end
 
-@testitem "TriangleOctree Verification Disabled" setup = [CommonImports] begin
+@testitem "TriangleOctree Verification Errors on Bad Orientation" setup = [CommonImports] begin
     # Mesh with inconsistent normals
     pts = [
         Point(0.0, 0.0, 0.0),
@@ -263,7 +232,10 @@ end
     connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 4, 3), Meshes.Triangle)]
     mesh = SimpleMesh(pts, connec)
 
-    # Should build without warning when verification is disabled
+    # Default verify_orientation=true should error on flipped faces
+    @test_throws ArgumentError TriangleOctree(mesh; h_min = 0.1)
+
+    # verify_orientation=false should build successfully
     octree = TriangleOctree(mesh; h_min = 0.1, verify_orientation = false)
     @test octree isa TriangleOctree
 end

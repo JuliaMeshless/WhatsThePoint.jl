@@ -5,9 +5,6 @@
 # Unit handling should be done at a higher level.
 
 
-using StaticArrays
-using LinearAlgebra
-
 #=============================================================================
 Point-Triangle Distance
 =============================================================================#
@@ -292,40 +289,40 @@ function triangle_box_intersection(
     box_half = (box_max - box_min) / 2
 
     # Translate triangle to box-centered coordinates
-    v0 = v1 - box_center
-    v1_t = v2 - box_center
-    v2_t = v3 - box_center
+    t0 = v1 - box_center
+    t1 = v2 - box_center
+    t2 = v3 - box_center
 
     # Triangle edges
-    e0 = v1_t - v0
-    e1 = v2_t - v1_t
-    e2 = v0 - v2_t
+    e0 = t1 - t0
+    e1 = t2 - t1
+    e2 = t0 - t2
 
     # Test 1: AABB face normals (3 tests)
     # X-axis
-    min_val = min(v0[1], v1_t[1], v2_t[1])
-    max_val = max(v0[1], v1_t[1], v2_t[1])
+    min_val = min(t0[1], t1[1], t2[1])
+    max_val = max(t0[1], t1[1], t2[1])
     if min_val > box_half[1] || max_val < -box_half[1]
         return false
     end
 
     # Y-axis
-    min_val = min(v0[2], v1_t[2], v2_t[2])
-    max_val = max(v0[2], v1_t[2], v2_t[2])
+    min_val = min(t0[2], t1[2], t2[2])
+    max_val = max(t0[2], t1[2], t2[2])
     if min_val > box_half[2] || max_val < -box_half[2]
         return false
     end
 
     # Z-axis
-    min_val = min(v0[3], v1_t[3], v2_t[3])
-    max_val = max(v0[3], v1_t[3], v2_t[3])
+    min_val = min(t0[3], t1[3], t2[3])
+    max_val = max(t0[3], t1[3], t2[3])
     if min_val > box_half[3] || max_val < -box_half[3]
         return false
     end
 
     # Test 2: Triangle normal
     normal = cross(e0, e1)
-    d = -dot(normal, v0)
+    d = -dot(normal, t0)
 
     # Box vertices in normal direction
     r =
@@ -340,49 +337,49 @@ function triangle_box_intersection(
     # Test 3: Edge-edge cross products (9 tests)
     # X-axis × triangle edges
     axis = SVector{3, T}(0, -e0[3], e0[2])
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
     axis = SVector{3, T}(0, -e1[3], e1[2])
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
     axis = SVector{3, T}(0, -e2[3], e2[2])
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
     # Y-axis × triangle edges
     axis = SVector{3, T}(e0[3], 0, -e0[1])
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
     axis = SVector{3, T}(e1[3], 0, -e1[1])
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
     axis = SVector{3, T}(e2[3], 0, -e2[1])
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
     # Z-axis × triangle edges
     axis = SVector{3, T}(-e0[2], e0[1], 0)
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
     axis = SVector{3, T}(-e1[2], e1[1], 0)
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
     axis = SVector{3, T}(-e2[2], e2[1], 0)
-    if !_triangle_axis_test(axis, v0, v1_t, v2_t, box_half)
+    if !_triangle_axis_test(axis, t0, t1, t2, box_half)
         return false
     end
 
@@ -390,66 +387,3 @@ function triangle_box_intersection(
     return true
 end
 
-"""
-    boxes_intersected_by_triangle(
-        v1::SVector{3,T},
-        v2::SVector{3,T},
-        v3::SVector{3,T},
-        parent_min::SVector{3,T},
-        parent_size::T,
-        subdivision::Int = 2
-    ) where {T<:Real} -> Vector{NTuple{3,Int}}
-
-Find which child boxes of a subdivided parent box are intersected by a triangle.
-
-For a parent box subdivided into `subdivision³` children, returns the (i,j,k)
-coordinates of each child box that the triangle intersects.
-
-# Arguments
-- `v1, v2, v3`: Triangle vertices
-- `parent_min`: Minimum corner of parent box
-- `parent_size`: Edge length of parent box
-- `subdivision`: Number of subdivisions per axis (default: 2 for octree)
-
-# Returns
-Vector of (i,j,k) tuples where each component ∈ [0, subdivision-1]
-
-# Example
-```julia
-# Triangle spanning multiple octree children
-v1 = SVector(0.0, 0.0, 0.0)
-v2 = SVector(10.0, 0.0, 0.0)
-v3 = SVector(5.0, 10.0, 0.0)
-
-parent_min = SVector(0.0, 0.0, 0.0)
-parent_size = 10.0
-
-boxes = boxes_intersected_by_triangle(v1, v2, v3, parent_min, parent_size)
-# Returns: [(0,0,0), (1,0,0), (0,1,0), (1,1,0)]  # 4 children in xy-plane
-```
-"""
-function boxes_intersected_by_triangle(
-        v1::SVector{3, T},
-        v2::SVector{3, T},
-        v3::SVector{3, T},
-        parent_min::SVector{3, T},
-        parent_size::T,
-        subdivision::Int = 2,
-    ) where {T <: Real}
-    child_size = parent_size / subdivision
-    intersected = NTuple{3, Int}[]
-
-    # Check each child box
-    for k in 0:(subdivision - 1), j in 0:(subdivision - 1), i in 0:(subdivision - 1)
-        # Child box bounds
-        box_min = parent_min + SVector{3, T}(i, j, k) * child_size
-        box_max = box_min + SVector{3, T}(child_size, child_size, child_size)
-
-        # Test intersection
-        if triangle_box_intersection(v1, v2, v3, box_min, box_max)
-            push!(intersected, (i, j, k))
-        end
-    end
-
-    return intersected
-end
