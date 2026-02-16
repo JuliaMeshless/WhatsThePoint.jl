@@ -35,10 +35,10 @@ point = SVector(0.5, 0.5, 0.5)
 is_inside = isinside(point, octree)
 ```
 """
-struct TriangleOctree{M<:Manifold,C<:CRS,T<:Real}
-    tree::SpatialOctree{Int,T}
-    mesh::SimpleMesh{M,C}
-    leaf_classification::Union{Nothing,Vector{Int8}}
+struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
+    tree::SpatialOctree{Int, T}
+    mesh::SimpleMesh{M, C}
+    leaf_classification::Union{Nothing, Vector{Int8}}
 end
 
 # Leaf classification tags
@@ -58,7 +58,7 @@ Extract and normalize a Meshes.jl Vec normal to a unit SVector{3,Float64}.
 """
 @inline function _normalize_normal(n_vec)
     # Direct component access avoids tuple overhead
-    n = SVector{3,Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
+    n = SVector{3, Float64}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
     n_mag = norm(n)
     if n_mag < eps(Float64) * 100
         error("Degenerate triangle: zero normal")
@@ -73,7 +73,7 @@ Extract coordinates from a Meshes.jl vertex to an SVector{3,Float64}.
 """
 @inline function _extract_vertex(vert)
     coords = Meshes.to(vert)
-    return SVector{3,Float64}(ustrip(coords[1]), ustrip(coords[2]), ustrip(coords[3]))
+    return SVector{3, Float64}(ustrip(coords[1]), ustrip(coords[2]), ustrip(coords[3]))
 end
 
 """
@@ -147,7 +147,7 @@ function _compute_bbox(mesh::SimpleMesh)
         max_z += eps_val
     end
 
-    return SVector{3,T}(min_x, min_y, min_z), SVector{3,T}(max_x, max_y, max_z)
+    return SVector{3, T}(min_x, min_y, min_z), SVector{3, T}(max_x, max_y, max_z)
 end
 
 """
@@ -156,11 +156,11 @@ end
 Create a canonical edge key from two vertices (order-independent).
 Uses component-wise comparison for consistent ordering.
 """
-@inline function _edge_key(v1::SVector{3,T}, v2::SVector{3,T}) where {T}
+@inline function _edge_key(v1::SVector{3, T}, v2::SVector{3, T}) where {T}
     # Order vertices lexicographically for canonical key
     if v1[1] < v2[1] ||
-       (v1[1] == v2[1] && v1[2] < v2[2]) ||
-       (v1[1] == v2[1] && v1[2] == v2[2] && v1[3] < v2[3])
+            (v1[1] == v2[1] && v1[2] < v2[2]) ||
+            (v1[1] == v2[1] && v1[2] == v2[2] && v1[3] < v2[3])
         return (v1, v2)
     else
         return (v2, v1)
@@ -207,8 +207,10 @@ function has_consistent_normals(mesh::SimpleMesh)
 
     # Build edge → (triangle index, edge vertices) map in O(n)
     # When we encounter an edge again, check if it's traversed in opposite direction
-    edge_map = Dict{Tuple{SVector{3,Float64},SVector{3,Float64}},
-        Tuple{Int,SVector{3,Float64},SVector{3,Float64}}}()
+    edge_map = Dict{
+        Tuple{SVector{3, Float64}, SVector{3, Float64}},
+        Tuple{Int, SVector{3, Float64}, SVector{3, Float64}},
+    }()
     sizehint!(edge_map, 3 * n)  # Each triangle has 3 edges
 
     for i in 1:n
@@ -285,12 +287,12 @@ println("Built octree with ", num_leaves(octree), " leaves")
 ```
 """
 function TriangleOctree(
-    mesh::SimpleMesh{M,C};
-    h_min,
-    max_triangles_per_box::Int=50,
-    classify_leaves::Bool=true,
-    verify_orientation::Bool=true,
-) where {M<:Manifold,C<:CRS}
+        mesh::SimpleMesh{M, C};
+        h_min,
+        max_triangles_per_box::Int = 50,
+        classify_leaves::Bool = true,
+        verify_orientation::Bool = true,
+    ) where {M <: Manifold, C <: CRS}
     T = Float64
     h_min_val = T(ustrip(h_min))
     n_triangles = Meshes.nelements(mesh)
@@ -321,7 +323,7 @@ function TriangleOctree(
     root_size = maximum(bbox_max - bbox_min)
 
     estimated_boxes = max(1000, n_triangles * 2)
-    tree = SpatialOctree{Int,T}(bbox_min, root_size; initial_capacity=estimated_boxes)
+    tree = SpatialOctree{Int, T}(bbox_min, root_size; initial_capacity = estimated_boxes)
 
     root_elements = tree.element_lists[1]
     for tri_idx in 1:n_triangles
@@ -380,11 +382,11 @@ For each box that needs subdivision:
 4. Recursively subdivide children if they meet criteria
 """
 function _subdivide_triangle_octree!(
-    tree::SpatialOctree{Int,T},
-    mesh::SimpleMesh,
-    box_idx::Int,
-    criterion,
-) where {T<:Real}
+        tree::SpatialOctree{Int, T},
+        mesh::SimpleMesh,
+        box_idx::Int,
+        criterion,
+    ) where {T <: Real}
     if !should_subdivide(criterion, tree, box_idx)
         return
     end
@@ -418,16 +420,16 @@ function _subdivide_triangle_octree!(
 end
 
 @inline function _point_box_distance_sq(
-    point::SVector{3,T},
-    bbox_min::SVector{3,T},
-    bbox_max::SVector{3,T},
-) where {T<:Real}
+        point::SVector{3, T},
+        bbox_min::SVector{3, T},
+        bbox_max::SVector{3, T},
+    ) where {T <: Real}
     dx = point[1] < bbox_min[1] ? (bbox_min[1] - point[1]) :
-         (point[1] > bbox_max[1] ? (point[1] - bbox_max[1]) : zero(T))
+        (point[1] > bbox_max[1] ? (point[1] - bbox_max[1]) : zero(T))
     dy = point[2] < bbox_min[2] ? (bbox_min[2] - point[2]) :
-         (point[2] > bbox_max[2] ? (point[2] - bbox_max[2]) : zero(T))
+        (point[2] > bbox_max[2] ? (point[2] - bbox_max[2]) : zero(T))
     dz = point[3] < bbox_min[3] ? (bbox_min[3] - point[3]) :
-         (point[3] > bbox_max[3] ? (point[3] - bbox_max[3]) : zero(T))
+        (point[3] > bbox_max[3] ? (point[3] - bbox_max[3]) : zero(T))
     return dx * dx + dy * dy + dz * dz
 end
 
@@ -439,13 +441,13 @@ end
 end
 
 @inline function _update_closest_triangle!(
-    point::SVector{3,T},
-    mesh::SimpleMesh,
-    tri_idx::Int,
-    best_dist_sq::Base.RefValue{T},
-    closest_idx::Base.RefValue{Int},
-    closest_pt::Base.RefValue{SVector{3,T}},
-) where {T<:Real}
+        point::SVector{3, T},
+        mesh::SimpleMesh,
+        tri_idx::Int,
+        best_dist_sq::Base.RefValue{T},
+        closest_idx::Base.RefValue{Int},
+        closest_pt::Base.RefValue{SVector{3, T}},
+    ) where {T <: Real}
     v1, v2, v3 = _get_triangle_vertices(mesh, tri_idx)
     cp = closest_point_on_triangle(point, v1, v2, v3)
     dvec = point - cp
@@ -461,14 +463,14 @@ end
 end
 
 function _nearest_triangle_octree!(
-    point::SVector{3,T},
-    tree::SpatialOctree{Int,T},
-    mesh::SimpleMesh,
-    box_idx::Int,
-    best_dist_sq::Base.RefValue{T},
-    closest_idx::Base.RefValue{Int},
-    closest_pt::Base.RefValue{SVector{3,T}},
-) where {T<:Real}
+        point::SVector{3, T},
+        tree::SpatialOctree{Int, T},
+        mesh::SimpleMesh,
+        box_idx::Int,
+        best_dist_sq::Base.RefValue{T},
+        closest_idx::Base.RefValue{Int},
+        closest_pt::Base.RefValue{SVector{3, T}},
+    ) where {T <: Real}
     bbox_min, bbox_max = box_bounds(tree, box_idx)
     _point_box_distance_sq(point, bbox_min, bbox_max) > best_dist_sq[] && return
 
@@ -488,8 +490,8 @@ function _nearest_triangle_octree!(
 
     # Collect children with distances into stack-allocated buffer (max 8 children).
     children = tree.children[box_idx]
-    dists = MVector{8,T}(ntuple(_ -> typemax(T), Val(8)))
-    idxs = MVector{8,Int}(ntuple(_ -> 0, Val(8)))
+    dists = MVector{8, T}(ntuple(_ -> typemax(T), Val(8)))
+    idxs = MVector{8, Int}(ntuple(_ -> 0, Val(8)))
     n_valid = 0
     @inbounds for child_idx in children
         child_idx == 0 && continue
@@ -509,7 +511,7 @@ function _nearest_triangle_octree!(
         end
     end
 
-    @inbounds for i in 1:n_valid
+    return @inbounds for i in 1:n_valid
         _nearest_triangle_octree!(
             point,
             tree,
@@ -530,7 +532,7 @@ Positive if outside (on the side of the normal), negative if inside.
 
 Used as ground-truth reference in tests. O(M) complexity.
 """
-function _compute_signed_distance(point::SVector{3,T}, mesh::SimpleMesh) where {T<:Real}
+function _compute_signed_distance(point::SVector{3, T}, mesh::SimpleMesh) where {T <: Real}
     min_dist = T(Inf)
     n = Meshes.nelements(mesh)
 
@@ -558,10 +560,10 @@ Compute signed distance to the closest triangle using octree branch-and-bound.
 This avoids global O(M) triangle scans by searching only relevant octree regions.
 """
 function _compute_signed_distance_octree(
-    point::SVector{3,T},
-    mesh::SimpleMesh,
-    tree::SpatialOctree{Int,T},
-) where {T<:Real}
+        point::SVector{3, T},
+        mesh::SimpleMesh,
+        tree::SpatialOctree{Int, T},
+    ) where {T <: Real}
     best_dist_sq = Ref(typemax(T))
     closest_idx = Ref(0)
     closest_pt = Ref(point)
@@ -600,14 +602,14 @@ This avoids falsely labeling a partially-outside leaf as interior.
 Implementation uses octree-accelerated signed distance, not ray casting.
 """
 function _classify_empty_leaf_conservative(
-    tree::SpatialOctree{Int,T},
-    mesh::SimpleMesh,
-    leaf_idx::Int,
-) where {T<:Real}
+        tree::SpatialOctree{Int, T},
+        mesh::SimpleMesh,
+        leaf_idx::Int,
+    ) where {T <: Real}
     bbox_min, bbox_max = box_bounds(tree, leaf_idx)
     h = box_size(tree, leaf_idx)
-    δ = max(T(1e-9), h * T(1e-6))
-    tol = max(T(1e-8), h * T(1e-6))
+    δ = max(T(1.0e-9), h * T(1.0e-6))
+    tol = max(T(1.0e-8), h * T(1.0e-6))
 
     center = box_center(tree, leaf_idx)
     sd_center = _compute_signed_distance_octree(center, mesh, tree)
@@ -623,16 +625,16 @@ function _classify_empty_leaf_conservative(
     y0, y1 = bbox_min[2] + δ, bbox_max[2] - δ
     z0, z1 = bbox_min[3] + δ, bbox_max[3] - δ
 
-    probes = SVector{3,T}[
+    probes = SVector{3, T}[
         center,
-        SVector{3,T}(x0, y0, z0),
-        SVector{3,T}(x1, y0, z0),
-        SVector{3,T}(x0, y1, z0),
-        SVector{3,T}(x1, y1, z0),
-        SVector{3,T}(x0, y0, z1),
-        SVector{3,T}(x1, y0, z1),
-        SVector{3,T}(x0, y1, z1),
-        SVector{3,T}(x1, y1, z1),
+        SVector{3, T}(x0, y0, z0),
+        SVector{3, T}(x1, y0, z0),
+        SVector{3, T}(x0, y1, z0),
+        SVector{3, T}(x1, y1, z0),
+        SVector{3, T}(x0, y0, z1),
+        SVector{3, T}(x1, y0, z1),
+        SVector{3, T}(x0, y1, z1),
+        SVector{3, T}(x1, y1, z1),
     ]
 
     first_class = _leaf_class_from_signed_distance(
@@ -666,7 +668,7 @@ Uses octree-accelerated signed distance for robust classification.
     - `1`: Boundary leaf
     - `2`: Interior leaf
 """
-function _classify_leaves(tree::SpatialOctree{Int,T}, mesh::SimpleMesh) where {T<:Real}
+function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::SimpleMesh) where {T <: Real}
     n_boxes = length(tree.element_lists)
     classification = fill(LEAF_UNKNOWN, n_boxes)
 
@@ -684,7 +686,6 @@ function _classify_leaves(tree::SpatialOctree{Int,T}, mesh::SimpleMesh) where {T
 
     return classification
 end
-
 
 
 Base.length(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
@@ -723,7 +724,7 @@ point = SVector(0.5, 0.5, 0.5)
 is_inside = isinside(point, octree)
 ```
 """
-function isinside(point::SVector{3,T}, octree::TriangleOctree) where {T<:Real}
+function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
     # Fast rejection: if point is outside bounding box, it's definitely outside
     bbox_min, bbox_max = box_bounds(octree.tree, 1)
     if any(point .< bbox_min) || any(point .> bbox_max)
@@ -770,10 +771,10 @@ we only check the k≈10-50 triangles in the point's octree leaf.
 Performance: Fused computation avoids redundant closest_point calculation.
 """
 function _compute_local_signed_distance(
-    point::SVector{3,T},
-    mesh::SimpleMesh,
-    tri_indices::Vector{Int},
-) where {T<:Real}
+        point::SVector{3, T},
+        mesh::SimpleMesh,
+        tri_indices::Vector{Int},
+    ) where {T <: Real}
     best_dist_sq = Ref(typemax(T))
     closest_idx = Ref(0)
     closest_pt = Ref(point)
@@ -799,7 +800,6 @@ function _compute_local_signed_distance(
 end
 
 
-
 """
     isinside(points::Vector{SVector{3,T}}, octree::TriangleOctree) -> Vector{Bool}
 
@@ -811,6 +811,6 @@ test_points = [SVector(randn(3)...) for _ in 1:1000]
 results = isinside(test_points, octree)  # Returns Vector{Bool}
 ```
 """
-function isinside(points::Vector{SVector{3,T}}, octree::TriangleOctree) where {T<:Real}
+function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}
     return tmap(p -> isinside(p, octree), points)
 end

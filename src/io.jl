@@ -18,12 +18,12 @@ function export_cloud(filename::String, cloud::PointCloud)
 end
 
 function exportvtk(
-    filename::String,
-    points::AbstractVector{V},
-    data::AbstractVector,
-    names::Vector;
-    triangulate=false,
-) where {V<:AbstractVector}
+        filename::String,
+        points::AbstractVector{V},
+        data::AbstractVector,
+        names::Vector;
+        triangulate = false,
+    ) where {V <: AbstractVector}
     # Strip units from points for VTK compatibility
     p = reduce(hcat, map(pt -> ustrip.(pt), points))
     cells = createvtkcells(p, triangulate)
@@ -35,7 +35,7 @@ function exportvtk(
     return nothing
 end
 
-function createvtkcells(coords, triangulate=true, nonconvex=false)
+function createvtkcells(coords, triangulate = true, nonconvex = false)
     # only save as points/vertexes
     return [MeshCell(VTKCellTypes.VTK_VERTEX, (i,)) for i in 1:size(coords, 2)]
 end

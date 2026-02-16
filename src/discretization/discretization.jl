@@ -26,26 +26,26 @@ cloud = discretize(boundary, 3.0m; alg=SlakKosec(octree), max_points=100_000)
 ```
 """
 function discretize(
-    bnd::PointBoundary{𝔼{3}},
-    spacing::AbstractSpacing;
-    alg::AbstractNodeGenerationAlgorithm=SlakKosec(),
-    max_points=10_000_000,
-)
+        bnd::PointBoundary{𝔼{3}},
+        spacing::AbstractSpacing;
+        alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
+        max_points = 10_000_000,
+    )
     cloud = PointCloud(bnd)
-    new_volume = _discretize_volume(cloud, spacing, alg; max_points=max_points)
+    new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
 function discretize(
-    bnd::PointBoundary{𝔼{2}},
-    spacing::AbstractSpacing;
-    alg::AbstractNodeGenerationAlgorithm=FornbergFlyer(),
-    max_points=10_000_000,
-)
+        bnd::PointBoundary{𝔼{2}},
+        spacing::AbstractSpacing;
+        alg::AbstractNodeGenerationAlgorithm = FornbergFlyer(),
+        max_points = 10_000_000,
+    )
     @warn "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
     cloud = PointCloud(bnd)
     new_volume =
-        _discretize_volume(cloud, spacing, FornbergFlyer(); max_points=max_points)
+        _discretize_volume(cloud, spacing, FornbergFlyer(); max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
@@ -55,12 +55,12 @@ end
 Generate volume points for an existing cloud and return a new PointCloud with the volume populated.
 """
 function discretize(
-    cloud::PointCloud,
-    spacing::AbstractSpacing;
-    alg::AbstractNodeGenerationAlgorithm=SlakKosec(),
-    max_points=10_000_000,
-)
-    new_volume = _discretize_volume(cloud, spacing, alg; max_points=max_points)
+        cloud::PointCloud,
+        spacing::AbstractSpacing;
+        alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
+        max_points = 10_000_000,
+    )
+    new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
@@ -85,17 +85,17 @@ end
 
 # Convenience overloads: accept bare Unitful.Length and wrap in ConstantSpacing
 function discretize(
-    bnd::PointBoundary,
-    spacing::Unitful.Length;
-    kwargs...,
-)
+        bnd::PointBoundary,
+        spacing::Unitful.Length;
+        kwargs...,
+    )
     return discretize(bnd, ConstantSpacing(spacing); kwargs...)
 end
 
 function discretize(
-    cloud::PointCloud,
-    spacing::Unitful.Length;
-    kwargs...,
-)
+        cloud::PointCloud,
+        spacing::Unitful.Length;
+        kwargs...,
+    )
     return discretize(cloud, ConstantSpacing(spacing); kwargs...)
 end

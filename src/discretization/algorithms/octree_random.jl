@@ -78,15 +78,15 @@ cloud = discretize(boundary, 1.0u"m"; alg=alg, max_points=10_000)
 - Adaptive refinement
 - Smooth point distributions
 """
-struct OctreeRandom{M<:Manifold,C<:CRS,T<:Real} <: AbstractNodeGenerationAlgorithm
-    octree::TriangleOctree{M,C,T}
+struct OctreeRandom{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
+    octree::TriangleOctree{M, C, T}
     boundary_oversampling::Float64
 end
 
-OctreeRandom(octree::TriangleOctree{M,C,T}) where {M,C,T} =
-    OctreeRandom{M,C,T}(octree, 2.0)
-OctreeRandom(octree::TriangleOctree{M,C,T}, oversampling::Real) where {M,C,T} =
-    OctreeRandom{M,C,T}(octree, Float64(oversampling))
+OctreeRandom(octree::TriangleOctree{M, C, T}) where {M, C, T} =
+    OctreeRandom{M, C, T}(octree, 2.0)
+OctreeRandom(octree::TriangleOctree{M, C, T}, oversampling::Real) where {M, C, T} =
+    OctreeRandom{M, C, T}(octree, Float64(oversampling))
 
 """
     _allocate_counts_by_volume(volumes, total_count; ensure_one=false)
@@ -98,15 +98,15 @@ If `ensure_one=true` and `total_count >= length(volumes)`, each leaf gets at
 least one allocation before distributing the remainder by volume.
 """
 function _allocate_counts_by_volume(
-    volumes::Vector{T},
-    total_count::Int;
-    ensure_one::Bool=false,
-) where {T<:Real}
+        volumes::Vector{T},
+        total_count::Int;
+        ensure_one::Bool = false,
+    ) where {T <: Real}
     n = length(volumes)
     n == 0 && return Int[]
     total_count <= 0 && return zeros(Int, n)
 
-    total_volume = sum(volumes; init=zero(T))
+    total_volume = sum(volumes; init = zero(T))
     weights = if total_volume > zero(T)
         volumes ./ total_volume
     else
@@ -132,7 +132,7 @@ function _allocate_counts_by_volume(
     leftover = remaining - sum(base)
     if leftover > 0
         frac = expected .- base
-        idxs = sortperm(frac; rev=true)
+        idxs = sortperm(frac; rev = true)
         for i in 1:leftover
             counts[idxs[i]] += 1
         end
@@ -142,11 +142,11 @@ function _allocate_counts_by_volume(
 end
 
 function _discretize_volume(
-    cloud::PointCloud{𝔼{3},C},
-    spacing::AbstractSpacing,  # Not used - random distribution
-    alg::OctreeRandom;
-    max_points=1_000,
-) where {C}
+        cloud::PointCloud{𝔼{3}, C},
+        spacing::AbstractSpacing,  # Not used - random distribution
+        alg::OctreeRandom;
+        max_points = 1_000,
+    ) where {C}
     # Note: cloud and spacing parameters are required by the interface but not used
     # This algorithm generates random points directly from octree classification
 
@@ -177,13 +177,13 @@ function _discretize_volume(
     end
 
     # Calculate total volume
-    total_interior_volume = sum(interior_volumes; init=zero(T))
-    total_boundary_volume = sum(boundary_volumes; init=zero(T))
+    total_interior_volume = sum(interior_volumes; init = zero(T))
+    total_boundary_volume = sum(boundary_volumes; init = zero(T))
     total_volume = total_interior_volume + total_boundary_volume
 
     if total_volume ≈ 0
         @warn "No interior or boundary volume found in octree"
-        return PointVolume(Point{𝔼{3},C}[])
+        return PointVolume(Point{𝔼{3}, C}[])
     end
 
     # Allocate points proportionally to volume
@@ -196,12 +196,12 @@ function _discretize_volume(
     interior_counts = _allocate_counts_by_volume(
         interior_volumes,
         n_interior;
-        ensure_one=true,
+        ensure_one = true,
     )
     boundary_sample_counts = _allocate_counts_by_volume(boundary_volumes, n_boundary_samples)
 
     # Pre-allocate result array
-    raw_points = SVector{3,T}[]
+    raw_points = SVector{3, T}[]
     sizehint!(raw_points, max_points)
 
     # Generate points in interior leaves.
@@ -218,7 +218,7 @@ function _discretize_volume(
                 x = bbox_min[1] + rand(T) * (bbox_max[1] - bbox_min[1])
                 y = bbox_min[2] + rand(T) * (bbox_max[2] - bbox_min[2])
                 z = bbox_min[3] + rand(T) * (bbox_max[3] - bbox_min[3])
-                pt = SVector{3,T}(x, y, z)
+                pt = SVector{3, T}(x, y, z)
 
                 if _compute_signed_distance_octree(pt, alg.octree.mesh, alg.octree.tree) < 0
                     push!(raw_points, pt)
@@ -229,7 +229,7 @@ function _discretize_volume(
 
     # Generate points in boundary leaves (with filtering)
     if !isempty(boundary_leaves)
-        boundary_candidates = SVector{3,T}[]
+        boundary_candidates = SVector{3, T}[]
         sizehint!(boundary_candidates, n_boundary_samples)
 
         for (leaf_idx, n_leaf_samples) in zip(boundary_leaves, boundary_sample_counts)
@@ -243,7 +243,7 @@ function _discretize_volume(
                 y = bbox_min[2] + rand(T) * (bbox_max[2] - bbox_min[2])
                 z = bbox_min[3] + rand(T) * (bbox_max[3] - bbox_min[3])
 
-                push!(boundary_candidates, SVector{3,T}(x, y, z))
+                push!(boundary_candidates, SVector{3, T}(x, y, z))
             end
         end
 
@@ -276,14 +276,14 @@ function _discretize_volume(
             x = bbox_min[1] + rand(T) * (bbox_max[1] - bbox_min[1])
             y = bbox_min[2] + rand(T) * (bbox_max[2] - bbox_min[2])
             z = bbox_min[3] + rand(T) * (bbox_max[3] - bbox_min[3])
-            pt = SVector{3,T}(x, y, z)
+            pt = SVector{3, T}(x, y, z)
             _compute_signed_distance_octree(pt, alg.octree.mesh, alg.octree.tree) < 0 &&
                 push!(raw_points, pt)
         end
     end
 
     # Convert to Point objects with proper manifold/CRS
-    result_points = Point{𝔼{3},C}[]
+    result_points = Point{𝔼{3}, C}[]
     sizehint!(result_points, length(raw_points))
 
     for pt in raw_points
