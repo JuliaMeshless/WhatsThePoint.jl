@@ -386,4 +386,3 @@ function triangle_box_intersection(
     # All tests passed - triangle intersects box
     return true
 end
-

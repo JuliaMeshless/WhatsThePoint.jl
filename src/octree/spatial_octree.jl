@@ -290,13 +290,15 @@ function subdivide!(octree::SpatialOctree, box_idx::Int)
 
     # Standard octree ordering: (di, dj, dk) ∈ {0,1}³ decoded from child index
     # child n (0-indexed) → di = n & 1, dj = (n >> 1) & 1, dk = (n >> 2) & 1
-    child_indices = SVector{8, Int}(ntuple(Val(8)) do n
-        m = n - 1
-        di = m & 1
-        dj = (m >> 1) & 1
-        dk = (m >> 2) & 1
-        add_box!(octree, 2 * i_p + di, 2 * j_p + dj, 2 * k_p + dk, N_child, box_idx)
-    end)
+    child_indices = SVector{8, Int}(
+        ntuple(Val(8)) do n
+            m = n - 1
+            di = m & 1
+            dj = (m >> 1) & 1
+            dk = (m >> 2) & 1
+            add_box!(octree, 2 * i_p + di, 2 * j_p + dj, 2 * k_p + dk, N_child, box_idx)
+        end
+    )
 
     octree.children[box_idx] = child_indices
 
@@ -490,6 +492,7 @@ function find_boxes_at_coords(
             return [current]
         end
     end
+    return
 end
 
 #=============================================================================

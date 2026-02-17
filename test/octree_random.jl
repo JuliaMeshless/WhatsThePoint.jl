@@ -2,7 +2,7 @@
 
 @testitem "OctreeRandom constructors" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
-    octree = TriangleOctree(mesh; h_min=0.05, max_triangles_per_box=5, classify_leaves=true)
+    octree = TriangleOctree(mesh; h_min = 0.05, max_triangles_per_box = 5, classify_leaves = true)
 
     # Default oversampling = 2.0 and verify_interior = false
     alg1 = OctreeRandom(octree)
@@ -21,7 +21,7 @@
     @test alg3.boundary_oversampling === 4.0
 
     # verify_interior can be enabled
-    alg4 = OctreeRandom(octree, 2.0; verify_interior=true)
+    alg4 = OctreeRandom(octree, 2.0; verify_interior = true)
     @test alg4.verify_interior == true
     @test alg4.boundary_oversampling == 2.0
 
@@ -54,7 +54,7 @@ end
     end
 
     # ensure_one: every leaf gets at least 1 when total_count >= n
-    result = _allocate_counts_by_volume([10.0, 0.001, 0.001], 100; ensure_one=true)
+    result = _allocate_counts_by_volume([10.0, 0.001, 0.001], 100; ensure_one = true)
     @test all(result .>= 1)
     @test sum(result) == 100
 
@@ -83,7 +83,7 @@ end
     @test result == [3, 3, 3]
 
     # ensure_one with total_count < n → can't guarantee one per leaf
-    result = _allocate_counts_by_volume([1.0, 1.0, 1.0, 1.0, 1.0], 3; ensure_one=true)
+    result = _allocate_counts_by_volume([1.0, 1.0, 1.0, 1.0, 1.0], 3; ensure_one = true)
     @test sum(result) == 3
 
     # Large count with many leaves → sum still exact
@@ -112,9 +112,9 @@ end
     mesh = OctreeTestData.unit_cube_mesh()
 
     bnd = PointBoundary(mesh)
-    octree = TriangleOctree(mesh; h_min=0.05, max_triangles_per_box=5, classify_leaves=true)
+    octree = TriangleOctree(mesh; h_min = 0.05, max_triangles_per_box = 5, classify_leaves = true)
 
-    cloud = discretize(bnd, ConstantSpacing(1.0m); alg=OctreeRandom(octree), max_points=200)
+    cloud = discretize(bnd, ConstantSpacing(1.0m); alg = OctreeRandom(octree), max_points = 200)
 
     @test cloud isa PointCloud
     vol = WhatsThePoint.volume(cloud)
@@ -142,11 +142,11 @@ end
     mesh = OctreeTestData.unit_cube_mesh()
 
     bnd = PointBoundary(mesh)
-    octree_no_class = TriangleOctree(mesh; h_min=0.05, max_triangles_per_box=5, classify_leaves=false)
+    octree_no_class = TriangleOctree(mesh; h_min = 0.05, max_triangles_per_box = 5, classify_leaves = false)
 
     @test_throws ErrorException discretize(
         bnd, ConstantSpacing(1.0m);
-        alg=OctreeRandom(octree_no_class), max_points=50,
+        alg = OctreeRandom(octree_no_class), max_points = 50,
     )
 end
 
@@ -158,12 +158,12 @@ end
         bnd = PointBoundary(TestData.BOX_PATH)
         octree = TriangleOctree(
             TestData.BOX_PATH;
-            h_min=0.1,
-            max_triangles_per_box=50,
-            classify_leaves=true,
+            h_min = 0.1,
+            max_triangles_per_box = 50,
+            classify_leaves = true,
         )
 
-        cloud = discretize(bnd, ConstantSpacing(1.0m); alg=OctreeRandom(octree), max_points=500)
+        cloud = discretize(bnd, ConstantSpacing(1.0m); alg = OctreeRandom(octree), max_points = 500)
 
         @test cloud isa PointCloud
         vol = WhatsThePoint.volume(cloud)
@@ -186,18 +186,18 @@ end
 
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
-    octree = TriangleOctree(mesh; h_min=0.05, max_triangles_per_box=5, classify_leaves=true)
+    octree = TriangleOctree(mesh; h_min = 0.05, max_triangles_per_box = 5, classify_leaves = true)
 
     max_pts = 200
 
     # Low oversampling
     Random.seed!(99)
-    cloud_low = discretize(bnd, ConstantSpacing(1.0m); alg=OctreeRandom(octree, 1.0), max_points=max_pts)
+    cloud_low = discretize(bnd, ConstantSpacing(1.0m); alg = OctreeRandom(octree, 1.0), max_points = max_pts)
     n_low = length(WhatsThePoint.volume(cloud_low))
 
     # High oversampling
     Random.seed!(99)
-    cloud_high = discretize(bnd, ConstantSpacing(1.0m); alg=OctreeRandom(octree, 3.0), max_points=max_pts)
+    cloud_high = discretize(bnd, ConstantSpacing(1.0m); alg = OctreeRandom(octree, 3.0), max_points = max_pts)
     n_high = length(WhatsThePoint.volume(cloud_high))
 
     # Both should produce valid interior points

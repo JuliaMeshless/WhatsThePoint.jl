@@ -58,10 +58,10 @@ const LEAF_INTERIOR::Int8 = 2
 
 # Numeric constants for bounding box and classification
 const _BBOX_EXPANSION = 1.02        # 2% buffer for numerical safety
-const _DEGENERATE_EPS = 1e-10       # Min bbox extent for degenerate dims
-const _CLASSIFICATION_INSET = 1e-9  # Corner inset to avoid on-surface probes
-const _CLASSIFY_TOLERANCE_REL = 1e-6  # Relative tolerance for classification (scaled by h)
-const _CLASSIFY_TOLERANCE_ABS = 1e-8  # Absolute tolerance floor for classification
+const _DEGENERATE_EPS = 1.0e-10       # Min bbox extent for degenerate dims
+const _CLASSIFICATION_INSET = 1.0e-9  # Corner inset to avoid on-surface probes
+const _CLASSIFY_TOLERANCE_REL = 1.0e-6  # Relative tolerance for classification (scaled by h)
+const _CLASSIFY_TOLERANCE_ABS = 1.0e-8  # Absolute tolerance floor for classification
 
 """
     NearestTriangleState{T<:Real}
@@ -353,14 +353,16 @@ function TriangleOctree(
     n_triangles = Meshes.nelements(mesh)
 
     if verify_orientation && !has_consistent_normals(T, mesh)
-        throw(ArgumentError(
-            "Triangle mesh has orientation errors (flipped faces). " *
-            "Some triangles have their faces oriented incorrectly (shared edges " *
-            "traversed in the same direction instead of opposite directions). " *
-            "This will cause incorrect isinside() and signed distance calculations. " *
-            "The mesh needs to be repaired before use with the octree. " *
-            "To skip this check, pass `verify_orientation=false`.",
-        ))
+        throw(
+            ArgumentError(
+                "Triangle mesh has orientation errors (flipped faces). " *
+                    "Some triangles have their faces oriented incorrectly (shared edges " *
+                    "traversed in the same direction instead of opposite directions). " *
+                    "This will cause incorrect isinside() and signed distance calculations. " *
+                    "The mesh needs to be repaired before use with the octree. " *
+                    "To skip this check, pass `verify_orientation=false`.",
+            )
+        )
     end
 
     tree = _create_root_octree(T, mesh, n_triangles)
