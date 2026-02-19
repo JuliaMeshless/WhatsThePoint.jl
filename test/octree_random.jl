@@ -209,3 +209,108 @@ end
     # Higher oversampling should yield count closer to max_points (or equal)
     @test n_high >= n_low
 end
+
+@testitem "_auto_h_min" setup = [CommonImports, OctreeTestData] begin
+    using WhatsThePoint: _auto_h_min
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    h = _auto_h_min(Float64, mesh)
+
+    # Must be positive
+    @test h > 0.0
+
+    # Verify formula: diagonal / (2 * cbrt(n_triangles))
+    # Unit cube: bbox diagonal = sqrt(3), 12 triangles
+    expected = sqrt(3.0) / (2 * cbrt(12.0))
+    @test h ≈ expected
+
+    # Sanity: h_min should be smaller than the bbox diagonal
+    @test h < sqrt(3.0)
+end
+
+@testitem "OctreeRandom(mesh) convenience constructor" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+
+    # Default parameters
+    alg = OctreeRandom(mesh)
+    @test alg isa OctreeRandom
+    @test alg.boundary_oversampling == 2.0
+    @test alg.verify_interior == false
+    @test alg.octree isa TriangleOctree
+
+    # Leaves must be classified (required for discretization)
+    @test !isnothing(alg.octree.leaf_classification)
+
+    # Type parameters propagate
+    @test alg isa OctreeRandom{Meshes.𝔼{3}}
+end
+
+@testitem "OctreeRandom(mesh; h_min=explicit)" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+
+    # Explicit h_min overrides auto calculation
+    alg = OctreeRandom(mesh; h_min = 0.1)
+    @test alg isa OctreeRandom
+    @test !isnothing(alg.octree.leaf_classification)
+
+    # Custom oversampling and verify_interior
+    alg2 = OctreeRandom(mesh; h_min = 0.1, boundary_oversampling = 3.0, verify_interior = true)
+    @test alg2.boundary_oversampling == 3.0
+    @test alg2.verify_interior == true
+end
+
+@testitem "OctreeRandom(filepath) convenience constructor" setup = [CommonImports, TestData] begin
+    if isfile(TestData.BOX_PATH)
+        alg = OctreeRandom(TestData.BOX_PATH)
+        @test alg isa OctreeRandom
+        @test !isnothing(alg.octree.leaf_classification)
+
+        # Explicit h_min via filepath
+        alg2 = OctreeRandom(TestData.BOX_PATH; h_min = 1.0)
+        @test alg2 isa OctreeRandom
+    else
+        @test_skip "box.stl not available"
+    end
+end
+
+@testitem "discretize(bnd, OctreeRandom) — no spacing" setup = [CommonImports, OctreeTestData] begin
+    using Random
+    Random.seed!(42)
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    bnd = PointBoundary(mesh)
+
+    # New API: no spacing parameter
+    cloud = discretize(bnd, OctreeRandom(mesh); max_points = 200)
+
+    @test cloud isa PointCloud
+    vol = WhatsThePoint.volume(cloud)
+    @test length(vol) > 0
+    @test length(vol) <= 200
+
+    # All volume points should be inside the unit cube
+    for pt in vol
+        c = to(pt)
+        x, y, z = c[1] / m, c[2] / m, c[3] / m
+        @test -0.01 <= x <= 1.01
+        @test -0.01 <= y <= 1.01
+        @test -0.01 <= z <= 1.01
+    end
+end
+
+@testitem "discretize backward compat — spacing + alg kwarg" setup = [CommonImports, OctreeTestData] begin
+    using Random
+    Random.seed!(42)
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    bnd = PointBoundary(mesh)
+    octree = TriangleOctree(mesh; h_min = 0.05, max_triangles_per_box = 5, classify_leaves = true)
+
+    # Old API: spacing + alg keyword
+    cloud = discretize(bnd, ConstantSpacing(1.0m); alg = OctreeRandom(octree), max_points = 200)
+
+    @test cloud isa PointCloud
+    vol = WhatsThePoint.volume(cloud)
+    @test length(vol) > 0
+    @test length(vol) <= 200
+end

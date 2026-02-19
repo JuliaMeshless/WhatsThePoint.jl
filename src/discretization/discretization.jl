@@ -83,6 +83,31 @@ function calculate_ninit(cloud::PointCloud{𝔼{2}}, s::ConstantSpacing)
     return ceil(Int, extent[1] * 10 / s.Δx)
 end
 
+"""
+    discretize(bnd::PointBoundary{𝔼{3}}, alg::OctreeRandom; max_points=10_000_000)
+
+Generate volume points using `OctreeRandom` without requiring a spacing parameter.
+
+OctreeRandom generates uniformly random points and does not use spacing, so this
+overload removes the need for a dummy spacing value.
+
+# Example
+```julia
+mesh = GeoIO.load("bunny.stl").geometry
+boundary = PointBoundary(mesh)
+cloud = discretize(boundary, OctreeRandom(mesh); max_points=100_000)
+```
+"""
+function discretize(
+        bnd::PointBoundary{𝔼{3}},
+        alg::OctreeRandom;
+        max_points = 10_000_000,
+    )
+    cloud = PointCloud(bnd)
+    new_volume = _discretize_volume(cloud, alg; max_points)
+    return PointCloud(boundary(cloud), new_volume, NoTopology())
+end
+
 # Convenience overloads: accept bare Unitful.Length and wrap in ConstantSpacing
 function discretize(
         bnd::PointBoundary,

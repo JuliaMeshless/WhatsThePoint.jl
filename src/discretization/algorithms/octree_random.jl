@@ -3,21 +3,30 @@
 
 Octree-guided random point generation for volume discretization.
 
-This algorithm uses a pre-built TriangleOctree with leaf classification to efficiently
+This algorithm uses a `TriangleOctree` with leaf classification to efficiently
 generate random points inside the mesh. It's much faster than rejection sampling because:
 - Only samples in interior/boundary regions (skips exterior entirely)
 - Interior boxes need no filtering (100% acceptance rate)
 - Only boundary boxes require isinside() checks
 
 # Fields
-- `octree::TriangleOctree` - Pre-built octree with leaf classification
+- `octree::TriangleOctree` - Octree with leaf classification
 - `boundary_oversampling::Float64` - Oversampling factor for boundary boxes (default: 2.0)
 - `verify_interior::Bool` - Per-point signed distance verification for interior leaves (default: false)
 
 # Constructors
 ```julia
-OctreeRandom(octree::TriangleOctree)                                        # Default oversampling = 2.0
-OctreeRandom(octree::TriangleOctree, oversampling; verify_interior=false)   # Custom oversampling factor
+# From mesh (recommended) — builds octree automatically with classified leaves
+OctreeRandom(mesh::SimpleMesh)                          # Auto h_min
+OctreeRandom(mesh; h_min=0.01, boundary_oversampling=2.0)  # Custom h_min
+
+# From file path — loads mesh then builds octree
+OctreeRandom("bunny.stl")
+OctreeRandom("bunny.stl"; h_min=0.01)
+
+# From pre-built octree (advanced)
+OctreeRandom(octree::TriangleOctree)
+OctreeRandom(octree, oversampling; verify_interior=false)
 ```
 
 # Performance
@@ -27,32 +36,30 @@ OctreeRandom(octree::TriangleOctree, oversampling; verify_interior=false)   # Cu
 
 # Usage Examples
 
-## Basic Usage
+## Recommended Usage
 ```julia
 using WhatsThePoint
 
-# Build octree from STL file
-octree = TriangleOctree("bunny.stl"; h_min=0.01, classify_leaves=true)
+mesh = GeoIO.load("bunny.stl").geometry
+boundary = PointBoundary(mesh)
+cloud = discretize(boundary, OctreeRandom(mesh); max_points=100_000)
+```
 
-# Create discretization algorithm
-alg = OctreeRandom(octree)
-
-# Discretize (spacing parameter is ignored for this algorithm)
-boundary = PointBoundary("bunny.stl")
-cloud = discretize(boundary, 1.0u"m"; alg=alg, max_points=10_000)
-println("Generated ", length(volume(cloud)), " interior points")
+## With Spacing (backward compatible)
+```julia
+octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
+cloud = discretize(boundary, 1.0u"m"; alg=OctreeRandom(octree), max_points=10_000)
 ```
 
 ## With Custom Oversampling
 ```julia
-# Higher oversampling (2.5×) generates more boundary candidates
-# Better for thin features but slower
-alg = OctreeRandom(octree, 2.5)
-cloud = discretize(boundary, 1.0u"m"; alg=alg, max_points=10_000)
+alg = OctreeRandom(mesh; boundary_oversampling=2.5)
+cloud = discretize(boundary, alg; max_points=10_000)
 ```
 
 # Notes
-- Requires octree built with `classify_leaves=true`
+- The mesh convenience constructor always sets `classify_leaves=true`
+- When `h_min` is omitted, it is computed as `bbox_diagonal / (2 * cbrt(n_triangles))`
 - The `spacing` parameter is **not used** (random uniform distribution)
 - For spacing-based discretization, use SlakKosec or VanDerSandeFornberg
 - Actual point count may be slightly less than `max_points` due to boundary filtering
@@ -98,6 +105,74 @@ function OctreeRandom(
     ) where {M, C, T}
     oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive, got $oversampling"))
     return OctreeRandom{M, C, T}(octree, Float64(oversampling), verify_interior)
+end
+
+"""
+    _auto_h_min(::Type{T}, mesh::SimpleMesh) where {T}
+
+Compute a default `h_min` for octree construction based on mesh geometry.
+
+Heuristic: `bbox_diagonal / (2 * cbrt(n_triangles))`. Scales leaf size to the
+mesh's characteristic triangle spacing so the octree resolves surface detail
+without excessive subdivision.
+"""
+function _auto_h_min(::Type{T}, mesh::SimpleMesh) where {T}
+    bbox_min, bbox_max = _compute_bbox(T, mesh)
+    diagonal = norm(bbox_max - bbox_min)
+    n = Meshes.nelements(mesh)
+    return diagonal / (2 * cbrt(T(n)))
+end
+
+"""
+    OctreeRandom(mesh::SimpleMesh; h_min=nothing, max_triangles_per_box=50,
+                 boundary_oversampling=2.0, verify_interior=false, verify_orientation=true)
+
+Convenience constructor that builds a classified `TriangleOctree` internally.
+
+When `h_min` is not provided, an automatic value is computed from the mesh's
+bounding box diagonal and triangle count.
+
+# Example
+```julia
+mesh = GeoIO.load("bunny.stl").geometry
+alg = OctreeRandom(mesh)
+cloud = discretize(boundary, alg; max_points=100_000)
+```
+"""
+function OctreeRandom(
+        mesh::SimpleMesh{M, C};
+        h_min = nothing,
+        max_triangles_per_box::Int = 50,
+        boundary_oversampling::Real = 2.0,
+        verify_interior::Bool = false,
+        verify_orientation::Bool = true,
+    ) where {M <: Manifold, C <: CRS}
+    T = Float64
+    h_min_val = isnothing(h_min) ? _auto_h_min(T, mesh) : T(ustrip(h_min))
+    octree = TriangleOctree(mesh;
+        h_min = h_min_val,
+        max_triangles_per_box,
+        classify_leaves = true,
+        verify_orientation,
+    )
+    return OctreeRandom(octree, boundary_oversampling; verify_interior)
+end
+
+"""
+    OctreeRandom(filepath::String; kwargs...)
+
+Load a mesh from `filepath` and build an `OctreeRandom` algorithm.
+Accepts the same keyword arguments as `OctreeRandom(mesh; ...)`.
+
+# Example
+```julia
+alg = OctreeRandom("bunny.stl")
+cloud = discretize(boundary, alg; max_points=100_000)
+```
+"""
+function OctreeRandom(filepath::String; kwargs...)
+    geo = GeoIO.load(filepath)
+    return OctreeRandom(geo.geometry; kwargs...)
 end
 
 """
@@ -182,9 +257,18 @@ function _collect_classified_leaves(octree::TriangleOctree)
     return interior_leaves, interior_volumes, boundary_leaves, boundary_volumes
 end
 
+# Delegate spacing-based call to spacing-free version (spacing is unused by OctreeRandom)
 function _discretize_volume(
         cloud::PointCloud{𝔼{3}, C},
-        spacing::AbstractSpacing,  # Not used - random distribution
+        ::AbstractSpacing,
+        alg::OctreeRandom;
+        max_points = 1_000,
+    ) where {C}
+    return _discretize_volume(cloud, alg; max_points)
+end
+
+function _discretize_volume(
+        cloud::PointCloud{𝔼{3}, C},
         alg::OctreeRandom;
         max_points = 1_000,
     ) where {C}
