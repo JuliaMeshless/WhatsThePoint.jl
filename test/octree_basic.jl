@@ -243,3 +243,113 @@ end
     @test min_corner ≈ SVector(0.0, 0.0, 0.0)
     @test max_corner ≈ SVector(10.0, 10.0, 10.0)
 end
+
+@testitem "SpatialOctree Capacity Growth" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, is_leaf
+
+    origin = SVector(0.0, 0.0, 0.0)
+    # initial_capacity=1 forces the resize path in add_box! (lines 242-256)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0; initial_capacity=1)
+
+    # Root uses slot 1; subdivision adds 8 children → must grow arrays
+    children = subdivide!(octree, 1)
+    @test octree.num_boxes[] == 9
+    @test all(is_leaf(octree, c) for c in children)
+
+    # Verify all arrays grew consistently
+    @test length(octree.parent) >= 9
+    @test length(octree.children) >= 9
+    @test length(octree.coords) >= 9
+    @test length(octree.element_lists) >= 9
+
+    # Verify children have correct coordinates after resize
+    @test octree.coords[children[1]] == SVector(0, 0, 0, 2)
+    @test octree.coords[children[8]] == SVector(1, 1, 1, 2)
+
+    # Second subdivision should also work (may trigger another resize)
+    grandchildren = subdivide!(octree, children[1])
+    @test octree.num_boxes[] == 17
+    @test all(is_leaf(octree, gc) for gc in grandchildren)
+    @test octree.coords[grandchildren[1]] == SVector(0, 0, 0, 4)
+end
+
+@testitem "SpatialOctree all_boxes" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, all_boxes
+
+    origin = SVector(0.0, 0.0, 0.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
+
+    # Single root box
+    @test all_boxes(octree) == [1]
+
+    # After subdivision: root + 8 children
+    subdivide!(octree, 1)
+    boxes = all_boxes(octree)
+    @test length(boxes) == 9
+    @test boxes == collect(1:9)
+
+    # After second subdivision: 9 + 8 = 17
+    subdivide!(octree, 2)  # subdivide first child
+    boxes = all_boxes(octree)
+    @test length(boxes) == 17
+    @test boxes == collect(1:17)
+end
+
+@testitem "SpatialOctree needs_balancing non-leaf" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, needs_balancing
+
+    origin = SVector(0.0, 0.0, 0.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
+
+    subdivide!(octree, 1)
+    # Root (box 1) is not a leaf after subdivision → early return false
+    @test needs_balancing(octree, 1) == false
+end
+
+@testitem "SpatialOctree find_boxes_at_coords edge cases" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, find_neighbor, find_boxes_at_coords
+
+    origin = SVector(0.0, 0.0, 0.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
+
+    children_L1 = subdivide!(octree, 1)
+    children_L2 = subdivide!(octree, children_L1[1])
+
+    # --- Line 448: exact match at target level ---
+    # Search for (1,0,0) at level 2 — navigates root→child 2 and matches
+    result = find_boxes_at_coords(octree, 1, 0, 0, 2)
+    @test result == [children_L1[2]]
+    @test octree.coords[result[1]] == SVector(1, 0, 0, 2)
+
+    # Also verify via find_neighbor: grandchild (1,0,0,4) looking -x → (0,0,0,4)
+    result = find_neighbor(octree, children_L2[2], 1)  # (1,0,0,4), -x direction
+    @test length(result) == 1
+    @test octree.coords[result[1]] == SVector(0, 0, 0, 4)
+
+    # --- Line 412: neighbor outside domain ---
+    # Grandchild (0,0,0,4) looking -x: i_n = -1 → outside domain
+    result = find_neighbor(octree, children_L2[1], 1)
+    @test isempty(result)
+
+    # Also test other boundary directions
+    result = find_neighbor(octree, children_L2[1], 3)  # -y: j_n = -1
+    @test isempty(result)
+    result = find_neighbor(octree, children_L2[1], 5)  # -z: k_n = -1
+    @test isempty(result)
+
+    # --- Line 468: target coords outside root's subtree ---
+    # Direct call with coords (2,0,0) at level 2 — root is (0,0,0,1),
+    # scale_factor=2, i_scaled=2÷2=1 != root.i=0 → Int[]
+    result = find_boxes_at_coords(octree, 2, 0, 0, 2)
+    @test isempty(result)
+
+    result = find_boxes_at_coords(octree, 0, 2, 0, 2)
+    @test isempty(result)
+
+    # --- Coarser neighbor: leaf covers target region (line 456) ---
+    # Grandchild (1,0,0,4) looking +x: i_n=2, N=4, within domain (2 < 4)
+    # Navigates to child (1,0,0,2) which is a leaf → returns coarser box
+    result = find_neighbor(octree, children_L2[2], 2)  # +x
+    @test length(result) == 1
+    @test octree.coords[result[1]] == SVector(1, 0, 0, 2)
+end
