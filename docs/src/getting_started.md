@@ -50,7 +50,7 @@ Combine multiple surfaces back into one:
 combine_surfaces!(boundary, "surface_1", "surface_2")
 ```
 
-## Discretization
+## Generating Volume Points
 
 Generate volume points from a boundary using `discretize`. The algorithm choice depends on the problem dimension.
 

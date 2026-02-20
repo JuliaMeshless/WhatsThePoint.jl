@@ -72,7 +72,7 @@ spacing = ConstantSpacing(1mm)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
 
-### OctreeRandom
+### Using OctreeRandom
 
 `OctreeRandom` uses the octree directly to generate volume points. See the [Discretization](@ref) page for details.
 
