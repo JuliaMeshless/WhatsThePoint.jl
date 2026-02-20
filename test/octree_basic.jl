@@ -249,7 +249,7 @@ end
 
     origin = SVector(0.0, 0.0, 0.0)
     # initial_capacity=1 forces the resize path in add_box! (lines 242-256)
-    octree = SpatialOctree{Int, Float64}(origin, 10.0; initial_capacity=1)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0; initial_capacity = 1)
 
     # Root uses slot 1; subdivision adds 8 children → must grow arrays
     children = subdivide!(octree, 1)

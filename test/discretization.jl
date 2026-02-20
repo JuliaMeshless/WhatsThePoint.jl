@@ -246,4 +246,3 @@ end
         @test isinside(p, octree) == true
     end
 end
-

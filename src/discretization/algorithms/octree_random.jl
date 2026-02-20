@@ -149,7 +149,8 @@ function OctreeRandom(
     ) where {M <: Manifold, C <: CRS}
     T = Float64
     h_min_val = isnothing(h_min) ? _auto_h_min(T, mesh) : T(ustrip(h_min))
-    octree = TriangleOctree(mesh;
+    octree = TriangleOctree(
+        mesh;
         h_min = h_min_val,
         max_triangles_per_box,
         classify_leaves = true,
