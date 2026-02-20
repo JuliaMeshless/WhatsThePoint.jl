@@ -111,7 +111,7 @@ end
     update_normals!(cloud[:surface1]; k = k)
     orient_normals!(cloud; k = k)
     @test all(
-        WhatsThePoint._angle.(normal(cloud[:surface1]), original_normals) .< 10 * π / 180
+        WhatsThePoint._angle.(normal(cloud[:surface1]), original_normals) .< 10 * π / 180,
     )
 end
 

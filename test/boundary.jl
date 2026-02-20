@@ -12,6 +12,11 @@ end
     @test hassurface(b, :surface1)
 end
 
+@testitem "PointBoundary source_mesh" setup = [TestData, CommonImports] begin
+    # TODO: has_source_mesh/source_mesh/NoMesh not yet implemented
+    @test_skip "has_source_mesh not yet implemented"
+end
+
 @testitem "PointBoundary Base Methods" setup = [TestData, CommonImports] begin
     N = 10
     b = PointBoundary(rand(Point, N))
@@ -219,4 +224,9 @@ end
     @test contains(output, "surface1")
     @test contains(output, "surface2")
     @test contains(output, "mysurface")
+end
+
+@testitem "PointBoundary type stability" setup = [TestData, CommonImports] begin
+    # TODO: has_source_mesh/source_mesh/NoMesh not yet implemented
+    @test_skip "source_mesh type stability not yet implemented"
 end

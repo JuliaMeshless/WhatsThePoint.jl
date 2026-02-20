@@ -35,7 +35,9 @@ struct PointSurface{M <: Manifold, C <: CRS, S, T <: AbstractTopology} <: Abstra
     shadow::S
     topology::T
     function PointSurface(
-            geoms::StructVector{SurfaceElement}, shadow::S = nothing, topology::T = NoTopology()
+            geoms::StructVector{SurfaceElement},
+            shadow::S = nothing,
+            topology::T = NoTopology(),
         ) where {S, T <: AbstractTopology}
         p = first(geoms.point)
         M = manifold(p)
@@ -56,7 +58,13 @@ function PointSurface(
     return PointSurface(geoms, shadow, topology)
 end
 
-function PointSurface(pts::Domain, normals, areas; shadow = nothing, topology = NoTopology())
+function PointSurface(
+        pts::Domain,
+        normals,
+        areas;
+        shadow = nothing,
+        topology = NoTopology(),
+    )
     p = _get_underlying_vector(pts)
     return PointSurface(p, normals, areas; shadow = shadow, topology = topology)
 end
@@ -159,7 +167,11 @@ function set_topology(surf::PointSurface, ::Type{KNNTopology}, k::Int)
     adj = _build_knn_neighbors(pts, k)
     topo = KNNTopology(adj, k)
     return PointSurface(
-        point(surf), normal(surf), area(surf); shadow = surf.shadow, topology = topo
+        point(surf),
+        normal(surf),
+        area(surf);
+        shadow = surf.shadow,
+        topology = topo,
     )
 end
 
@@ -173,7 +185,11 @@ function set_topology(surf::PointSurface, ::Type{RadiusTopology}, radius)
     adj = _build_radius_neighbors(pts, radius)
     topo = RadiusTopology(adj, radius)
     return PointSurface(
-        point(surf), normal(surf), area(surf); shadow = surf.shadow, topology = topo
+        point(surf),
+        normal(surf),
+        area(surf);
+        shadow = surf.shadow,
+        topology = topo,
     )
 end
 

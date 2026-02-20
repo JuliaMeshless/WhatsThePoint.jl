@@ -1,12 +1,21 @@
 """
-    struct PointBoundary{Dim,T,P}
+    struct PointBoundary{M,C} <: Domain{M,C}
 
 A boundary of points.
+
+# Fields
+- `surfaces`: Named surfaces forming the boundary
+
+# Type Parameters
+- `M <: Manifold`: The manifold type
+- `C <: CRS`: The coordinate reference system
 """
 struct PointBoundary{M <: Manifold, C <: CRS} <: Domain{M, C}
     surfaces::LittleDict{Symbol, AbstractSurface{M, C}}
+
+    #basic constructor starting from surfaces
     function PointBoundary(
-            surfaces::LittleDict{Symbol, AbstractSurface{M, C}}
+            surfaces::LittleDict{Symbol, AbstractSurface{M, C}},
         ) where {M <: Manifold, C <: CRS}
         return new{M, C}(surfaces)
     end
@@ -27,13 +36,31 @@ function PointBoundary(points)
 end
 
 function PointBoundary(filepath::String)
-    println("Importing surface from $filepath")
     points, normals, areas, _ = import_surface(filepath)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
     surfaces = LittleDict{Symbol, AbstractSurface{M, C}}(:surface1 => surf)
     return PointBoundary(surfaces)
+end
+
+"""
+    PointBoundary(mesh::SimpleMesh)
+Create a `PointBoundary` from a `SimpleMesh` 
+by taking the centroids of its elements as points, 
+and computing normals and areas accordingly.
+
+(IMPORTANT: does not use any fancy node sampling, 
+depends on the mesh's discretization, and is not guaranteed 
+to be a good representation of the original geometry. 
+Use with caution.)
+"""
+function PointBoundary(mesh::SimpleMesh)
+    points = map(centroid, elements(mesh))
+    normals = compute_normals(points)
+    normals = map(x -> x / norm(x), normals) # normalize normals
+    areas = map(Meshes.area, elements(mesh))
+    return PointBoundary(points, normals, areas)
 end
 
 to(boundary::PointBoundary) = to.(points(boundary))
@@ -54,6 +81,7 @@ hassurface(boundary::PointBoundary, name) = haskey(namedsurfaces(boundary), name
 Return vector of all points from all surfaces in the boundary.
 """
 points(boundary::PointBoundary) = mapreduce(points, vcat, surfaces(boundary))
+
 Meshes.nelements(boundary::PointBoundary) = length(boundary)
 
 Base.length(boundary::PointBoundary) = sum(length, surfaces(boundary))

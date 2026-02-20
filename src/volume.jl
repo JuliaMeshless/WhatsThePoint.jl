@@ -9,13 +9,14 @@ Interior volume points with optional topology.
 - `T<:AbstractTopology` - topology type for volume-local connectivity
 - `V<:AbstractVector{Point{M,C}}` - storage type (allows GPU arrays)
 """
-struct PointVolume{M <: Manifold, C <: CRS, T <: AbstractTopology, V <: AbstractVector{Point{M, C}}} <: Domain{M, C}
+struct PointVolume{M <: Manifold, C <: CRS, T <: AbstractTopology, V <: AbstractVector{Point{M, C}}} <:
+    Domain{M, C}
     points::V
     topology::T
 end
 
 function PointVolume{M, C}(;
-        topology::T = NoTopology()
+        topology::T = NoTopology(),
     ) where {M <: Manifold, C <: CRS, T <: AbstractTopology}
     return PointVolume(Point{M, C}[], topology)
 end

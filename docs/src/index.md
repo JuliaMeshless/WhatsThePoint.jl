@@ -11,7 +11,7 @@ CurrentModule = WhatsThePoint
 
 Documentation for [WhatsThePoint](https://github.com/JuliaMeshless/WhatsThePoint.jl).
 
-This package intends to provide functions for all things regarding point clouds.
+This package provides tools for generating and manipulating point clouds for meshless PDE methods. It handles the full workflow from surface mesh import through volume discretization, point distribution optimization, and connectivity computation.
 
 ## Installation
 
@@ -43,7 +43,7 @@ visualize(boundary; markersize=0.15)
 
 ![bunny boundary](assets/bunny-boundary.png)
 
-Then we can generate a point cloud using the `PointCloud` constructor.
+Then we can generate a point cloud using `discretize`.
 
 ```julia
 spacing = ConstantSpacing(1m)
@@ -54,6 +54,23 @@ and we can visualize again with `visualize(cloud; markersize=0.15)`
 
 ![bunny discretized](assets/bunny-discretized.png)
 
+### Octree-Accelerated Discretization
+
+For large meshes, you can use `OctreeRandom` which builds an octree from the surface mesh and generates volume points directly from the tree structure — no spacing parameter needed:
+
+```julia
+cloud = discretize(boundary, OctreeRandom("model.stl"; h_min=0.5))
+```
+
+Or pass a pre-built `TriangleOctree` to `SlakKosec` for accelerated point-in-volume queries:
+
+```julia
+octree = TriangleOctree("model.stl"; h_min=0.5)
+cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
+```
+
+See the [Octree](@ref) and [Discretization](@ref) pages for details.
+
 ## Adding Topology (Point Connectivity)
 
 For meshless PDE solvers, you often need to know the neighbors of each point (the stencil).
@@ -61,47 +78,23 @@ WhatsThePoint can compute and store this connectivity:
 
 ```julia
 # Add k-nearest neighbor topology (21 neighbors per point)
-set_topology!(cloud, KNNTopology, 21)
+cloud = set_topology(cloud, KNNTopology, 21)
 
 # Access neighbors
 all_neighbors = neighbors(cloud)        # Vector{Vector{Int}}
 point_5_neighbors = neighbors(cloud, 5) # neighbors of point 5
 
 # Check topology state
-hastopology(cloud)           # true
-isvalid(topology(cloud))     # true
+hastopology(cloud)  # true
 ```
 
 Alternatively, use radius-based topology where all points within a given distance are neighbors:
 
 ```julia
-set_topology!(cloud, RadiusTopology, 2mm)
+cloud = set_topology(cloud, RadiusTopology, 2mm)
 ```
 
-Note: Operations that move points (like `repel!`) will invalidate the topology.
-Call `rebuild_topology!(cloud)` to recompute after such operations.
-
-## Iteration Behavior
-
-Iterating over `PointCloud` and `PointBoundary` yields individual points (as `SurfaceElement` or volume points), not surfaces. To iterate over surfaces, use the `surfaces()` function:
-
-```julia
-# Iterating over individual points
-for pt in cloud
-    # pt is a SurfaceElement or volume point
-end
-
-# Iterating over surfaces
-for surf in surfaces(cloud)
-    # surf is a PointSurface object
-end
-
-# Same applies to PointBoundary
-for pt in boundary
-    # pt is a SurfaceElement
-end
-
-for surf in surfaces(boundary)
-    # surf is a PointSurface object
-end
-```
+!!! note
+    `set_topology` returns a new object with the computed topology. Operations that move
+    points (like `repel`) also return new objects with `NoTopology`, since the connectivity
+    is no longer valid after points have moved. Simply call `set_topology` again after repulsion.

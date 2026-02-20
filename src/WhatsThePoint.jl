@@ -35,6 +35,13 @@ export metrics
 
 include("geometry.jl")
 
+# Octree spatial indexing
+include("octree/traits.jl")
+include("octree/spatial_octree.jl")
+include("octree/geometric_utils.jl")
+include("octree/triangle_octree.jl")
+export TriangleOctree, num_leaves, num_triangles, has_consistent_normals
+
 include("points.jl")
 export emptyspace
 
@@ -74,7 +81,7 @@ include("discretization/spacings.jl")
 export AbstractSpacing, ConstantSpacing, LogLike, Power
 
 include("discretization/discretization.jl")
-export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer
+export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, OctreeRandom
 export discretize
 
 include("repel.jl")
@@ -97,7 +104,8 @@ using PrecompileTools
 @setup_workload begin
     using Unitful: m, °
     @compile_workload begin
-        b = PointBoundary(joinpath(@__DIR__, "precompile_tools_dummy.stl"))
+        mesh = GeoIO.load(joinpath(@__DIR__, "precompile_tools_dummy.stl")).geometry
+        b = PointBoundary(mesh)
         split_surface!(b, 75°)
         cloud = discretize(b, ConstantSpacing(1m); alg = VanDerSandeFornberg())
     end

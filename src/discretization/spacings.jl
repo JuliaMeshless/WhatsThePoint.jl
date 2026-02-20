@@ -27,7 +27,7 @@ Node spacing based on a log-like function of the distance to nearest boundary ``
     parameter.
 """
 struct LogLike{B, G} <: VariableSpacing
-    boundary
+    boundary::Any
     base_size::B
     growth_rate::G
 end
@@ -51,7 +51,7 @@ Node spacing based on a power of the distance to nearest boundary ``x^{g}`` wher
     the distance to the nearest boundary and ``g`` is the growth_rate.
 """
 struct Power{B, G} <: VariableSpacing
-    boundary
+    boundary::Any
     base_size::B
     growth_rate::G
     function Power(cloud::PointCloud, surfaces, base_size::Real, growth_rate::Real)

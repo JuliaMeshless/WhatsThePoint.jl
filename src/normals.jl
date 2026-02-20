@@ -27,11 +27,17 @@ Estimate the normals of a set of points that form a surface. Uses the PCA approa
 Requires Euclidean manifold (`𝔼{2}` or `𝔼{3}`). This function assumes flat space geometry.
 
 """
-function compute_normals(search_method::KNearestSearch, surf::PointSurface{𝔼{N}, C}) where {N, C <: CRS}
+function compute_normals(
+        search_method::KNearestSearch,
+        surf::PointSurface{𝔼{N}, C},
+    ) where {N, C <: CRS}
     return compute_normals(search_method, point(surf))
 end
 
-function compute_normals(search_method::KNearestSearch, points::AbstractVector{<:Point{𝔼{N}}}) where {N}
+function compute_normals(
+        search_method::KNearestSearch,
+        points::AbstractVector{<:Point{𝔼{N}}},
+    ) where {N}
     neighbors = search.(points, Ref(search_method))
     normals = tmap(n -> _compute_normal(points[n]), neighbors)
     return normals
@@ -67,7 +73,9 @@ Correct the orientation of normals on a surface as the [compute_normals](@ref) f
 
 """
 function orient_normals!(
-        search_method::KNearestSearch, normals::AbstractVector{<:AbstractVector}, points
+        search_method::KNearestSearch,
+        normals::AbstractVector{<:AbstractVector},
+        points,
     )
     # build minimum spanning tree based on angle between normals
     neighbors = search.(points, Ref(search_method))
@@ -113,7 +121,11 @@ Correct the orientation of normals on a surface as the [compute_normals](@ref) f
 Requires Euclidean manifold (`𝔼{2}` or `𝔼{3}`). This function uses Euclidean dot products for orientation consistency.
 
 """
-function orient_normals!(normals::AbstractVector{<:AbstractVector}, points::AbstractVector{<:Point{𝔼{N}}}; k::Int = 5) where {N}
+function orient_normals!(
+        normals::AbstractVector{<:AbstractVector},
+        points::AbstractVector{<:Point{𝔼{N}}};
+        k::Int = 5,
+    ) where {N}
     k = k > length(points) ? length(points) : k
     # build minimum spanning tree based on angle between normals
     search_method = KNearestSearch(points, k)
