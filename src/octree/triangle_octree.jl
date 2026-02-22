@@ -24,11 +24,11 @@ For a mesh with M triangles:
 # Example
 ```julia
 # Option 1: From STL file (simplest)
-octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
+octree = TriangleOctree("model.stl")
 
 # Option 2: From SimpleMesh
 mesh = GeoIO.load("model.stl").geometry
-octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
+octree = TriangleOctree(mesh)
 
 # Fast queries (100-1000x speedup over brute force)
 point = SVector(0.5, 0.5, 0.5)
@@ -40,7 +40,7 @@ Since PointBoundary discards mesh topology, build both from the same mesh:
 ```julia
 mesh = GeoIO.load("model.stl").geometry
 boundary = PointBoundary(mesh)
-octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
+octree = TriangleOctree(mesh)
 cloud = discretize(boundary, spacing; alg=OctreeRandom(octree))
 ```
 """
@@ -62,6 +62,116 @@ const _DEGENERATE_EPS = 1.0e-10       # Min bbox extent for degenerate dims
 const _CLASSIFICATION_INSET = 1.0e-9  # Corner inset to avoid on-surface probes
 const _CLASSIFY_TOLERANCE_REL = 1.0e-6  # Relative tolerance for classification (scaled by h)
 const _CLASSIFY_TOLERANCE_ABS = 1.0e-8  # Absolute tolerance floor for classification
+
+#=============================================================================
+SUBDIVISION CRITERION
+=============================================================================#
+
+"""
+    VertexResolutionCriterion{T<:Real} <: SubdivisionCriterion
+
+Subdivide based on vertex density within box bounds.
+
+Makes octree resolution geometry-adaptive:
+- Fine mesh regions (dense vertices) → deep subdivision
+- Coarse mesh regions (sparse vertices) → shallow subdivision
+- Automatically stops when boxes contain ≤1 unique vertex
+
+# Fields
+- `tolerance_sq::T` - Squared vertex coincidence tolerance (scale-aware)
+- `absolute_min::T` - Hard floor on box size (prevents pathological subdivision)
+
+# Example
+```julia
+mesh = GeoIO.load("model.stl").geometry
+octree = TriangleOctree(mesh)
+```
+"""
+struct VertexResolutionCriterion{T<:Real} <: SubdivisionCriterion
+    tolerance_sq::T        # Squared for performance
+    absolute_min::T
+end
+
+"""
+    VertexResolutionCriterion(mesh::SimpleMesh;
+                              tolerance_relative=1e-6,
+                              min_ratio=1e-6)
+
+Create geometry-adaptive criterion with scale-aware tolerance.
+
+# Arguments
+- `mesh::SimpleMesh`: Mesh to build criterion for
+- `tolerance_relative::Real=1e-6`: Vertex tolerance as fraction of domain diagonal
+- `min_ratio::Real=1e-6`: Absolute minimum box size as fraction of diagonal
+
+# Details
+Tolerance is computed relative to domain size for scale-independence:
+- 1m domain: tolerance = 1μm
+- 1km domain: tolerance = 1mm
+- 1nm domain: tolerance = 1pm
+"""
+function VertexResolutionCriterion(
+    mesh::SimpleMesh;
+    tolerance_relative=1e-6,
+    min_ratio=1e-6
+)
+    T = Float64
+    n_triangles = Meshes.nelements(mesh)
+    n_triangles > 0 || throw(ArgumentError("Mesh must contain at least one triangle"))
+
+    bbox_min, bbox_max = _compute_bbox(T, mesh)
+    diagonal = norm(bbox_max - bbox_min)
+
+    # Scale-aware tolerance (relative to domain size)
+    tolerance = diagonal * T(tolerance_relative)
+    tolerance_sq = tolerance * tolerance  # Store squared for performance
+
+    absolute_min = diagonal * T(min_ratio)
+
+    return VertexResolutionCriterion(tolerance_sq, absolute_min)
+end
+
+"""
+    should_subdivide(c::VertexResolutionCriterion, tree, box_idx, mesh::SimpleMesh) -> Bool
+
+Subdivide if box contains >1 unique vertex within bounds.
+
+Only vertices physically inside the box are counted. Large triangles that merely
+intersect the box but have no vertices inside won't trigger subdivision.
+"""
+function should_subdivide(
+    c::VertexResolutionCriterion{T},
+    tree,
+    box_idx,
+    mesh::SimpleMesh
+) where {T}
+    box_size(tree, box_idx) <= c.absolute_min && return false
+    isempty(tree.element_lists[box_idx]) && return false
+
+    bbox_min, bbox_max = box_bounds(tree, box_idx)
+    found = SVector{3,T}[]  # Unique vertices inside box
+
+    for tri_idx in tree.element_lists[box_idx], v in _get_triangle_vertices(T, mesh, tri_idx)
+        # Skip if outside box or too close to existing vertex
+        all(bbox_min .<= v .<= bbox_max) || continue
+        all(sum(abs2, v - existing) >= c.tolerance_sq for existing in found) || continue
+
+        push!(found, v)
+        length(found) > 1 && return true  # Found 2nd vertex → subdivide
+    end
+
+    return false  # ≤1 vertex → don't subdivide
+end
+
+"""
+    can_subdivide(c::VertexResolutionCriterion, tree, box_idx) -> Bool
+
+Check if box can be subdivided (respects absolute minimum only).
+Used during octree balancing.
+"""
+function can_subdivide(c::VertexResolutionCriterion, tree, box_idx)
+    return box_size(tree, box_idx) > c.absolute_min
+end
 
 """
     NearestTriangleState{T<:Real}
@@ -308,103 +418,103 @@ end
 
 """
     TriangleOctree(mesh::SimpleMesh{M,C};
-                   h_min,
-                   max_triangles_per_box::Int=50,
+                   tolerance_relative=1e-6,
+                   min_ratio=1e-6,
                    classify_leaves::Bool=true,
                    verify_orientation::Bool=true) -> TriangleOctree{M,C,Float64}
 
-Build an octree spatial index for a SimpleMesh.
+Build geometry-adaptive octree for triangle mesh.
+
+Subdivision is controlled purely by vertex density within box bounds,
+with no user-specified spatial resolution parameter.
 
 # Arguments
 - `mesh::SimpleMesh{M,C}`: Meshes.jl SimpleMesh to index
-- `h_min`: Minimum octree box size (stopping criterion)
-- `max_triangles_per_box::Int=50`: Maximum triangles per leaf before subdivision
-- `classify_leaves::Bool=true`: Whether to classify empty leaves as interior/exterior
-- `verify_orientation::Bool=true`: Check if triangle normals are consistently oriented
+- `tolerance_relative::Real=1e-6`: Vertex coincidence tolerance as fraction of domain diagonal
+- `min_ratio::Real=1e-6`: Absolute minimum box size as fraction of domain diagonal
+- `classify_leaves::Bool=true`: Classify empty leaves as interior/exterior
+- `verify_orientation::Bool=true`: Check triangle normal consistency
 
 # Algorithm
-1. (Optional) Verify triangle normal consistency
+1. Verify triangle normal consistency (optional)
 2. Create root octree covering mesh bounding box
-3. Distribute triangles to boxes using SAT intersection tests
-4. Recursively subdivide boxes exceeding triangle threshold
-5. Balance octree to ensure 2:1 refinement constraint
-6. (Optional) Classify empty leaves via signed-distance tests
-
-# Returns
-`TriangleOctree{M,C,T}` ready for fast spatial queries (T defaults to Float64)
+3. Build VertexResolutionCriterion from mesh and parameters
+4. Subdivide adaptively: box subdivides if it contains >1 unique vertex within bounds
+5. Balance octree (2:1 refinement constraint)
+6. Classify leaves via signed-distance tests
 
 # Example
 ```julia
-mesh = GeoIO.load("box.stl").geometry
-octree = TriangleOctree(mesh; h_min=0.01, max_triangles_per_box=50)
-println("Built octree with ", num_leaves(octree), " leaves")
+# Automatic geometry-adaptive octree
+mesh = GeoIO.load("bunny.stl").geometry
+octree = TriangleOctree(mesh)
+
+# Custom tolerance for fine features
+octree = TriangleOctree(mesh; tolerance_relative=1e-7)
+
+# Adjust minimum box size
+octree = TriangleOctree(mesh; min_ratio=1e-5)
 ```
 """
 function TriangleOctree(
     mesh::SimpleMesh{M,C};
-    h_min,
-    max_triangles_per_box::Int=50,
-    classify_leaves::Bool=true,
-    verify_orientation::Bool=true,
+    tolerance_relative = 1e-6,
+    min_ratio = 1e-6,
+    classify_leaves::Bool = true,
+    verify_orientation::Bool = true,
 ) where {M<:Manifold,C<:CRS}
     T = Float64
-    h_min_val = T(ustrip(h_min))
-    h_min_val > 0 || throw(ArgumentError("h_min must be positive, got $h_min_val"))
     n_triangles = Meshes.nelements(mesh)
 
     if verify_orientation && !has_consistent_normals(T, mesh)
         throw(
             ArgumentError(
                 "Triangle mesh has orientation errors (flipped faces). " *
-                "Some triangles have their faces oriented incorrectly (shared edges " *
-                "traversed in the same direction instead of opposite directions). " *
-                "This will cause incorrect isinside() and signed distance calculations. " *
-                "The mesh needs to be repaired before use with the octree. " *
+                "Some triangles have their faces oriented incorrectly. " *
+                "This will cause incorrect isinside() calculations. " *
+                "The mesh needs to be repaired before use. " *
                 "To skip this check, pass `verify_orientation=false`.",
             )
         )
     end
 
+    # Build vertex-based subdivision criterion
+    criterion = VertexResolutionCriterion(
+        mesh;
+        tolerance_relative = tolerance_relative,
+        min_ratio = min_ratio
+    )
+
+    # Build octree
     tree = _create_root_octree(T, mesh, n_triangles)
-
-    size_criterion = SizeCriterion(h_min_val)
-    criterion = AndCriterion((MaxElementsCriterion(max_triangles_per_box), size_criterion))
-
     _subdivide_triangle_octree!(tree, mesh, 1, criterion)
 
-    # Balance octree to ensure 2:1 refinement constraint
-    # This may subdivide leaves and create new empty leaves.
-    balance_octree!(tree, size_criterion)
+    # Balance octree
+    balance_octree!(tree, criterion)
 
-    # Classify FINAL leaves after balancing for correctness.
-    # (More expensive than propagation, but robust.)
-    classification = if classify_leaves
-        _classify_leaves(tree, mesh)
-    else
-        nothing
-    end
+    # Classify leaves
+    classification = classify_leaves ? _classify_leaves(tree, mesh) : nothing
 
     return TriangleOctree(tree, mesh, classification)
 end
 
 """
-    TriangleOctree(filepath::String; h_min, kwargs...) -> TriangleOctree
+    TriangleOctree(filepath::String; kwargs...) -> TriangleOctree
 
-Build an octree spatial index from an STL file.
-
-# Arguments
-- `filepath::String`: Path to STL file
-- `h_min`: Minimum octree box size
-- `kwargs...`: Additional arguments passed to TriangleOctree(mesh; ...)
+Build geometry-adaptive octree from STL file.
 
 # Example
 ```julia
-octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
+# Geometry-adaptive octree
+octree = TriangleOctree("model.stl")
+
+# Custom parameters
+octree = TriangleOctree("model.stl"; tolerance_relative=1e-7)
 ```
 """
-function TriangleOctree(filepath::String; h_min, kwargs...)
+function TriangleOctree(filepath::String; kwargs...)
     geo = GeoIO.load(filepath)
-    return TriangleOctree(geo.geometry; h_min, kwargs...)
+    return TriangleOctree(geo.geometry; kwargs...)
 end
 
 """
@@ -422,9 +532,9 @@ function _subdivide_triangle_octree!(
     tree::SpatialOctree{Int,T},
     mesh::SimpleMesh,
     box_idx::Int,
-    criterion::SubdivisionCriterion,
+    criterion::VertexResolutionCriterion,
 ) where {T<:Real}
-    if !should_subdivide(criterion, tree, box_idx)
+    if !should_subdivide(criterion, tree, box_idx, mesh)
         return
     end
 
