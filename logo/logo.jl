@@ -6,7 +6,7 @@ using Luxor
 using Meshes
 
 function get_xy(cloud)
-    points = pointify(cloud)
+    points = WhatsThePoint.points(cloud)
     x = map(p -> ustrip(WhatsThePoint.coords(p).x), points)
     y = map(p -> ustrip(WhatsThePoint.coords(p).y), points)
     return x, y
@@ -25,7 +25,7 @@ function circle_nodes(origins)
 
     α = s / 10
     for _ in 1:5
-        repel!(cloud, spacing; α = α, β = 0.2, k = 12, max_iters = 10_000, tol = 1.0e-6)
+        cloud, _ = repel(cloud, spacing; α = α, β = 0.2, k = 12, max_iters = 10_000, tol = 1.0e-6)
         α /= 2
     end
 
@@ -36,7 +36,7 @@ Oy = 2cos(π / 6) - 1
 origins = [Vec(-1, Oy), Vec(1, Oy), Vec(0, -1)] #.+ Ref(Vec(2.5, -2.5))
 nodes = circle_nodes.(origins)
 
-colors = (Luxor.julia_red, Luxor.julia_green, Luxor.julia_purple)
+colors = (Luxor.julia_red, Luxor.julia_purple, Luxor.julia_green)
 
 function draw_logo(colors, nodes, scale, r)
     for (color, node) in zip(colors, nodes)
