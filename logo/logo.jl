@@ -14,7 +14,7 @@ end
 
 function circle_nodes(origins)
     r = 0.75
-    N = 12
+    N = 10
     θ = 0:(π / N):(2π - π / (2N))
     s = 3 * r / N
     spacing = ConstantSpacing(s * m)
