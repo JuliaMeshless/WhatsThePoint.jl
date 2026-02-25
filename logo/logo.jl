@@ -22,12 +22,7 @@ function circle_nodes(origins)
     points = WhatsThePoint.Point.([(r * cos(i), r * sin(i)) for i in θ]) .+ (origins,)
     boundary = PointBoundary(points)
     cloud = discretize(boundary, spacing; max_points = 200)
-
-    α = s / 10
-    for _ in 1:10
-        cloud, _ = repel(cloud, spacing; α = α, β = 0.2, k = 12, max_iters = 10_000, tol = 1.0e-6)
-        α /= 1.1
-    end
+    cloud, _ = repel(cloud, spacing; α = s / 10, β = 0.2, k = 12, max_iters = 100_000, tol = 1.0e-6)
 
     return get_xy(cloud)
 end
