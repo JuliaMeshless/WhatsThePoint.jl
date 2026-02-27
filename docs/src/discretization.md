@@ -21,6 +21,8 @@ The `max_points` parameter is a safety limit that prevents runaway point generat
 | [`FornbergFlyer`](@ref) | 2D | Yes (`ConstantSpacing` only) | 1D projection with height-field fill |
 | [`OctreeRandom`](@ref) | 3D | No | Octree-guided random point generation |
 
+![Algorithm comparison](assets/algorithm-comparison.png)
+
 ### Choosing an Algorithm
 
 - **2D problems:** Use [`FornbergFlyer`](@ref) — it is the only 2D algorithm and is selected by default for 2D boundaries.

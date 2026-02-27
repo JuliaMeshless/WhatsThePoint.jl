@@ -54,6 +54,8 @@ cloud, convergence = repel(cloud, spacing)
 cloud = set_topology(cloud, KNNTopology, 9)
 ```
 
+![2D discretization](assets/2d-discretization.png)
+
 ## Visualization
 
 ```julia

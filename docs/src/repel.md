@@ -70,6 +70,8 @@ println("Iterations used: ", length(conv))
 
 If `conv[end]` is still large (say > 1e-3), the distribution may benefit from more iterations or parameter tuning.
 
+![Repulsion before and after](assets/repel-comparison.png)
+
 ## Verifying Distribution Quality
 
 Use `metrics` to quantify the point distribution before and after repulsion:
