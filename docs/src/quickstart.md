@@ -41,7 +41,7 @@ neighbors(cloud, 1)  # neighbor indices for point 1
 ```julia
 using WhatsThePoint
 
-# 1. Define a 2D polygon boundary (unit square)
+# 1. Define a 2D polygon boundary
 pts = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
 boundary = PointBoundary(pts)
 
@@ -54,7 +54,9 @@ cloud, convergence = repel(cloud, spacing)
 cloud = set_topology(cloud, KNNTopology, 9)
 ```
 
-![2D discretization](assets/2d-discretization.png)
+Any closed polygon works — here's the Stanford Bunny silhouette projected from 3D:
+
+![2D discretization of the Stanford Bunny](assets/2d-discretization.png)
 
 ## Visualization
 
