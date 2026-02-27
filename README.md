@@ -6,10 +6,12 @@
 [![License File](https://img.shields.io/badge/license-MIT-blue)](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/master/LICENSE)
 [![codecov](https://codecov.io/gh/JuliaMeshless/WhatsThePoint.jl/graph/badge.svg?token=S3BQ5FIULZ)](https://codecov.io/gh/JuliaMeshless/WhatsThePoint.jl)
 
-A Julia package for generating and manipulating point clouds for meshless PDE methods. Part of the [JuliaMeshless](https://github.com/JuliaMeshless) organization.
+A Julia package for generating and manipulating point clouds for meshless PDE methods — RBF-FD, generalized finite differences, SPH, and related techniques. Part of the [JuliaMeshless](https://github.com/JuliaMeshless) organization.
 
-> [!CAUTION]
-> This package is under heavy development and does not have robust testing for all methods yet. Use at your own risk.
+**[Full documentation](https://JuliaMeshless.github.io/WhatsThePoint.jl/stable)**
+
+> [!NOTE]
+> WhatsThePoint.jl is under active development. The API may change before v1.0.
 
 ## Features
 
