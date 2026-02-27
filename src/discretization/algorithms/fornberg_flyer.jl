@@ -1,3 +1,11 @@
+"""
+    FornbergFlyer <: AbstractNodeGenerationAlgorithm
+
+2D volume discretization algorithm using a height-field approach projected onto the x-axis.
+This is the default and only algorithm for 2D boundaries. Requires `ConstantSpacing`.
+
+See: Fornberg, B. & Flyer, N. (2015). *Comput. Math. Appl.*, 69(7).
+"""
 struct FornbergFlyer <: AbstractNodeGenerationAlgorithm end
 
 function _discretize_volume(

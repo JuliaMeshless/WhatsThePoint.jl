@@ -1,10 +1,16 @@
+```@meta
+CurrentModule = WhatsThePoint
+```
+
 # Discretization
 
-Volume discretization generates interior points from a boundary surface. The `discretize` function dispatches to dimension-specific algorithms.
+Volume discretization generates interior points from a boundary surface. This is typically the second step in the workflow after importing a surface mesh — see the [Guide](guide.md) for the full pipeline.
 
 ```julia
 cloud = discretize(boundary, spacing; alg=algorithm, max_points=10_000_000)
 ```
+
+The `max_points` parameter is a safety limit that prevents runaway point generation. It defaults to 10 million. If your target spacing would produce more points than this limit, discretization stops early.
 
 ## Algorithm Overview
 
@@ -14,6 +20,13 @@ cloud = discretize(boundary, spacing; alg=algorithm, max_points=10_000_000)
 | [`VanDerSandeFornberg`](@ref) | 3D | Yes (`ConstantSpacing` only) | Grid projection with sphere packing |
 | [`FornbergFlyer`](@ref) | 2D | Yes (`ConstantSpacing` only) | 1D projection with height-field fill |
 | [`OctreeRandom`](@ref) | 3D | No | Octree-guided random point generation |
+
+### Choosing an Algorithm
+
+- **2D problems:** Use [`FornbergFlyer`](@ref) — it is the only 2D algorithm and is selected by default for 2D boundaries.
+- **3D with variable spacing:** Use [`SlakKosec`](@ref) — it is the only 3D algorithm supporting `LogLike` spacing.
+- **3D with uniform spacing:** [`SlakKosec`](@ref) (default) or [`VanDerSandeFornberg`](@ref) both work. SlakKosec is more general; VanDerSandeFornberg can be faster for simple geometries.
+- **Large 3D meshes:** Use [`OctreeRandom`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Octree](isinside_octree.md) page.
 
 ## SlakKosec
 
@@ -104,6 +117,7 @@ Variable spacing that is denser near the boundary and coarser in the interior. U
 spacing = LogLike(cloud, base_size, growth_rate)
 ```
 
+- `cloud` — An existing `PointCloud`. LogLike uses the cloud's boundary points to compute distances, so you must first create a cloud with `ConstantSpacing`, then use `LogLike` for a second-pass refinement.
 - `base_size` — Spacing at the boundary surface.
 - `growth_rate` — Rate at which spacing increases away from the boundary. Values > 1 create coarser interior points.
 
@@ -111,7 +125,18 @@ The spacing at a point is computed as `base_size * x / (a + x)` where `x` is the
 
 Works with `SlakKosec` only.
 
-### Power
+**Typical workflow:**
+```julia
+# First pass with uniform spacing
+cloud = discretize(boundary, ConstantSpacing(1mm); alg=SlakKosec())
 
-!!! warning
-    `Power` spacing is declared but not yet functional. Its constructor currently throws an error.
+# Second pass with variable spacing
+spacing = LogLike(cloud, 0.5mm, 1.2)
+cloud = discretize(boundary, spacing; alg=SlakKosec())
+```
+
+## References
+
+- Slak, J. & Kosec, G. (2019). On generation of node distributions for meshless PDE discretizations. *SIAM Journal on Scientific Computing*, 41(5).
+- Van der Sande, K. & Fornberg, B. (2021). Fast variable density 3-D node generation. *SIAM Journal on Scientific Computing*, 43(1).
+- Fornberg, B. & Flyer, N. (2015). Fast generation of 2-D node distributions for mesh-free PDE discretizations. *Computers & Mathematics with Applications*, 69(7).

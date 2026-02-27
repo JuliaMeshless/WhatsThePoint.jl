@@ -17,10 +17,14 @@ makedocs(;
     ),
     pages = [
         "Home" => "index.md",
-        "Getting Started" => "getting_started.md",
+        "Quick Start" => "quickstart.md",
+        "Guide" => "guide.md",
+        "Concepts" => "concepts.md",
         "Discretization" => "discretization.md",
-        "Octree" => "octree.md",
-        "API" => "api.md",
+        "Boundary & Normals" => "boundary_normals.md",
+        "Point-in-Volume & Octree" => "isinside_octree.md",
+        "Node Repulsion" => "repel.md",
+        "API Reference" => "api.md",
     ],
 )
 

@@ -1,3 +1,9 @@
+"""
+    combine_surfaces!(boundary::PointBoundary, surfs...)
+
+Merge multiple named surfaces into one. The first name is kept and subsequent surfaces are
+merged into it. All original surfaces are removed and replaced by the combined surface.
+"""
 function combine_surfaces!(boundary::PointBoundary, surfs...)
     for surf in surfs
         @assert hassurface(boundary, surf) "Surface does not exist. Check spelling."
@@ -20,6 +26,17 @@ function combine_surfaces!(boundary::PointBoundary, surfs...)
     return nothing
 end
 
+"""
+    split_surface!(cloud, angle; k=10)
+    split_surface!(cloud, target_surf, angle; k=10)
+
+Split a surface into sub-surfaces based on normal angle discontinuities. Builds a k-nearest
+neighbor graph, removes edges where adjacent normals differ by more than `angle`, and labels
+each connected component as a separate named surface.
+
+When called on a cloud/boundary with a single surface, that surface is split automatically.
+When multiple surfaces exist, specify `target_surf` by name.
+"""
 function split_surface!(cloud::Union{PointCloud, PointBoundary}, angle::Angle; k::Int = 10)
     @assert length(namedsurfaces(cloud)) == 1 "More than 1 surface in this cloud. Please specify a target surface."
     target_surf = only(names(boundary(cloud)))

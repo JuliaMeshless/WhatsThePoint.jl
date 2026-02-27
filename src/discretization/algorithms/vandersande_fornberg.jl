@@ -1,3 +1,11 @@
+"""
+    VanDerSandeFornberg <: AbstractNodeGenerationAlgorithm
+
+3D volume discretization algorithm that projects a 2D grid onto the shadow plane and fills the
+volume layer by layer using sphere packing heights. Requires `ConstantSpacing`.
+
+See: Van der Sande, K. & Fornberg, B. (2021). *SIAM J. Sci. Comput.*, 43(1).
+"""
 struct VanDerSandeFornberg <: AbstractNodeGenerationAlgorithm end
 
 function _discretize_volume(

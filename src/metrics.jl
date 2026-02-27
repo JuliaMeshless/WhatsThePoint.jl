@@ -1,3 +1,9 @@
+"""
+    metrics(cloud::PointCloud; k=20)
+
+Print distance statistics (mean, std, max, min) to the `k` nearest neighbors for all points
+in the cloud. Useful for assessing point distribution quality before and after repulsion.
+"""
 function metrics(cloud::PointCloud; k = 20)
     method = KNearestSearch(cloud, k)
     results = searchdists(cloud, method)

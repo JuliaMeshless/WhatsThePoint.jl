@@ -124,8 +124,26 @@ Base.view(surf::PointSurface, range::UnitRange) = view(parent(surf), range)
 Base.view(surf::PointSurface, range::StepRange) = view(parent(surf), range)
 
 to(surf::PointSurface) = to.(parent(surf).point)
+
+"""
+    point(surf::PointSurface)
+
+Return the vector of point coordinates for all surface elements.
+"""
 point(surf::PointSurface) = parent(surf).point
+
+"""
+    normal(surf::PointSurface)
+
+Return the vector of outward unit normal vectors for all surface elements.
+"""
 normal(surf::PointSurface) = parent(surf).normal
+
+"""
+    area(surf::PointSurface)
+
+Return the vector of surface areas for all surface elements.
+"""
 area(surf::PointSurface) = parent(surf).area
 
 # Topology accessors

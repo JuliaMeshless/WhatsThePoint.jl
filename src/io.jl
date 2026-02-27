@@ -1,3 +1,9 @@
+"""
+    import_surface(filepath::String)
+
+Load a surface mesh from a file (STL, OBJ, or any format supported by GeoIO.jl). Returns a
+tuple of `(points, normals, areas, mesh)` where points are face centers.
+"""
 function import_surface(filepath::String)
     geo = GeoIO.load(filepath)
     mesh = geo.geometry
@@ -12,6 +18,12 @@ function import_surface(filepath::String)
     return points, normals, area, mesh
 end
 
+"""
+    export_cloud(filename::String, cloud::PointCloud)
+
+Export a point cloud to VTK format. The output file contains boundary point coordinates and
+normal vectors.
+"""
 function export_cloud(filename::String, cloud::PointCloud)
     exportvtk(filename, to(boundary(cloud)), [normal(cloud)], ["normals"])
     return nothing
@@ -57,6 +69,11 @@ function savevtk!(vtkfile)
     return vtk_save(vtkfile)
 end
 
+"""
+    save(filename::String, cloud::PointCloud)
+
+Save a point cloud to a file using FileIO.jl serialization.
+"""
 function FileIO.save(filename::String, cloud::PointCloud)
     return save(filename, LittleDict("cloud" => cloud))
 end
