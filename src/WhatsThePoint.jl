@@ -28,7 +28,7 @@ export Point, coords, isinside, centroid, boundingbox, points
 export KNearestSearch, BallSearch, MetricBall, search, searchdists
 
 const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-const Angle{T} = Union{Quantity{T, NoDims, typeof(u"rad")}, Quantity{T, NoDims, typeof(u"°")}}
+const Angle{T} = Union{Quantity{T,NoDims,typeof(u"rad")},Quantity{T,NoDims,typeof(u"°")}}
 
 include("utils.jl")
 export metrics
@@ -78,10 +78,10 @@ include("isinside.jl")
 export isinside
 
 include("discretization/spacings.jl")
-export AbstractSpacing, ConstantSpacing, LogLike, Power
+export AbstractSpacing, ConstantSpacing, LogLike, Power, PiecewiseSpacing, SigmoidSpacing
 
 include("discretization/discretization.jl")
-export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, OctreeRandom
+export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, OctreeRandom, DensityAwareOctree
 export discretize
 
 include("repel.jl")
@@ -107,7 +107,7 @@ using PrecompileTools
         mesh = GeoIO.load(joinpath(@__DIR__, "precompile_tools_dummy.stl")).geometry
         b = PointBoundary(mesh)
         split_surface!(b, 75°)
-        cloud = discretize(b, ConstantSpacing(1m); alg = VanDerSandeFornberg())
+        cloud = discretize(b, ConstantSpacing(1m); alg=VanDerSandeFornberg())
     end
 end
 
