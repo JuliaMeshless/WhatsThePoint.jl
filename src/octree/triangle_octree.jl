@@ -62,6 +62,8 @@ const _DEGENERATE_EPS = 1.0e-10       # Min bbox extent for degenerate dims
 const _CLASSIFICATION_INSET = 1.0e-9  # Corner inset to avoid on-surface probes
 const _CLASSIFY_TOLERANCE_REL = 1.0e-6  # Relative tolerance for classification (scaled by h)
 const _CLASSIFY_TOLERANCE_ABS = 1.0e-8  # Absolute tolerance floor for classification
+const _SIGN_VOTE_EPS_REL = 1.0e-6       # Regularization for inverse-distance sign voting
+const _SIGN_AMBIGUITY_REL = 1.0e-3      # If sign vote magnitude is below this × nearest distance, mark ambiguous
 
 #=============================================================================
 SUBDIVISION CRITERION
@@ -458,10 +460,10 @@ octree = TriangleOctree(mesh; min_ratio=1e-5)
 """
 function TriangleOctree(
     mesh::SimpleMesh{M,C};
-    tolerance_relative = 1e-6,
-    min_ratio = 1e-6,
-    classify_leaves::Bool = true,
-    verify_orientation::Bool = true,
+    tolerance_relative=1e-6,
+    min_ratio=1e-6,
+    classify_leaves::Bool=true,
+    verify_orientation::Bool=true,
 ) where {M<:Manifold,C<:CRS}
     T = Float64
     n_triangles = Meshes.nelements(mesh)
@@ -481,8 +483,8 @@ function TriangleOctree(
     # Build vertex-based subdivision criterion
     criterion = VertexResolutionCriterion(
         mesh;
-        tolerance_relative = tolerance_relative,
-        min_ratio = min_ratio
+        tolerance_relative=tolerance_relative,
+        min_ratio=min_ratio
     )
 
     # Build octree
@@ -652,6 +654,55 @@ function _nearest_triangle_octree!(
     end
 end
 
+@inline function _fallback_sign_from_nearest(
+    point::SVector{3,T},
+    mesh::SimpleMesh,
+    nearest_tri_idx::Int,
+    nearest_pt::SVector{3,T},
+) where {T<:Real}
+    n = _get_triangle_normal(T, mesh, nearest_tri_idx)
+    return dot(point - nearest_pt, n) < 0 ? -1 : 1
+end
+
+function _local_sign_vote(
+    point::SVector{3,T},
+    mesh::SimpleMesh,
+    tree::SpatialOctree{Int,T},
+    nearest_pt::SVector{3,T},
+    nearest_dist::T,
+) where {T<:Real}
+    vote_leaf_idx = find_leaf(tree, nearest_pt)
+    vote_tris = tree.element_lists[vote_leaf_idx]
+    isempty(vote_tris) && return nothing
+
+    eps_w = max(T(_SIGN_VOTE_EPS_REL) * max(nearest_dist, one(T))^2, eps(T))
+    vote = zero(T)
+    weight_sum = zero(T)
+
+    @inbounds for tri_idx in vote_tris
+        v1, v2, v3 = _get_triangle_vertices(T, mesh, tri_idx)
+        cp = closest_point_on_triangle(point, v1, v2, v3)
+        dvec = point - cp
+        d2 = dot(dvec, dvec)
+        ni = _get_triangle_normal(T, mesh, tri_idx)
+        signed_proj = dot(dvec, ni)
+        w = inv(d2 + eps_w)
+        vote += w * signed_proj
+        weight_sum += w
+    end
+
+    weight_sum <= zero(T) && return nothing
+
+    avg_vote = vote / weight_sum
+    amb_tol = max(
+        T(_SIGN_AMBIGUITY_REL) * max(nearest_dist, one(T)),
+        T(_CLASSIFY_TOLERANCE_ABS),
+    )
+
+    abs(avg_vote) <= amb_tol && return 0
+    return avg_vote < 0 ? -1 : 1
+end
+
 
 """
     _compute_signed_distance_octree(point, mesh, tree) -> T
@@ -673,9 +724,49 @@ function _compute_signed_distance_octree(
         return typemax(T)
     end
 
-    n = _get_triangle_normal(T, mesh, state.closest_idx)
-    sign = dot(point - state.closest_pt, n) < 0 ? -one(T) : one(T)
-    return sign * sqrt(state.best_dist_sq)
+    nearest_dist = sqrt(state.best_dist_sq)
+
+    # Fast fallback from nearest triangle.
+    fallback_sign = _fallback_sign_from_nearest(
+        point,
+        mesh,
+        state.closest_idx,
+        state.closest_pt,
+    )
+
+    # Conservative local vote. If ambiguous, classify as boundary (0 signed distance).
+    voted_sign = _local_sign_vote(
+        point,
+        mesh,
+        tree,
+        state.closest_pt,
+        nearest_dist,
+    )
+    isnothing(voted_sign) && return fallback_sign * nearest_dist
+    voted_sign == 0 && return zero(T)
+
+    return voted_sign * nearest_dist
+end
+
+@inline function _inset_corners(
+    bbox_min::SVector{3,T},
+    bbox_max::SVector{3,T},
+    inset::T,
+) where {T<:Real}
+    x0, x1 = bbox_min[1] + inset, bbox_max[1] - inset
+    y0, y1 = bbox_min[2] + inset, bbox_max[2] - inset
+    z0, z1 = bbox_min[3] + inset, bbox_max[3] - inset
+
+    return (
+        SVector{3,T}(x0, y0, z0),
+        SVector{3,T}(x1, y0, z0),
+        SVector{3,T}(x0, y1, z0),
+        SVector{3,T}(x1, y1, z0),
+        SVector{3,T}(x0, y0, z1),
+        SVector{3,T}(x1, y0, z1),
+        SVector{3,T}(x0, y1, z1),
+        SVector{3,T}(x1, y1, z1),
+    )
 end
 
 """
@@ -698,7 +789,7 @@ function _classify_empty_leaf_conservative(
 ) where {T<:Real}
     bbox_min, bbox_max = box_bounds(tree, leaf_idx)
     h = box_size(tree, leaf_idx)
-    δ = max(T(_CLASSIFICATION_INSET), h * T(_CLASSIFY_TOLERANCE_REL))
+    inset = max(T(_CLASSIFICATION_INSET), h * T(_CLASSIFY_TOLERANCE_REL))
     tol = max(T(_CLASSIFY_TOLERANCE_ABS), h * T(_CLASSIFY_TOLERANCE_REL))
 
     center = box_center(tree, leaf_idx)
@@ -716,22 +807,9 @@ function _classify_empty_leaf_conservative(
     # Early exit: if center is on boundary, entire box is boundary
     center_class == LEAF_BOUNDARY && return LEAF_BOUNDARY
 
-    # Inset corners slightly to avoid exact-on-surface degeneracy
-    x0, x1 = bbox_min[1] + δ, bbox_max[1] - δ
-    y0, y1 = bbox_min[2] + δ, bbox_max[2] - δ
-    z0, z1 = bbox_min[3] + δ, bbox_max[3] - δ
-
-    # Check 8 corners for unanimous agreement with center classification
-    corners = (
-        SVector{3,T}(x0, y0, z0),
-        SVector{3,T}(x1, y0, z0),
-        SVector{3,T}(x0, y1, z0),
-        SVector{3,T}(x1, y1, z0),
-        SVector{3,T}(x0, y0, z1),
-        SVector{3,T}(x1, y0, z1),
-        SVector{3,T}(x0, y1, z1),
-        SVector{3,T}(x1, y1, z1),
-    )
+    # Inset corners slightly to avoid exact-on-surface degeneracy.
+    # Then require unanimous agreement with center classification.
+    corners = _inset_corners(bbox_min, bbox_max, inset)
 
     @inbounds for corner in corners
         corner_class = _leaf_class_from_signed_distance(
