@@ -29,8 +29,7 @@ println()
 
 # Build octree with classification
 println("Building octree with classification...")
-h_min = 0.001  # Minimum box size
-@time octree = TriangleOctree(mesh; h_min = h_min, classify_leaves = true)
+@time octree = TriangleOctree(mesh; classify_leaves=true)
 
 # Print octree statistics
 n_leaves = num_leaves(octree)
@@ -39,24 +38,24 @@ println("✓ Built octree:")
 println("  - Total leaves: $n_leaves")
 println("  - Triangles: $n_triangles")
 
-# Count leaf types
-leaf_indices = collect(all_leaves(octree.tree))
-leaf_classes = octree.leaf_classification[leaf_indices]
-n_interior = count(==(Int8(2)), leaf_classes)
-n_boundary = count(==(Int8(1)), leaf_classes)
-n_exterior = count(==(Int8(0)), leaf_classes)
+# # Count leaf types
+# leaf_indices = collect(all_leaves(octree.tree))
+# leaf_classes = octree.leaf_classification[leaf_indices]
+# n_interior = count(==(Int8(2)), leaf_classes)
+# n_boundary = count(==(Int8(1)), leaf_classes)
+# n_exterior = count(==(Int8(0)), leaf_classes)
 
-println("  - Interior leaves: $n_interior ($(round(100 * n_interior / n_leaves, digits = 1))%)")
-println("  - Boundary leaves: $n_boundary ($(round(100 * n_boundary / n_leaves, digits = 1))%)")
-println("  - Exterior leaves: $n_exterior ($(round(100 * n_exterior / n_leaves, digits = 1))%)")
-println()
+# println("  - Interior leaves: $n_interior ($(round(100 * n_interior / n_leaves, digits = 1))%)")
+# println("  - Boundary leaves: $n_boundary ($(round(100 * n_boundary / n_leaves, digits = 1))%)")
+# println("  - Exterior leaves: $n_exterior ($(round(100 * n_exterior / n_leaves, digits = 1))%)")
+# println()
 
 # Generate points using OctreeRandom algorithm
-target_points = 100_000
+target_points = 300_000
 println("Generating $target_points random interior points...")
 
-alg = OctreeRandom(octree)
-@time cloud = discretize(boundary, 1.0m; alg = alg, max_points = target_points)
+alg = OctreeRandom(octree, 2.0; verify_interior=true)
+@time cloud = discretize(boundary, 1.0m; alg=alg, max_points=target_points)
 
 n_volume = length(WhatsThePoint.volume(cloud))
 println("✓ Generated $n_volume volume points")
@@ -68,7 +67,7 @@ vol_points = points(WhatsThePoint.volume(cloud))
 inside_count = count(vol_points) do pt
     # Convert Point to SVector{3,Float64} for octree query
     c = Meshes.to(pt)
-    sv = SVector{3, Float64}(ustrip(c[1]), ustrip(c[2]), ustrip(c[3]))
+    sv = SVector{3,Float64}(ustrip(c[1]), ustrip(c[2]), ustrip(c[3]))
     isinside(sv, octree)
 end
 
@@ -109,4 +108,4 @@ println("For spacing-controlled discretization, use SlakKosec instead.")
 println("="^70)
 
 
-visualize(cloud; markersize = 0.3)
+visualize(cloud; markersize=0.3)

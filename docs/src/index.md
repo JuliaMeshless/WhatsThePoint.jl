@@ -59,13 +59,13 @@ and we can visualize again with `visualize(cloud; markersize=0.15)`
 For large meshes, you can use `OctreeRandom` which builds an octree from the surface mesh and generates volume points directly from the tree structure — no spacing parameter needed:
 
 ```julia
-cloud = discretize(boundary, OctreeRandom("model.stl"; h_min=0.5))
+cloud = discretize(boundary, OctreeRandom("model.stl"; min_ratio=1e-6))
 ```
 
 Or pass a pre-built `TriangleOctree` to `SlakKosec` for accelerated point-in-volume queries:
 
 ```julia
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
 

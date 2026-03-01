@@ -12,24 +12,24 @@ Build a `TriangleOctree` from a mesh file or a `SimpleMesh`:
 using WhatsThePoint
 
 # From a file path
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 
 # From a SimpleMesh
 using GeoIO
 mesh = GeoIO.load("model.stl") |> boundary
-octree = TriangleOctree(mesh; h_min=0.5)
+octree = TriangleOctree(mesh; min_ratio=1e-6)
 ```
 
 Parameters:
-- `h_min` (required) — Minimum box size. Controls the finest resolution of the octree.
-- `max_triangles_per_box` — Maximum triangles per leaf before subdivision (default: 50).
+- `tolerance_relative` — Vertex coincidence tolerance as fraction of domain diagonal.
+- `min_ratio` — Minimum box size as fraction of domain diagonal.
 - `classify_leaves` — Whether to classify empty leaves as interior/exterior (default: `true`).
 - `verify_orientation` — Check mesh normal consistency before building (default: `true`).
 
 ### Construction Process
 
 1. Create a root box enclosing the mesh bounding box (with a small buffer)
-2. Distribute triangles into leaves, subdividing when a leaf has too many triangles or is larger than `h_min`
+2. Subdivide adaptively when a box contains more than one unique in-box vertex
 3. Balance the tree to enforce a 2:1 refinement constraint (no adjacent leaves differ by more than one level)
 4. Classify empty leaves as interior or exterior using signed distance queries
 
@@ -47,7 +47,7 @@ This classification enables O(1) point-in-volume queries for interior and exteri
 The primary use of `TriangleOctree` is fast point-in-volume testing:
 
 ```julia
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 
 # Single point query
 result = isinside(point, octree)
@@ -67,7 +67,7 @@ Both `SVector{3}` and Meshes.jl `Point` types are accepted.
 Pass a `TriangleOctree` to `SlakKosec` to accelerate the `isinside` checks during volume point generation:
 
 ```julia
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 spacing = ConstantSpacing(1mm)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
@@ -77,7 +77,7 @@ cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 `OctreeRandom` uses the octree directly to generate volume points. See the [Discretization](@ref) page for details.
 
 ```julia
-cloud = discretize(boundary, OctreeRandom("model.stl"; h_min=0.5))
+cloud = discretize(boundary, OctreeRandom("model.stl"; min_ratio=1e-6))
 ```
 
 ## Query Functions

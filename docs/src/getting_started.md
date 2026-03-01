@@ -66,13 +66,13 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
 
 # OctreeRandom — octree-guided random generation (no spacing needed)
-cloud = discretize(boundary, OctreeRandom("model.stl"; h_min=0.5))
+cloud = discretize(boundary, OctreeRandom("model.stl"; min_ratio=1e-6))
 ```
 
 `SlakKosec` can also accept a `TriangleOctree` for accelerated point-in-volume queries:
 
 ```julia
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
 

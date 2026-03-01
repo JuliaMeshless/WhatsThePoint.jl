@@ -17,12 +17,12 @@ generate random points inside the mesh. It's much faster than rejection sampling
 # Constructors
 ```julia
 # From mesh (recommended) — builds octree automatically with classified leaves
-OctreeRandom(mesh::SimpleMesh)                          # Auto h_min
-OctreeRandom(mesh; h_min=0.01, boundary_oversampling=2.0)  # Custom h_min
+OctreeRandom(mesh::SimpleMesh)                                  # Auto min_ratio
+OctreeRandom(mesh; min_ratio=1e-6, boundary_oversampling=2.0)   # Custom min_ratio
 
 # From file path — loads mesh then builds octree
 OctreeRandom("bunny.stl")
-OctreeRandom("bunny.stl"; h_min=0.01)
+OctreeRandom("bunny.stl"; min_ratio=1e-6)
 
 # From pre-built octree (advanced)
 OctreeRandom(octree::TriangleOctree)
@@ -47,7 +47,7 @@ cloud = discretize(boundary, OctreeRandom(mesh); max_points=100_000)
 
 ## With Spacing (backward compatible)
 ```julia
-octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
+octree = TriangleOctree(mesh; min_ratio=1e-6, classify_leaves=true)
 cloud = discretize(boundary, 1.0u"m"; alg=OctreeRandom(octree), max_points=10_000)
 ```
 
@@ -59,7 +59,7 @@ cloud = discretize(boundary, alg; max_points=10_000)
 
 # Notes
 - The mesh convenience constructor always sets `classify_leaves=true`
-- When `h_min` is omitted, it is computed as `bbox_diagonal / (2 * cbrt(n_triangles))`
+- When `min_ratio` is omitted, it is computed as `1 / (2 * cbrt(n_triangles))`
 - The `spacing` parameter is **not used** (random uniform distribution)
 - For spacing-based discretization, use SlakKosec or VanDerSandeFornberg
 - Actual point count may be slightly less than `max_points` due to boundary filtering
@@ -86,51 +86,54 @@ cloud = discretize(boundary, alg; max_points=10_000)
 - Adaptive refinement
 - Smooth point distributions
 """
-struct OctreeRandom{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
-    octree::TriangleOctree{M, C, T}
+struct OctreeRandom{M<:Manifold,C<:CRS,T<:Real} <: AbstractNodeGenerationAlgorithm
+    octree::TriangleOctree{M,C,T}
     boundary_oversampling::Float64
     verify_interior::Bool
 end
 
-@inline function _rand_point_in_box(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
-    return bbox_min + rand(SVector{3, T}) .* (bbox_max - bbox_min)
+@inline function _rand_point_in_box(bbox_min::SVector{3,T}, bbox_max::SVector{3,T}) where {T}
+    return bbox_min + rand(SVector{3,T}) .* (bbox_max - bbox_min)
 end
 
-OctreeRandom(octree::TriangleOctree{M, C, T}) where {M, C, T} =
-    OctreeRandom{M, C, T}(octree, 2.0, false)
+OctreeRandom(octree::TriangleOctree{M,C,T}) where {M,C,T} =
+    OctreeRandom{M,C,T}(octree, 2.0, false)
 function OctreeRandom(
-        octree::TriangleOctree{M, C, T},
-        oversampling::Real;
-        verify_interior::Bool = false,
-    ) where {M, C, T}
+    octree::TriangleOctree{M,C,T},
+    oversampling::Real;
+    verify_interior::Bool=false,
+) where {M,C,T}
     oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive, got $oversampling"))
-    return OctreeRandom{M, C, T}(octree, Float64(oversampling), verify_interior)
+    return OctreeRandom{M,C,T}(octree, Float64(oversampling), verify_interior)
 end
 
 """
-    _auto_h_min(::Type{T}, mesh::SimpleMesh) where {T}
+    _auto_min_ratio(::Type{T}, mesh::SimpleMesh) where {T}
 
-Compute a default `h_min` for octree construction based on mesh geometry.
+Compute a default `min_ratio` for octree construction.
 
-Heuristic: `bbox_diagonal / (2 * cbrt(n_triangles))`. Scales leaf size to the
-mesh's characteristic triangle spacing so the octree resolves surface detail
-without excessive subdivision.
+Heuristic: `1 / (2 * cbrt(n_triangles))`.
+
+Since `TriangleOctree` expects `min_ratio` (minimum box size as fraction of
+domain diagonal), this gives a scale-adaptive default without introducing
+absolute-size parameters.
 """
-function _auto_h_min(::Type{T}, mesh::SimpleMesh) where {T}
-    bbox_min, bbox_max = _compute_bbox(T, mesh)
-    diagonal = norm(bbox_max - bbox_min)
+function _auto_min_ratio(::Type{T}, mesh::SimpleMesh) where {T}
     n = Meshes.nelements(mesh)
-    return diagonal / (2 * cbrt(T(n)))
+    return inv(T(2) * cbrt(T(n)))
 end
 
 """
-    OctreeRandom(mesh::SimpleMesh; h_min=nothing, max_triangles_per_box=50,
-                 boundary_oversampling=2.0, verify_interior=false, verify_orientation=true)
+    OctreeRandom(mesh::SimpleMesh;
+                 min_ratio=nothing,
+                 tolerance_relative=1e-6,
+                 boundary_oversampling=2.0,
+                 verify_interior=false,
+                 verify_orientation=true)
 
 Convenience constructor that builds a classified `TriangleOctree` internally.
 
-When `h_min` is not provided, an automatic value is computed from the mesh's
-bounding box diagonal and triangle count.
+When `min_ratio` is not provided, an automatic value is computed from triangle count.
 
 # Example
 ```julia
@@ -140,20 +143,20 @@ cloud = discretize(boundary, alg; max_points=100_000)
 ```
 """
 function OctreeRandom(
-        mesh::SimpleMesh{M, C};
-        h_min = nothing,
-        max_triangles_per_box::Int = 50,
-        boundary_oversampling::Real = 2.0,
-        verify_interior::Bool = false,
-        verify_orientation::Bool = true,
-    ) where {M <: Manifold, C <: CRS}
+    mesh::SimpleMesh{M,C};
+    min_ratio=nothing,
+    tolerance_relative::Real=1e-6,
+    boundary_oversampling::Real=2.0,
+    verify_interior::Bool=false,
+    verify_orientation::Bool=true,
+) where {M<:Manifold,C<:CRS}
     T = Float64
-    h_min_val = isnothing(h_min) ? _auto_h_min(T, mesh) : T(ustrip(h_min))
+    min_ratio_val = isnothing(min_ratio) ? _auto_min_ratio(T, mesh) : T(min_ratio)
     octree = TriangleOctree(
         mesh;
-        h_min = h_min_val,
-        max_triangles_per_box,
-        classify_leaves = true,
+        tolerance_relative=tolerance_relative,
+        min_ratio=min_ratio_val,
+        classify_leaves=true,
         verify_orientation,
     )
     return OctreeRandom(octree, boundary_oversampling; verify_interior)
@@ -186,15 +189,15 @@ If `ensure_one=true` and `total_count >= length(volumes)`, each leaf gets at
 least one allocation before distributing the remainder by volume.
 """
 function _allocate_counts_by_volume(
-        volumes::Vector{T},
-        total_count::Int;
-        ensure_one::Bool = false,
-    ) where {T <: Real}
+    volumes::Vector{T},
+    total_count::Int;
+    ensure_one::Bool=false,
+) where {T<:Real}
     n = length(volumes)
     n == 0 && return Int[]
     total_count <= 0 && return zeros(Int, n)
 
-    total_volume = sum(volumes; init = zero(T))
+    total_volume = sum(volumes; init=zero(T))
     weights = if total_volume > zero(T)
         volumes ./ total_volume
     else
@@ -220,7 +223,7 @@ function _allocate_counts_by_volume(
     leftover = remaining - sum(base)
     if leftover > 0
         frac = expected .- base
-        idxs = sortperm(frac; rev = true)
+        idxs = sortperm(frac; rev=true)
         for i in 1:leftover
             counts[idxs[i]] += 1
         end
@@ -260,19 +263,19 @@ end
 
 # Delegate spacing-based call to spacing-free version (spacing is unused by OctreeRandom)
 function _discretize_volume(
-        cloud::PointCloud{𝔼{3}, C},
-        ::AbstractSpacing,
-        alg::OctreeRandom;
-        max_points = 1_000,
-    ) where {C}
+    cloud::PointCloud{𝔼{3},C},
+    ::AbstractSpacing,
+    alg::OctreeRandom;
+    max_points=1_000,
+) where {C}
     return _discretize_volume(cloud, alg; max_points)
 end
 
 function _discretize_volume(
-        cloud::PointCloud{𝔼{3}, C},
-        alg::OctreeRandom;
-        max_points = 1_000,
-    ) where {C}
+    cloud::PointCloud{𝔼{3},C},
+    alg::OctreeRandom;
+    max_points=1_000,
+) where {C}
     isnothing(alg.octree.leaf_classification) &&
         error("TriangleOctree must be built with classify_leaves=true")
 
@@ -282,13 +285,13 @@ function _discretize_volume(
         _collect_classified_leaves(alg.octree)
 
     # Calculate total volume
-    total_interior_volume = sum(interior_volumes; init = zero(T))
-    total_boundary_volume = sum(boundary_volumes; init = zero(T))
+    total_interior_volume = sum(interior_volumes; init=zero(T))
+    total_boundary_volume = sum(boundary_volumes; init=zero(T))
     total_volume = total_interior_volume + total_boundary_volume
 
     if total_volume ≈ 0
         @warn "No interior or boundary volume found in octree"
-        return PointVolume(Point{𝔼{3}, C}[])
+        return PointVolume(Point{𝔼{3},C}[])
     end
 
     # Allocate points proportionally to volume
@@ -301,12 +304,12 @@ function _discretize_volume(
     interior_counts = _allocate_counts_by_volume(
         interior_volumes,
         n_interior;
-        ensure_one = true,
+        ensure_one=true,
     )
     boundary_sample_counts = _allocate_counts_by_volume(boundary_volumes, n_boundary_samples)
 
     # Pre-allocate result array
-    raw_points = SVector{3, T}[]
+    raw_points = SVector{3,T}[]
     sizehint!(raw_points, max_points)
 
     # Generate points in interior leaves.
@@ -334,7 +337,7 @@ function _discretize_volume(
 
     # Generate points in boundary leaves (with filtering)
     if !isempty(boundary_leaves)
-        boundary_candidates = SVector{3, T}[]
+        boundary_candidates = SVector{3,T}[]
         sizehint!(boundary_candidates, n_boundary_samples)
 
         for (leaf_idx, n_leaf_samples) in zip(boundary_leaves, boundary_sample_counts)
@@ -385,7 +388,7 @@ function _discretize_volume(
     end
 
     # Convert to Point objects with proper manifold/CRS
-    result_points = Point{𝔼{3}, C}[]
+    result_points = Point{𝔼{3},C}[]
     sizehint!(result_points, length(raw_points))
 
     for pt in raw_points

@@ -27,7 +27,7 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 cloud = discretize(boundary, spacing; alg=SlakKosec(20))
 
 # With octree acceleration for faster isinside queries
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 cloud = discretize(boundary, spacing; alg=SlakKosec(20, octree))
 ```
@@ -58,17 +58,17 @@ This is the default (and only) algorithm for 2D boundaries.
 
 Generates volume points directly from an octree decomposition of the domain. The octree classifies leaf nodes as interior, boundary, or exterior. Interior leaves are filled with random points directly (100% acceptance rate), while boundary leaves are oversampled and filtered with the octree-accelerated `isinside` test.
 
-**No spacing parameter is needed** — point density is controlled by the octree resolution (`h_min`).
+**No spacing parameter is needed** — point density is controlled by octree parameters (`tolerance_relative`, `min_ratio`).
 
 ```julia
-# From a mesh file (recommended — auto-computes h_min)
+# From a mesh file (recommended — auto-computes min_ratio)
 cloud = discretize(boundary, OctreeRandom("model.stl"))
 
-# With explicit h_min
-cloud = discretize(boundary, OctreeRandom("model.stl"; h_min=0.5))
+# With explicit min_ratio
+cloud = discretize(boundary, OctreeRandom("model.stl"; min_ratio=1e-6))
 
 # From a pre-built TriangleOctree
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 cloud = discretize(boundary, OctreeRandom(octree))
 
 # With custom boundary oversampling (default: 2.0)
@@ -76,8 +76,8 @@ cloud = discretize(boundary, OctreeRandom(octree, 3.0))
 ```
 
 Parameters:
-- `h_min` — Minimum octree box size. Auto-computed from mesh diagonal and triangle count if omitted.
-- `max_triangles_per_box` — Maximum triangles per leaf before subdivision (default: 50).
+- `min_ratio` — Minimum octree box size as fraction of mesh diagonal. Auto-computed if omitted.
+- `tolerance_relative` — Vertex coincidence tolerance as fraction of mesh diagonal.
 - `boundary_oversampling` — Oversampling factor for boundary leaves (default: 2.0). Higher values improve boundary coverage at the cost of more rejected candidates.
 - `verify_interior` — Verify generated interior points with `isinside` (default: `false`). Usually unnecessary since leaf classification is reliable.
 - `verify_orientation` — Check mesh normal consistency before building the octree (default: `true`).
