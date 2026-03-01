@@ -654,16 +654,6 @@ function _nearest_triangle_octree!(
     end
 end
 
-@inline function _fallback_sign_from_nearest(
-    point::SVector{3,T},
-    mesh::SimpleMesh,
-    nearest_tri_idx::Int,
-    nearest_pt::SVector{3,T},
-) where {T<:Real}
-    n = _get_triangle_normal(T, mesh, nearest_tri_idx)
-    return dot(point - nearest_pt, n) < 0 ? -1 : 1
-end
-
 function _local_sign_vote(
     point::SVector{3,T},
     mesh::SimpleMesh,
@@ -673,7 +663,7 @@ function _local_sign_vote(
 ) where {T<:Real}
     vote_leaf_idx = find_leaf(tree, nearest_pt)
     vote_tris = tree.element_lists[vote_leaf_idx]
-    isempty(vote_tris) && return nothing
+    isempty(vote_tris) && return 0
 
     eps_w = max(T(_SIGN_VOTE_EPS_REL) * max(nearest_dist, one(T))^2, eps(T))
     vote = zero(T)
@@ -691,7 +681,7 @@ function _local_sign_vote(
         weight_sum += w
     end
 
-    weight_sum <= zero(T) && return nothing
+    weight_sum <= zero(T) && return 0
 
     avg_vote = vote / weight_sum
     amb_tol = max(
@@ -726,15 +716,7 @@ function _compute_signed_distance_octree(
 
     nearest_dist = sqrt(state.best_dist_sq)
 
-    # Fast fallback from nearest triangle.
-    fallback_sign = _fallback_sign_from_nearest(
-        point,
-        mesh,
-        state.closest_idx,
-        state.closest_pt,
-    )
-
-    # Conservative local vote. If ambiguous, classify as boundary (0 signed distance).
+    # Conservative local vote for sign. Any ambiguity maps to boundary.
     voted_sign = _local_sign_vote(
         point,
         mesh,
@@ -742,7 +724,6 @@ function _compute_signed_distance_octree(
         state.closest_pt,
         nearest_dist,
     )
-    isnothing(voted_sign) && return fallback_sign * nearest_dist
     voted_sign == 0 && return zero(T)
 
     return voted_sign * nearest_dist
