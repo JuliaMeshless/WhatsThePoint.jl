@@ -18,7 +18,7 @@ mkpath(ASSETS_DIR)
 # 2D Stanford Bunny silhouette (projected from 3D bunny.stl)
 # ============================================================================
 
-function bunny_silhouette(; n_bins=200)
+function bunny_silhouette(; n_bins = 200)
     stl_path = joinpath(@__DIR__, "src", "assets", "bunny.stl")
     boundary3d = WTP.PointBoundary(stl_path)
     coords = WTP.to(boundary3d)
@@ -35,7 +35,7 @@ function bunny_silhouette(; n_bins=200)
     angles = atan.(zs .- cz, xs .- cx)
     dists = @. sqrt((xs - cx)^2 + (zs - cz)^2)
 
-    bin_edges = range(-π, π; length=n_bins + 1)
+    bin_edges = range(-π, π; length = n_bins + 1)
     outline_x = Float64[]
     outline_z = Float64[]
 
@@ -66,7 +66,7 @@ function generate_2d_discretization()
     xs = [ustrip(c[1]) for c in coords]
     dx = maximum(xs) - minimum(xs)
     spacing = WTP.ConstantSpacing((dx / 60) * m)
-    cloud = WTP.discretize(boundary, spacing; alg=WTP.FornbergFlyer())
+    cloud = WTP.discretize(boundary, spacing; alg = WTP.FornbergFlyer())
 
     # Extract coordinates
     bnd_coords = WTP.to(WTP.boundary(cloud))
@@ -77,17 +77,19 @@ function generate_2d_discretization()
     vol_x = [ustrip(c[1]) for c in vol_coords]
     vol_y = [ustrip(c[2]) for c in vol_coords]
 
-    fig = Figure(; size=(700, 600))
-    ax = Axis(fig[1, 1]; aspect=DataAspect(),
-              xlabel="x", ylabel="y",
-              title="2D Discretization — Stanford Bunny")
+    fig = Figure(; size = (700, 600))
+    ax = Axis(
+        fig[1, 1]; aspect = DataAspect(),
+        xlabel = "x", ylabel = "y",
+        title = "2D Discretization — Stanford Bunny"
+    )
 
-    scatter!(ax, vol_x, vol_y; color=:steelblue, markersize=4, label="Volume")
-    scatter!(ax, bnd_x, bnd_y; color=:red, markersize=6, label="Boundary")
-    axislegend(ax; position=:rt)
+    scatter!(ax, vol_x, vol_y; color = :steelblue, markersize = 4, label = "Volume")
+    scatter!(ax, bnd_x, bnd_y; color = :red, markersize = 6, label = "Boundary")
+    axislegend(ax; position = :rt)
 
-    CairoMakie.save(joinpath(ASSETS_DIR, "2d-discretization.png"), fig; px_per_unit=2)
-    println("  Saved 2d-discretization.png ($(length(cloud)) points)")
+    CairoMakie.save(joinpath(ASSETS_DIR, "2d-discretization.png"), fig; px_per_unit = 2)
+    return println("  Saved 2d-discretization.png ($(length(cloud)) points)")
 end
 
 # ============================================================================
@@ -102,16 +104,18 @@ function generate_repel_comparison()
     xs = [ustrip(c[1]) for c in coords]
     dx = maximum(xs) - minimum(xs)
     spacing = WTP.ConstantSpacing((dx / 60) * m)
-    cloud_before = WTP.discretize(boundary, spacing; alg=WTP.FornbergFlyer())
+    cloud_before = WTP.discretize(boundary, spacing; alg = WTP.FornbergFlyer())
 
-    cloud_after, convergence = WTP.repel(cloud_before, spacing; max_iters=500)
+    cloud_after, convergence = WTP.repel(cloud_before, spacing; max_iters = 500)
 
-    fig = Figure(; size=(1400, 600))
+    fig = Figure(; size = (1400, 600))
 
     # Before repulsion
-    ax1 = Axis(fig[1, 1]; aspect=DataAspect(),
-               xlabel="x", ylabel="y",
-               title="Before Repulsion")
+    ax1 = Axis(
+        fig[1, 1]; aspect = DataAspect(),
+        xlabel = "x", ylabel = "y",
+        title = "Before Repulsion"
+    )
 
     bnd_coords = WTP.to(WTP.boundary(cloud_before))
     bnd_x = [ustrip(c[1]) for c in bnd_coords]
@@ -120,13 +124,15 @@ function generate_repel_comparison()
     vol_x = [ustrip(c[1]) for c in vol_coords]
     vol_y = [ustrip(c[2]) for c in vol_coords]
 
-    scatter!(ax1, vol_x, vol_y; color=:steelblue, markersize=3)
-    scatter!(ax1, bnd_x, bnd_y; color=:red, markersize=5)
+    scatter!(ax1, vol_x, vol_y; color = :steelblue, markersize = 3)
+    scatter!(ax1, bnd_x, bnd_y; color = :red, markersize = 5)
 
     # After repulsion
-    ax2 = Axis(fig[1, 2]; aspect=DataAspect(),
-               xlabel="x", ylabel="y",
-               title="After Repulsion")
+    ax2 = Axis(
+        fig[1, 2]; aspect = DataAspect(),
+        xlabel = "x", ylabel = "y",
+        title = "After Repulsion"
+    )
 
     bnd_coords2 = WTP.to(WTP.boundary(cloud_after))
     bnd_x2 = [ustrip(c[1]) for c in bnd_coords2]
@@ -135,13 +141,13 @@ function generate_repel_comparison()
     vol_x2 = [ustrip(c[1]) for c in vol_coords2]
     vol_y2 = [ustrip(c[2]) for c in vol_coords2]
 
-    scatter!(ax2, vol_x2, vol_y2; color=:steelblue, markersize=3)
-    scatter!(ax2, bnd_x2, bnd_y2; color=:red, markersize=5)
+    scatter!(ax2, vol_x2, vol_y2; color = :steelblue, markersize = 3)
+    scatter!(ax2, bnd_x2, bnd_y2; color = :red, markersize = 5)
 
-    CairoMakie.save(joinpath(ASSETS_DIR, "repel-comparison.png"), fig; px_per_unit=2)
+    CairoMakie.save(joinpath(ASSETS_DIR, "repel-comparison.png"), fig; px_per_unit = 2)
     println("  Saved repel-comparison.png")
     println("  Before: $(length(cloud_before)) points, After: $(length(cloud_after)) points")
-    println("  Convergence: $(convergence[end]) after $(length(convergence)) iterations")
+    return println("  Convergence: $(convergence[end]) after $(length(convergence)) iterations")
 end
 
 # ============================================================================
@@ -154,16 +160,18 @@ function generate_algorithm_comparison()
     boundary = WTP.PointBoundary(joinpath(@__DIR__, "src", "assets", "bunny.stl"))
     spacing = WTP.ConstantSpacing(1m)
 
-    cloud_sk = WTP.discretize(boundary, spacing; alg=WTP.SlakKosec(), max_points=95_000)
-    cloud_vf = WTP.discretize(boundary, spacing; alg=WTP.VanDerSandeFornberg(), max_points=95_000)
+    cloud_sk = WTP.discretize(boundary, spacing; alg = WTP.SlakKosec(), max_points = 95_000)
+    cloud_vf = WTP.discretize(boundary, spacing; alg = WTP.VanDerSandeFornberg(), max_points = 95_000)
 
-    fig = Figure(; size=(1200, 550))
+    fig = Figure(; size = (1200, 550))
 
-    for (idx, (cloud, title)) in enumerate([
-        (cloud_sk, "SlakKosec ($(length(cloud_sk)) pts)"),
-        (cloud_vf, "VanDerSandeFornberg ($(length(cloud_vf)) pts)"),
-    ])
-        ax = Axis3(fig[1, idx]; azimuth=1.275π, elevation=π / 8, title=title)
+    for (idx, (cloud, title)) in enumerate(
+            [
+                (cloud_sk, "SlakKosec ($(length(cloud_sk)) pts)"),
+                (cloud_vf, "VanDerSandeFornberg ($(length(cloud_vf)) pts)"),
+            ]
+        )
+        ax = Axis3(fig[1, idx]; azimuth = 1.275π, elevation = π / 8, title = title)
         ax.aspect = :data
 
         vol = WTP.volume(cloud)
@@ -172,12 +180,12 @@ function generate_algorithm_comparison()
             x = ustrip.([c[1] for c in coords])
             y = ustrip.([c[2] for c in coords])
             z = ustrip.([c[3] for c in coords])
-            meshscatter!(ax, x, y, z; markersize=0.15, color=:steelblue)
+            meshscatter!(ax, x, y, z; markersize = 0.15, color = :steelblue)
         end
     end
 
-    CairoMakie.save(joinpath(ASSETS_DIR, "algorithm-comparison.png"), fig; px_per_unit=2)
-    println("  Saved algorithm-comparison.png")
+    CairoMakie.save(joinpath(ASSETS_DIR, "algorithm-comparison.png"), fig; px_per_unit = 2)
+    return println("  Saved algorithm-comparison.png")
 end
 
 # ============================================================================
