@@ -4,6 +4,7 @@ include("algorithms/fornberg_flyer.jl")
 include("algorithms/vandersande_fornberg.jl")
 include("algorithms/slak_kosec.jl")
 include("algorithms/octree_random.jl")
+include("algorithms/density_aware_octree.jl")
 
 """
     discretize(bnd::PointBoundary, spacing; alg=auto, max_points=10_000_000)
