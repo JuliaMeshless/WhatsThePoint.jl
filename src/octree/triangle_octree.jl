@@ -325,7 +325,7 @@ O(n) complexity using edge hash map instead of O(n²) pairwise comparison.
 
 # Examples
 ```julia
-octree = TriangleOctree("model.stl"; h_min=0.01)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 if !has_consistent_normals(octree.mesh)
     @warn "Mesh has flipped triangles - will cause incorrect isinside() results"
 end
@@ -891,7 +891,7 @@ Returns `true` if point is inside the closed surface defined by the mesh.
 ```julia
 using WhatsThePoint, StaticArrays
 
-octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6, classify_leaves=true)
 
 point = SVector(0.5, 0.5, 0.5)
 is_inside = isinside(point, octree)

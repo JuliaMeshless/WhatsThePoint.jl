@@ -54,11 +54,11 @@ point = SVector(2.0, 2.0, 2.0)
 leaf = find_leaf(octree, point)
 ```
 """
-struct SpatialOctree{E, T <: Real} <: AbstractOctree{E, T}
+struct SpatialOctree{E,T<:Real} <: AbstractOctree{E,T}
     parent::Vector{Int}
-    children::Vector{SVector{8, Int}}    # 8 child indices per box (0 = no child)
-    coords::Vector{SVector{4, Int}}      # (i,j,k,N) coordinates per box
-    origin::SVector{3, T}
+    children::Vector{SVector{8,Int}}    # 8 child indices per box (0 = no child)
+    coords::Vector{SVector{4,Int}}      # (i,j,k,N) coordinates per box
+    origin::SVector{3,T}
     root_size::T
     element_lists::Vector{Vector{E}}
     num_boxes::Ref{Int}          # Mutable counter
@@ -84,21 +84,21 @@ origin = SVector(0.0, 0.0, 0.0)
 octree = SpatialOctree{Int,Float64}(origin, 10.0)
 ```
 """
-function SpatialOctree{E, T}(
-        origin::SVector{3, T},
-        size::T;
-        initial_capacity = 1000,
-    ) where {E, T}
+function SpatialOctree{E,T}(
+    origin::SVector{3,T},
+    size::T;
+    initial_capacity=1000,
+) where {E,T}
     parent = zeros(Int, initial_capacity)
-    children = [zero(SVector{8, Int}) for _ in 1:initial_capacity]
-    coords = [zero(SVector{4, Int}) for _ in 1:initial_capacity]
+    children = [zero(SVector{8,Int}) for _ in 1:initial_capacity]
+    coords = [zero(SVector{4,Int}) for _ in 1:initial_capacity]
     element_lists = [E[] for _ in 1:initial_capacity]
 
     # Initialize root at (0,0,0,1)
-    coords[1] = SVector{4, Int}(0, 0, 0, 1)
+    coords[1] = SVector{4,Int}(0, 0, 0, 1)
     num_boxes = Ref(1)
 
-    return SpatialOctree{E, T}(
+    return SpatialOctree{E,T}(
         parent,
         children,
         coords,
@@ -124,7 +124,7 @@ center = origin + (2*[i,j,k] + 1) * box_size / 2
 ```
 where `box_size = root_size / N`
 """
-function box_center(octree::SpatialOctree{E, T}, box_idx::Int) where {E, T}
+function box_center(octree::SpatialOctree{E,T}, box_idx::Int) where {E,T}
     i, j, k, N = octree.coords[box_idx]
     h = octree.root_size / N  # Box size at this level
 
@@ -132,7 +132,7 @@ function box_center(octree::SpatialOctree{E, T}, box_idx::Int) where {E, T}
     y = octree.origin[2] + (2 * j + 1) * h / 2
     z = octree.origin[3] + (2 * k + 1) * h / 2
 
-    return SVector{3, T}(x, y, z)
+    return SVector{3,T}(x, y, z)
 end
 
 """
@@ -155,12 +155,12 @@ Get (min_corner, max_corner) of box.
 # Returns
 Tuple of (min_corner, max_corner) as SVector{3,C}
 """
-function box_bounds(octree::SpatialOctree{E, T}, box_idx::Int) where {E, T}
+function box_bounds(octree::SpatialOctree{E,T}, box_idx::Int) where {E,T}
     i, j, k, N = octree.coords[box_idx]
     h = octree.root_size / N
 
-    min_corner = octree.origin + SVector{3, T}(i * h, j * h, k * h)
-    max_corner = min_corner + SVector{3, T}(h, h, h)
+    min_corner = octree.origin + SVector{3,T}(i * h, j * h, k * h)
+    max_corner = min_corner + SVector{3,T}(h, h, h)
 
     return (min_corner, max_corner)
 end
@@ -193,7 +193,7 @@ end
 Total number of elements stored in tree.
 """
 function num_elements(octree::SpatialOctree)
-    return sum(i -> length(octree.element_lists[i]), 1:octree.num_boxes[]; init = 0)
+    return sum(i -> length(octree.element_lists[i]), 1:octree.num_boxes[]; init=0)
 end
 
 """
@@ -201,9 +201,9 @@ end
 
 Get overall bounding box of tree (root box).
 """
-function bounding_box(octree::SpatialOctree{E, T}) where {E, T}
+function bounding_box(octree::SpatialOctree{E,T}) where {E,T}
     max_corner =
-        octree.origin + SVector{3, T}(octree.root_size, octree.root_size, octree.root_size)
+        octree.origin + SVector{3,T}(octree.root_size, octree.root_size, octree.root_size)
     return (octree.origin, max_corner)
 end
 
@@ -227,13 +227,13 @@ Automatically grows arrays if capacity exceeded.
 Index of newly created box
 """
 function add_box!(
-        octree::SpatialOctree{E},
-        i::Int,
-        j::Int,
-        k::Int,
-        N::Int,
-        parent_idx::Int,
-    ) where {E}
+    octree::SpatialOctree{E},
+    i::Int,
+    j::Int,
+    k::Int,
+    N::Int,
+    parent_idx::Int,
+) where {E}
     octree.num_boxes[] += 1
     box_idx = octree.num_boxes[]
 
@@ -246,17 +246,17 @@ function add_box!(
         resize!(octree.parent, new_capacity)
         append!(
             octree.children,
-            [zero(SVector{8, Int}) for _ in 1:(new_capacity - old_capacity)],
+            [zero(SVector{8,Int}) for _ in 1:(new_capacity-old_capacity)],
         )
         append!(
             octree.coords,
-            [zero(SVector{4, Int}) for _ in 1:(new_capacity - old_capacity)],
+            [zero(SVector{4,Int}) for _ in 1:(new_capacity-old_capacity)],
         )
-        append!(octree.element_lists, [E[] for _ in 1:(new_capacity - old_capacity)])
+        append!(octree.element_lists, [E[] for _ in 1:(new_capacity-old_capacity)])
     end
 
     octree.parent[box_idx] = parent_idx
-    octree.coords[box_idx] = SVector{4, Int}(i, j, k, N)
+    octree.coords[box_idx] = SVector{4,Int}(i, j, k, N)
 
     return box_idx
 end
@@ -290,7 +290,7 @@ function subdivide!(octree::SpatialOctree, box_idx::Int)
 
     # Standard octree ordering: (di, dj, dk) ∈ {0,1}³ decoded from child index
     # child n (0-indexed) → di = n & 1, dj = (n >> 1) & 1, dk = (n >> 2) & 1
-    child_indices = SVector{8, Int}(
+    child_indices = SVector{8,Int}(
         ntuple(Val(8)) do n
             m = n - 1
             di = m & 1
@@ -325,7 +325,7 @@ Index of leaf box containing point
 # Throws
 AssertionError if point is outside octree bounds
 """
-function find_leaf(octree::SpatialOctree{E, T}, point::SVector{3, T}) where {E, T}
+function find_leaf(octree::SpatialOctree{E,T}, point::SVector{3,T}) where {E,T}
     current = 1  # Start at root
 
     while has_children(octree, current)
@@ -430,12 +430,12 @@ Find box(es) at given (i,j,k,N) coordinates.
 Vector of box indices covering the target location
 """
 function find_boxes_at_coords(
-        octree::SpatialOctree,
-        i_target::Int,
-        j_target::Int,
-        k_target::Int,
-        N_target::Int,
-    )
+    octree::SpatialOctree,
+    i_target::Int,
+    j_target::Int,
+    k_target::Int,
+    N_target::Int,
+)
     # Start at root
     current = 1
 
@@ -574,7 +574,7 @@ all adjacent boxes differ by at most one refinement level.
 # Algorithm
 1. Collect all leaves
 2. Check each leaf for balance violations
-3. Subdivide violating neighbors (only respecting physical limits like h_min)
+3. Subdivide violating neighbors (only respecting physical minimum-size limits)
 4. Repeat until no violations
 
 # Note
