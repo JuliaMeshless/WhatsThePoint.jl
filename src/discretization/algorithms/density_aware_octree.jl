@@ -124,16 +124,12 @@ function _subdivide_node_octree!(
     return
 end
 
-@inline function _probe_leaf_sign(
+@inline function _mesh_geometry_query(
     point::SVector{3,T},
-    triangle_octree::TriangleOctree,
     tol::T,
+    triangle_octree::TriangleOctree,
 ) where {T<:Real}
-    sd = _compute_signed_distance_octree(
-        point,
-        triangle_octree.mesh,
-        triangle_octree.tree,
-    )
+    sd = _compute_signed_distance_octree(point, triangle_octree.mesh, triangle_octree.tree)
     return _leaf_class_from_signed_distance(sd, tol)
 end
 
@@ -151,7 +147,7 @@ function _box_may_contain_interior(
     corners = _inset_corners(bbox_min, bbox_max, inset)
 
     for probe in (center, corners...)
-        cls = _probe_leaf_sign(probe, triangle_octree, tol)
+        cls = _mesh_geometry_query(probe, tol, triangle_octree)
         cls != LEAF_EXTERIOR && return true
     end
 
@@ -162,85 +158,121 @@ function _classify_node_leaves(
     node_tree::SpatialOctree{Int,T},
     triangle_octree::TriangleOctree,
 ) where {T<:Real}
-    n_boxes = node_tree.num_boxes[]
-    classification = fill(LEAF_UNKNOWN, n_boxes)
-
-    for leaf_idx in all_leaves(node_tree)
-        classification[leaf_idx] = _classify_node_leaf_conservative(
-            node_tree,
-            leaf_idx,
-            triangle_octree,
-        )
-    end
-
-    return classification
+    mesh_query(point::SVector{3,T}, tol::T) = _mesh_geometry_query(point, tol, triangle_octree)
+    return classify_leaves!(node_tree, mesh_query)
 end
 
-function _classify_node_leaf_conservative(
-    node_tree::SpatialOctree{Int,T},
-    leaf_idx::Int,
-    triangle_octree::TriangleOctree,
-) where {T<:Real}
-    bbox_min, bbox_max = box_bounds(node_tree, leaf_idx)
-    h = box_size(node_tree, leaf_idx)
-
-    inset = max(T(_CLASSIFICATION_INSET), h * T(_CLASSIFY_TOLERANCE_REL))
-    tol = max(T(_CLASSIFY_TOLERANCE_ABS), h * T(_CLASSIFY_TOLERANCE_REL))
-
-    center = box_center(node_tree, leaf_idx)
-    corners = _inset_corners(bbox_min, bbox_max, inset)
-    classes = map(p -> _probe_leaf_sign(p, triangle_octree, tol), (center, corners...))
-
-    any(==(LEAF_BOUNDARY), classes) && return LEAF_BOUNDARY
-    all(==(LEAF_INTERIOR), classes) && return LEAF_INTERIOR
-    all(==(LEAF_EXTERIOR), classes) && return LEAF_EXTERIOR
-    return LEAF_BOUNDARY
+struct LeafGroup{T<:Real}
+    indices::Vector{Int}
+    weights::Vector{T}
 end
 
-function _collect_classified_node_leaves(
+function _collect_weighted_leaves(
     node_tree::SpatialOctree{Int,T},
     classification::Vector{Int8},
+    spacing::AbstractSpacing,
 ) where {T<:Real}
-    interior_leaves = Int[]
-    boundary_leaves = Int[]
-    interior_volumes = T[]
-    boundary_volumes = T[]
+    interior_indices = Int[]
+    interior_weights = T[]
+    near_surface_indices = Int[]
+    near_surface_weights = T[]
 
     for leaf_idx in all_leaves(node_tree)
         cls = classification[leaf_idx]
-        if cls == LEAF_INTERIOR
-            push!(interior_leaves, leaf_idx)
-            push!(interior_volumes, box_size(node_tree, leaf_idx)^3)
-        elseif cls == LEAF_BOUNDARY
-            push!(boundary_leaves, leaf_idx)
-            push!(boundary_volumes, box_size(node_tree, leaf_idx)^3)
+        if cls == LEAF_INTERIOR || cls == LEAF_BOUNDARY
+            center = box_center(node_tree, leaf_idx)
+            h_local = max(_spacing_value(T, spacing, center), sqrt(eps(T)))
+            volume = box_size(node_tree, leaf_idx)^3
+            weight = volume / h_local^3
+
+            if cls == LEAF_INTERIOR
+                push!(interior_indices, leaf_idx)
+                push!(interior_weights, weight)
+            else
+                push!(near_surface_indices, leaf_idx)
+                push!(near_surface_weights, weight)
+            end
         end
     end
 
-    return interior_leaves, interior_volumes, boundary_leaves, boundary_volumes
+    return LeafGroup{T}(interior_indices, interior_weights),
+           LeafGroup{T}(near_surface_indices, near_surface_weights)
 end
 
-function _compute_node_leaf_weights(
-    leaves::Vector{Int},
+function _generate_interior_points(
+    leaf_group::LeafGroup{T},
     node_tree::SpatialOctree{Int,T},
-    spacing::AbstractSpacing,
-    volumes::Vector{T},
+    n_points::Int,
+    placement::Symbol,
 ) where {T<:Real}
-    weights = Vector{T}(undef, length(leaves))
+    counts = _allocate_counts_by_volume(leaf_group.weights, n_points)
+    points = SVector{3,T}[]
+    sizehint!(points, n_points)
 
-    for (i, leaf_idx) in enumerate(leaves)
-        center = box_center(node_tree, leaf_idx)
-        h_local = _spacing_value(T, spacing, center)
-        h_local = max(h_local, sqrt(eps(T)))
-        density = inv(h_local^3)
-        weights[i] = density * volumes[i]
+    for (leaf_idx, n_leaf) in zip(leaf_group.indices, counts)
+        n_leaf == 0 && continue
+        bbox_min, bbox_max = box_bounds(node_tree, leaf_idx)
+        append!(points, _generate_points_in_box(bbox_min, bbox_max, n_leaf, placement))
     end
 
-    return weights
+    return points
 end
 
-function _allocate_counts_by_weight(weights::Vector{T}, total_count::Int) where {T<:Real}
-    return _allocate_counts_by_volume(weights, total_count)
+function _generate_near_surface_points(
+    leaf_group::LeafGroup{T},
+    node_tree::SpatialOctree{Int,T},
+    triangle_octree::TriangleOctree,
+    n_target::Int,
+    oversampling::Float64,
+    placement::Symbol,
+) where {T<:Real}
+    n_candidates = round(Int, n_target * oversampling)
+    counts = _allocate_counts_by_volume(leaf_group.weights, n_candidates)
+
+    candidates = SVector{3,T}[]
+    sizehint!(candidates, n_candidates)
+    for (leaf_idx, n_leaf) in zip(leaf_group.indices, counts)
+        n_leaf == 0 && continue
+        bbox_min, bbox_max = box_bounds(node_tree, leaf_idx)
+        append!(candidates, _generate_points_in_box(bbox_min, bbox_max, n_leaf, placement))
+    end
+
+    accepted = SVector{3,T}[]
+    sizehint!(accepted, n_target)
+    for p in candidates
+        isinside(p, triangle_octree) && push!(accepted, p)
+        length(accepted) >= n_target && break
+    end
+
+    return accepted
+end
+
+function _fill_deficit(
+    interior_leaves::LeafGroup{T},
+    node_tree::SpatialOctree{Int,T},
+    n_needed::Int,
+) where {T<:Real}
+    isempty(interior_leaves.indices) && return SVector{3,T}[]
+
+    w = isempty(interior_leaves.weights) ?
+        fill(inv(T(length(interior_leaves.indices))), length(interior_leaves.indices)) :
+        interior_leaves.weights
+
+    cumw = cumsum(w)
+    totalw = cumw[end]
+
+    points = SVector{3,T}[]
+    sizehint!(points, n_needed)
+
+    for _ in 1:n_needed
+        r = rand(T) * totalw
+        idx = clamp(searchsortedfirst(cumw, r), 1, length(interior_leaves.indices))
+        leaf_idx = interior_leaves.indices[idx]
+        bbox_min, bbox_max = box_bounds(node_tree, leaf_idx)
+        push!(points, _rand_point_in_box(bbox_min, bbox_max))
+    end
+
+    return points
 end
 
 function _generate_points_in_box(
@@ -276,7 +308,6 @@ function _generate_points_in_box(
     return pts
 end
 
-# Delegate spacing-free call only for explicit spacing algorithms.
 function _discretize_volume(
     cloud::PointCloud{𝔼{3},C},
     spacing::AbstractSpacing,
@@ -285,79 +316,39 @@ function _discretize_volume(
 ) where {C}
     T = Float64
 
+    # Build and classify node octree
     node_tree = _build_node_octree(alg.triangle_octree, spacing)
-    leaf_classification = _classify_node_leaves(node_tree, alg.triangle_octree)
+    classification = _classify_node_leaves(node_tree, alg.triangle_octree)
+    interior, near_surface = _collect_weighted_leaves(node_tree, classification, spacing)
 
-    interior_leaves, interior_volumes, boundary_leaves, boundary_volumes =
-        _collect_classified_node_leaves(node_tree, leaf_classification)
-
-    interior_weights = _compute_node_leaf_weights(
-        interior_leaves,
-        node_tree,
-        spacing,
-        interior_volumes,
-    )
-    boundary_weights = _compute_node_leaf_weights(
-        boundary_leaves,
-        node_tree,
-        spacing,
-        boundary_volumes,
-    )
-
-    total_weight = sum(interior_weights; init=zero(T)) + sum(boundary_weights; init=zero(T))
+    # Allocate points proportionally to weighted volumes
+    total_weight = sum(interior.weights; init=zero(T)) + sum(near_surface.weights; init=zero(T))
     total_weight <= zero(T) && return PointVolume(Point{𝔼{3},C}[])
 
-    n_interior = round(Int, max_points * (sum(interior_weights; init=zero(T)) / total_weight))
-    n_boundary = max_points - n_interior
-    n_boundary_samples = round(Int, n_boundary * alg.boundary_oversampling)
+    interior_ratio = sum(interior.weights; init=zero(T)) / total_weight
+    n_interior = round(Int, max_points * interior_ratio)
+    n_near_surface = max_points - n_interior
 
-    interior_counts = _allocate_counts_by_weight(interior_weights, n_interior)
-    boundary_counts = _allocate_counts_by_weight(boundary_weights, n_boundary_samples)
-
+    # Generate points
     raw_points = SVector{3,T}[]
     sizehint!(raw_points, max_points)
 
-    for (leaf_idx, n_leaf) in zip(interior_leaves, interior_counts)
-        n_leaf == 0 && continue
-        bbox_min, bbox_max = box_bounds(node_tree, leaf_idx)
-        append!(raw_points, _generate_points_in_box(bbox_min, bbox_max, n_leaf, alg.placement))
+    append!(raw_points, _generate_interior_points(interior, node_tree, n_interior, alg.placement))
+    append!(raw_points, _generate_near_surface_points(
+        near_surface,
+        node_tree,
+        alg.triangle_octree,
+        n_near_surface,
+        alg.boundary_oversampling,
+        alg.placement,
+    ))
+
+    # Fill deficit if near-surface rejection left us short
+    if length(raw_points) < max_points
+        deficit = max_points - length(raw_points)
+        append!(raw_points, _fill_deficit(interior, node_tree, deficit))
     end
 
-    boundary_candidates = SVector{3,T}[]
-    sizehint!(boundary_candidates, n_boundary_samples)
-    for (leaf_idx, n_leaf) in zip(boundary_leaves, boundary_counts)
-        n_leaf == 0 && continue
-        bbox_min, bbox_max = box_bounds(node_tree, leaf_idx)
-        append!(boundary_candidates, _generate_points_in_box(bbox_min, bbox_max, n_leaf, alg.placement))
-    end
-
-    for p in boundary_candidates
-        if isinside(p, alg.triangle_octree)
-            push!(raw_points, p)
-            length(raw_points) >= max_points && break
-        end
-    end
-
-    if length(raw_points) < max_points && !isempty(interior_leaves)
-        missing = max_points - length(raw_points)
-        w = isempty(interior_weights) ? fill(inv(T(length(interior_leaves))), length(interior_leaves)) : interior_weights
-        cumw = cumsum(w)
-        totalw = cumw[end]
-
-        for _ in 1:missing
-            r = rand(T) * totalw
-            idx = clamp(searchsortedfirst(cumw, r), 1, length(interior_leaves))
-            leaf_idx = interior_leaves[idx]
-            bbox_min, bbox_max = box_bounds(node_tree, leaf_idx)
-            push!(raw_points, _rand_point_in_box(bbox_min, bbox_max))
-        end
-    end
-
-    result_points = Point{𝔼{3},C}[]
-    sizehint!(result_points, length(raw_points))
-    for p in raw_points
-        push!(result_points, Point(p[1], p[2], p[3]))
-    end
-
-    return PointVolume(result_points)
+    # Convert to Point objects
+    return PointVolume([Point(p[1], p[2], p[3]) for p in raw_points])
 end

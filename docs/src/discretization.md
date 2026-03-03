@@ -73,21 +73,21 @@ This is the default (and only) algorithm for 2D boundaries.
 
 Generates volume points directly from an octree decomposition of the domain. The octree classifies leaf nodes as interior, boundary, or exterior. Interior leaves are filled with random points directly (100% acceptance rate), while boundary leaves are oversampled and filtered with the octree-accelerated `isinside` test.
 
-**No spacing parameter is needed** — point density is controlled by octree parameters (`tolerance_relative`, `min_ratio`).
+**Spacing is ignored** — point density is controlled by octree parameters (`tolerance_relative`, `min_ratio`). Use any spacing value for API consistency.
 
 ```julia
 # From a mesh file (recommended — auto-computes min_ratio)
-cloud = discretize(boundary, OctreeRandom("model.stl"))
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom("model.stl"))
 
 # With explicit min_ratio
-cloud = discretize(boundary, OctreeRandom("model.stl"; min_ratio=1e-6))
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom("model.stl"; min_ratio=1e-6))
 
 # From a pre-built TriangleOctree
 octree = TriangleOctree("model.stl"; min_ratio=1e-6)
-cloud = discretize(boundary, OctreeRandom(octree))
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom(octree))
 
 # With custom boundary oversampling (default: 2.0)
-cloud = discretize(boundary, OctreeRandom(octree, 3.0))
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom(octree, 3.0))
 ```
 
 Parameters:

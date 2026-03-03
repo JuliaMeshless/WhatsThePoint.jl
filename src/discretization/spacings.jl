@@ -67,103 +67,59 @@ function (s::Power)(p::Union{Point,Vec})
 end
 
 """
-    PiecewiseSpacing <: VariableSpacing
+    BoundaryLayerSpacing <: VariableSpacing
 
-Piecewise-constant spacing as function of distance to nearest boundary point.
+Smooth spacing transition from fine spacing at the boundary to coarse spacing in the bulk.
 
-The mapping is defined by distance bins `(d_max, h)`:
-- If `distance <= d_max`, spacing is `h`
-- Bins are evaluated in ascending `d_max` order
-- Last bin should typically use `Inf` as catch-all
+Uses physical boundary layer intuition with clear parameters:
+- `at_wall`: Spacing at the boundary surface (fine)
+- `bulk`: Spacing far from boundaries (coarse)
+- `layer_thickness`: Distance over which transition occurs
 
 # Example
 ```julia
-spacing = PiecewiseSpacing(points(boundary), [(10.0, 1.0), (Inf, 5.0)])
+# Fine 0.5m spacing at walls, coarse 10m in bulk, 8m boundary layer
+spacing = BoundaryLayerSpacing(boundary, at_wall=0.5m, bulk=10m, layer_thickness=8m)
 ```
+
+Internally uses sigmoid: `h(d) = at_wall + (bulk - at_wall) * σ(d)`
+where `σ(d) = 1 / (1 + exp(-(d - δ/2) / (δ/6)))` and δ = layer_thickness.
 """
-struct PiecewiseSpacing{B} <: VariableSpacing
+struct BoundaryLayerSpacing{B,L} <: VariableSpacing
     boundary::Any
-    bins::Vector{Tuple{Float64,B}}
+    at_wall::B
+    bulk::B
+    layer_thickness::L
 end
 
-function PiecewiseSpacing(boundary_points, bins)
-    isempty(bins) && throw(ArgumentError("bins must contain at least one (d_max, h) entry"))
+function BoundaryLayerSpacing(boundary_points; at_wall, bulk, layer_thickness)
+    # Validate inputs
+    δ = Float64(ustrip(layer_thickness))
+    δ > 0 || throw(ArgumentError("layer_thickness must be positive, got $layer_thickness"))
 
-    parsed = Tuple{Float64,Any}[]
-    for (dmax, h) in bins
-        dmax_val = dmax == Inf ? Inf : Float64(ustrip(dmax))
-        push!(parsed, (dmax_val, h))
-    end
-    sort!(parsed, by=first)
+    # Ensure at_wall and bulk have compatible types
+    B = promote_type(typeof(at_wall), typeof(bulk))
+    h_wall = convert(B, at_wall)
+    h_bulk = convert(B, bulk)
 
-    h_type = typeof(parsed[1][2])
-    typed_bins = Vector{Tuple{Float64,h_type}}(undef, length(parsed))
-    for i in eachindex(parsed)
-        typed_bins[i] = (parsed[i][1], convert(h_type, parsed[i][2]))
-    end
-
-    return PiecewiseSpacing{h_type}(boundary_points, typed_bins)
-end
-
-function (s::PiecewiseSpacing)(p::Union{Point,Vec})
-    x, _ = findmin_turbo(distance.(p, s.boundary))
-    dx = Float64(ustrip(x))
-
-    @inbounds for (dmax, h) in s.bins
-        dx <= dmax && return h
-    end
-
-    # Fallback to last bin (should be unreachable if last dmax is Inf).
-    return s.bins[end][2]
-end
-
-"""
-    SigmoidSpacing <: VariableSpacing
-
-Smooth spacing transition from `h_boundary` near the surface to `h_interior`
-away from the surface using a logistic curve.
-
-`distance` is computed to the nearest boundary point and the blend is:
-`σ = 1 / (1 + exp(-(distance - center) / width))`
-
-spacing = `h_boundary + (h_interior - h_boundary) * σ`
-"""
-struct SigmoidSpacing{B,C,W} <: VariableSpacing
-    boundary::Any
-    h_boundary::B
-    h_interior::B
-    transition_center::C
-    transition_width::W
-end
-
-function SigmoidSpacing(
-    boundary_points,
-    h_boundary,
-    h_interior,
-    transition_center,
-    transition_width,
-)
-    width = Float64(ustrip(transition_width))
-    width > 0 || throw(ArgumentError("transition_width must be positive, got $transition_width"))
-
-    B = promote_type(typeof(h_boundary), typeof(h_interior))
-    hb = convert(B, h_boundary)
-    hi = convert(B, h_interior)
-    return SigmoidSpacing{B,typeof(transition_center),typeof(transition_width)}(
+    return BoundaryLayerSpacing{B,typeof(layer_thickness)}(
         boundary_points,
-        hb,
-        hi,
-        transition_center,
-        transition_width,
+        h_wall,
+        h_bulk,
+        layer_thickness,
     )
 end
 
-function (s::SigmoidSpacing)(p::Union{Point,Vec})
+function (s::BoundaryLayerSpacing)(p::Union{Point,Vec})
+    # Distance to nearest boundary point
     x, _ = findmin_turbo(distance.(p, s.boundary))
-    dx = Float64(ustrip(x))
-    c = Float64(ustrip(s.transition_center))
-    w = Float64(ustrip(s.transition_width))
+    d = Float64(ustrip(x))
 
-    σ = inv(1 + exp(-(dx - c) / w))
-    return s.h_boundary + (s.h_interior - s.h_boundary) * σ
+    # Sigmoid transition: center at δ/2, width ≈ δ/6 (smooth S-curve over boundary layer)
+    δ = Float64(ustrip(s.layer_thickness))
+    center = δ / 2
+    width = δ / 6
+
+    σ = inv(1 + exp(-(d - center) / width))
+    return s.at_wall + (s.bulk - s.at_wall) * σ
 end

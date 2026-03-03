@@ -97,7 +97,7 @@ cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 `OctreeRandom` uses the octree directly to generate volume points. See the [Discretization](discretization.md) page for details.
 
 ```julia
-cloud = discretize(boundary, OctreeRandom("model.stl"; min_ratio=1e-6))
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom("model.stl"; min_ratio=1e-6))
 ```
 
 ## Choosing an Approach

@@ -77,8 +77,8 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 # VanDerSandeFornberg — grid projection with sphere packing
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
 
-# OctreeRandom — octree-guided random generation (no spacing needed)
-cloud = discretize(boundary, OctreeRandom("model.stl"; min_ratio=1e-6))
+# OctreeRandom — octree-guided random generation (spacing ignored)
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom("model.stl"; min_ratio=1e-6))
 ```
 
 `SlakKosec` can also accept a `TriangleOctree` for accelerated point-in-volume queries:

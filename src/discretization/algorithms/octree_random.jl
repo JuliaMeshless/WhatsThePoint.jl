@@ -36,25 +36,27 @@ OctreeRandom(octree, oversampling; verify_interior=false)
 
 # Usage Examples
 
-## Recommended Usage
+## Basic Usage
 ```julia
 using WhatsThePoint
 
 mesh = GeoIO.load("bunny.stl").geometry
 boundary = PointBoundary(mesh)
-cloud = discretize(boundary, OctreeRandom(mesh); max_points=100_000)
+
+# OctreeRandom ignores spacing (uniform random generation)
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom(mesh), max_points=100_000)
 ```
 
-## With Spacing (backward compatible)
+## With Pre-built Octree
 ```julia
 octree = TriangleOctree(mesh; min_ratio=1e-6, classify_leaves=true)
-cloud = discretize(boundary, 1.0u"m"; alg=OctreeRandom(octree), max_points=10_000)
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom(octree), max_points=10_000)
 ```
 
 ## With Custom Oversampling
 ```julia
 alg = OctreeRandom(mesh; boundary_oversampling=2.5)
-cloud = discretize(boundary, alg; max_points=10_000)
+cloud = discretize(boundary, ConstantSpacing(1m); alg=alg, max_points=10_000)
 ```
 
 # Notes

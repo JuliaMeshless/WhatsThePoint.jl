@@ -273,15 +273,15 @@ end
     end
 end
 
-@testitem "discretize(bnd, OctreeRandom) — no spacing" setup = [CommonImports, OctreeTestData] begin
+@testitem "discretize(bnd, spacing, OctreeRandom)" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(42)
 
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
 
-    # New API: no spacing parameter
-    cloud = discretize(bnd, OctreeRandom(mesh); max_points = 200)
+    # OctreeRandom ignores spacing but API is consistent
+    cloud = discretize(bnd, ConstantSpacing(1m); alg=OctreeRandom(mesh), max_points = 200)
 
     @test cloud isa PointCloud
     vol = WhatsThePoint.volume(cloud)
