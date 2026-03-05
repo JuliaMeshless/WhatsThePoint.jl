@@ -46,11 +46,11 @@ boundary = PointBoundary("model.stl")
 cloud = PointCloud(boundary)
 
 # Build octree from STL file (Option 1: simplest)
-octree = TriangleOctree("model.stl"; h_min=0.01, classify_leaves=true)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6, classify_leaves=true)
 
 # Or from SimpleMesh (Option 2)
 # mesh = GeoIO.load("model.stl").geometry
-# octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
+# octree = TriangleOctree(mesh; min_ratio=1e-6, classify_leaves=true)
 
 # Use octree-accelerated discretization (100-1000× faster!)
 spacing = ConstantSpacing(1.0u"m")
@@ -61,34 +61,34 @@ result = discretize(cloud, spacing; alg=alg, max_points=100_000)
 # References
 Šlak J, Kosec G. "On generation of node distributions for meshless PDE discretizations" (2019)
 """
-struct SlakKosec{O <: Union{Nothing, TriangleOctree}} <: AbstractNodeGenerationAlgorithm
+struct SlakKosec{O<:Union{Nothing,TriangleOctree}} <: AbstractNodeGenerationAlgorithm
     n::Int
     octree::O
 end
-SlakKosec(n::Int = 10) = SlakKosec{Nothing}(n, nothing)
-SlakKosec(octree::TriangleOctree{M, C, T}) where {M, C, T} =
-    SlakKosec{TriangleOctree{M, C, T}}(10, octree)
-SlakKosec(n::Int, octree::TriangleOctree{M, C, T}) where {M, C, T} =
-    SlakKosec{TriangleOctree{M, C, T}}(n, octree)
+SlakKosec(n::Int=10) = SlakKosec{Nothing}(n, nothing)
+SlakKosec(octree::TriangleOctree{M,C,T}) where {M,C,T} =
+    SlakKosec{TriangleOctree{M,C,T}}(10, octree)
+SlakKosec(n::Int, octree::TriangleOctree{M,C,T}) where {M,C,T} =
+    SlakKosec{TriangleOctree{M,C,T}}(n, octree)
 
 _check_inside(c::Point{𝔼{3}}, ::PointCloud, octree::TriangleOctree) = isinside(c, octree)
 _check_inside(c::Point{𝔼{3}}, cloud::PointCloud{𝔼{3}}, ::Nothing) = isinside(c, cloud)
 
 function _discretize_volume(
-        cloud::PointCloud{𝔼{3}, C},
-        spacing::AbstractSpacing,
-        alg::SlakKosec;
-        max_points = 1_000,
-    ) where {C}
+    cloud::PointCloud{𝔼{3},C},
+    spacing::AbstractSpacing,
+    alg::SlakKosec;
+    max_points=1_000,
+) where {C}
     seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
-    new_points = Point{𝔼{3}, C}[]
+    new_points = Point{𝔼{3},C}[]
 
     i = 0
     while !isempty(seeds) && i < max_points
         p = popfirst!(seeds)
         r = spacing(p)
-        candidates = _get_candidates(p, r; n = alg.n)
+        candidates = _get_candidates(p, r; n=alg.n)
         for c in candidates
             inside = _check_inside(c, cloud, alg.octree)
 
@@ -112,7 +112,7 @@ function _discretize_volume(
 end
 
 
-function _get_candidates(p::Point{𝔼{3}, C}, r; n = 10) where {C}
+function _get_candidates(p::Point{𝔼{3},C}, r; n=10) where {C}
     T = CoordRefSystems.mactype(C)
 
     u = rand(T, n)

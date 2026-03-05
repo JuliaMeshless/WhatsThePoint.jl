@@ -4,6 +4,7 @@ include("algorithms/fornberg_flyer.jl")
 include("algorithms/vandersande_fornberg.jl")
 include("algorithms/slak_kosec.jl")
 include("algorithms/octree_random.jl")
+include("algorithms/density_aware_octree.jl")
 
 """
     discretize(bnd::PointBoundary, spacing; alg=auto, max_points=10_000_000)
@@ -21,31 +22,31 @@ Generate volume points for the given boundary and return a new PointCloud.
 ```julia
 mesh = GeoIO.load("model.stl").geometry
 boundary = PointBoundary(mesh)
-octree = TriangleOctree(mesh; h_min=0.1)
+octree = TriangleOctree(mesh; min_ratio=1e-6)
 cloud = discretize(boundary, 3.0m; alg=SlakKosec(octree), max_points=100_000)
 ```
 """
 function discretize(
-        bnd::PointBoundary{𝔼{3}},
-        spacing::AbstractSpacing;
-        alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-        max_points = 10_000_000,
-    )
+    bnd::PointBoundary{𝔼{3}},
+    spacing::AbstractSpacing;
+    alg::AbstractNodeGenerationAlgorithm=SlakKosec(),
+    max_points=10_000_000,
+)
     cloud = PointCloud(bnd)
-    new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
+    new_volume = _discretize_volume(cloud, spacing, alg; max_points=max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
 function discretize(
-        bnd::PointBoundary{𝔼{2}},
-        spacing::AbstractSpacing;
-        alg::AbstractNodeGenerationAlgorithm = FornbergFlyer(),
-        max_points = 10_000_000,
-    )
+    bnd::PointBoundary{𝔼{2}},
+    spacing::AbstractSpacing;
+    alg::AbstractNodeGenerationAlgorithm=FornbergFlyer(),
+    max_points=10_000_000,
+)
     @warn "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
     cloud = PointCloud(bnd)
     new_volume =
-        _discretize_volume(cloud, spacing, FornbergFlyer(); max_points = max_points)
+        _discretize_volume(cloud, spacing, FornbergFlyer(); max_points=max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
@@ -55,12 +56,12 @@ end
 Generate volume points for an existing cloud and return a new PointCloud with the volume populated.
 """
 function discretize(
-        cloud::PointCloud,
-        spacing::AbstractSpacing;
-        alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-        max_points = 10_000_000,
-    )
-    new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
+    cloud::PointCloud,
+    spacing::AbstractSpacing;
+    alg::AbstractNodeGenerationAlgorithm=SlakKosec(),
+    max_points=10_000_000,
+)
+    new_volume = _discretize_volume(cloud, spacing, alg; max_points=max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
@@ -83,44 +84,19 @@ function calculate_ninit(cloud::PointCloud{𝔼{2}}, s::ConstantSpacing)
     return ceil(Int, extent[1] * 10 / s.Δx)
 end
 
-"""
-    discretize(bnd::PointBoundary{𝔼{3}}, alg::OctreeRandom; max_points=10_000_000)
-
-Generate volume points using `OctreeRandom` without requiring a spacing parameter.
-
-OctreeRandom generates uniformly random points and does not use spacing, so this
-overload removes the need for a dummy spacing value.
-
-# Example
-```julia
-mesh = GeoIO.load("bunny.stl").geometry
-boundary = PointBoundary(mesh)
-cloud = discretize(boundary, OctreeRandom(mesh); max_points=100_000)
-```
-"""
-function discretize(
-        bnd::PointBoundary{𝔼{3}},
-        alg::OctreeRandom;
-        max_points = 10_000_000,
-    )
-    cloud = PointCloud(bnd)
-    new_volume = _discretize_volume(cloud, alg; max_points)
-    return PointCloud(boundary(cloud), new_volume, NoTopology())
-end
-
 # Convenience overloads: accept bare Unitful.Length and wrap in ConstantSpacing
 function discretize(
-        bnd::PointBoundary,
-        spacing::Unitful.Length;
-        kwargs...,
-    )
+    bnd::PointBoundary,
+    spacing::Unitful.Length;
+    kwargs...,
+)
     return discretize(bnd, ConstantSpacing(spacing); kwargs...)
 end
 
 function discretize(
-        cloud::PointCloud,
-        spacing::Unitful.Length;
-        kwargs...,
-    )
+    cloud::PointCloud,
+    spacing::Unitful.Length;
+    kwargs...,
+)
     return discretize(cloud, ConstantSpacing(spacing); kwargs...)
 end
