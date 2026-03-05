@@ -21,17 +21,16 @@ mesh = GeoIO.load(stl_file).geometry
 boundary = WhatsThePoint.PointBoundary(mesh)
 
 println("Building spacing function (fine near boundary, coarse in interior)...")
-spacing = SigmoidSpacing(
-    WhatsThePoint.points(boundary),
-    0.6m,   # h_boundary
-    4.0m,   # h_interior
-    8.0m,   # transition_center
-    3.0m,   # transition_width
+spacing = BoundaryLayerSpacing(
+    WhatsThePoint.points(boundary);
+    at_wall=0.6m,        # Fine spacing at the boundary surface
+    bulk=4.0m,           # Coarse spacing in the interior
+    layer_thickness=8.0m # Boundary layer thickness
 )
 
 println("Building DensityAwareOctree and generating points...")
 alg = DensityAwareOctree(mesh; placement=:jittered, boundary_oversampling=2.0)
-@time cloud = discretize(boundary, spacing; alg=alg, max_points=120_000)
+@time cloud = discretize(boundary, spacing; alg=alg, max_points=200_000)
 
 vol_pts = WhatsThePoint.points(WhatsThePoint.volume(cloud))
 println("Generated volume points: $(length(vol_pts))")
@@ -91,7 +90,7 @@ plt = scatter!(ax, xs, ys, zs;
     color=logρ,
     colormap=:viridis,
     colorrange=(q02, q98),
-    markersize=2.2,
+    markersize=2.5,
 )
 
 Colorbar(fig[1, 2], plt, label="log10(1 / h^3)")

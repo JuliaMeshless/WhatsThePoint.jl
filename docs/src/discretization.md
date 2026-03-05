@@ -19,6 +19,7 @@ The `max_points` parameter is a safety limit that prevents runaway point generat
 | [`SlakKosec`](@ref) | 3D | Yes | Sphere-based candidate generation |
 | [`VanDerSandeFornberg`](@ref) | 3D | Yes (`ConstantSpacing` only) | Grid projection with sphere packing |
 | [`FornbergFlyer`](@ref) | 2D | Yes (`ConstantSpacing` only) | 1D projection with height-field fill |
+| [`DensityAwareOctree`](@ref) | 3D | Yes (variable-friendly) | Octree-guided adaptive fill using local spacing |
 | [`OctreeRandom`](@ref) | 3D | No | Octree-guided random point generation |
 
 ![Algorithm comparison](assets/algorithm-comparison.png)
@@ -26,9 +27,31 @@ The `max_points` parameter is a safety limit that prevents runaway point generat
 ### Choosing an Algorithm
 
 - **2D problems:** Use [`FornbergFlyer`](@ref) — it is the only 2D algorithm and is selected by default for 2D boundaries.
-- **3D with variable spacing:** Use [`SlakKosec`](@ref) — it is the only 3D algorithm supporting `LogLike` spacing.
+- **3D with variable spacing:** Use [`DensityAwareOctree`](@ref) with [`BoundaryLayerSpacing`](@ref) for strong near-wall refinement, or [`SlakKosec`](@ref) with `LogLike` for simpler variable spacing.
 - **3D with uniform spacing:** [`SlakKosec`](@ref) (default) or [`VanDerSandeFornberg`](@ref) both work. SlakKosec is more general; VanDerSandeFornberg can be faster for simple geometries.
-- **Large 3D meshes:** Use [`OctreeRandom`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Octree](isinside_octree.md) page.
+- **Large 3D meshes:** Use [`OctreeRandom`](@ref), [`DensityAwareOctree`](@ref), or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Octree](isinside_octree.md) page.
+
+## DensityAwareOctree
+
+Adaptive 3D octree-based algorithm that uses the provided spacing function to decide local point density. This makes it suitable for boundary-layer-style discretizations.
+
+```julia
+mesh = GeoIO.load("model.stl").geometry
+boundary = PointBoundary(mesh)
+
+spacing = BoundaryLayerSpacing(
+	points(boundary);
+	at_wall=0.6m,
+	bulk=4.0m,
+	layer_thickness=8.0m,
+)
+
+alg = DensityAwareOctree(mesh; placement=:jittered, boundary_oversampling=2.0)
+cloud = discretize(boundary, spacing; alg=alg, max_points=200_000)
+```
+
+For a complete runnable script, see:
+- [examples/density_aware_discretization.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/density_aware_discretization.jl)
 
 ## SlakKosec
 
@@ -110,6 +133,25 @@ spacing = ConstantSpacing(1mm)
 ```
 
 Works with all algorithms.
+
+### BoundaryLayerSpacing
+
+Variable spacing specifically designed for boundary-layer refinement.
+
+```julia
+spacing = BoundaryLayerSpacing(
+	points(boundary);
+	at_wall=0.6m,
+	bulk=4.0m,
+	layer_thickness=8.0m,
+)
+```
+
+- `at_wall` controls the smallest spacing near the boundary.
+- `bulk` controls the largest spacing far from the boundary.
+- `layer_thickness` sets how fast spacing transitions from wall to bulk.
+
+Works especially well with [`DensityAwareOctree`](@ref).
 
 ### LogLike
 
