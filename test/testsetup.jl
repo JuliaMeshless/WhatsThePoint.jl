@@ -5,6 +5,7 @@
     using Meshes: Euclidean, 🌐, Vec, SimpleMesh, connect, Box, PointSet, Geometry, to
     using Random
     using FileIO
+    using GeoIO
     using Unitful
     using Unitful: m, °, @u_str
     using StaticArrays

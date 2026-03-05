@@ -2,7 +2,7 @@
 
 @testitem "TriangleOctree regression - near-surface normal offsets (bifurcation)" setup = [CommonImports, TestData] begin
     using GeoIO
-    using WhatsThePoint: _compute_bbox, _get_triangle_vertices, _get_triangle_normal
+    using WhatsThePoint: _compute_bbox, _get_triangle_vertices, _get_triangle_normal, all_leaves
 
     if !isfile(TestData.BIFURCATION_PATH)
         @test_skip "bifurcation.stl not available"
@@ -31,8 +31,8 @@
         p_out = centroid + ε * n
         p_in = centroid - ε * n
 
-        outside_false_positives += isinside(p_out, octree) ? 1 : 0
-        inside_hits += isinside(p_in, octree) ? 1 : 0
+        global outside_false_positives += isinside(p_out, octree) ? 1 : 0
+        global inside_hits += isinside(p_in, octree) ? 1 : 0
     end
 
     # Conservative-first guarantee we want to protect:
@@ -45,7 +45,7 @@ end
 
 @testitem "TriangleOctree regression - interior leaves avoid positive signed distance" setup = [CommonImports, TestData] begin
     using GeoIO
-    using WhatsThePoint: LEAF_INTERIOR, _compute_signed_distance_octree
+    using WhatsThePoint: LEAF_INTERIOR, _compute_signed_distance_octree, all_leaves, box_bounds
 
     if !isfile(TestData.BIFURCATION_PATH)
         @test_skip "bifurcation.stl not available"
@@ -75,8 +75,8 @@ end
         for _ in 1:5
             p = bbox_min + rand(SVector{3,Float64}) .* (bbox_max - bbox_min)
             sd = _compute_signed_distance_octree(p, octree.mesh, octree.tree)
-            n_checked += 1
-            positive_sd_count += sd > 1e-10 ? 1 : 0
+            global n_checked += 1
+            global positive_sd_count += sd > 1e-10 ? 1 : 0
         end
     end
 
