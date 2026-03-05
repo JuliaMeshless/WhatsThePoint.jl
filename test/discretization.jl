@@ -17,8 +17,6 @@ end
     @test far <= 10.0m
 end
 
-_relative_spacing(domain; divisor=8) = ConstantSpacing(norm(Meshes.boundingbox(domain).max - Meshes.boundingbox(domain).min) / divisor)
-
 @testitem "SlakKosec with octree" setup = [TestData, CommonImports] begin
     bnd = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves=true)

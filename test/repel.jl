@@ -1,5 +1,3 @@
-_relative_spacing(domain; divisor=8) = ConstantSpacing(norm(Meshes.boundingbox(domain).max - Meshes.boundingbox(domain).min) / divisor)
-
 @testitem "repel basic behavior" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves=true)
