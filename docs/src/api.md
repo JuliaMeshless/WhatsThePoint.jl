@@ -53,8 +53,10 @@ discretize
 SlakKosec
 VanDerSandeFornberg
 FornbergFlyer
+DensityAwareOctree
 OctreeRandom
 ConstantSpacing
+BoundaryLayerSpacing
 LogLike
 Power
 ```

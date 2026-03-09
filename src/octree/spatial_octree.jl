@@ -574,7 +574,7 @@ all adjacent boxes differ by at most one refinement level.
 # Algorithm
 1. Collect all leaves
 2. Check each leaf for balance violations
-3. Subdivide violating neighbors (only respecting physical limits like h_min)
+3. Subdivide violating neighbors (only respecting physical minimum-size limits)
 4. Repeat until no violations
 
 # Note
@@ -616,4 +616,157 @@ function balance_octree!(octree::SpatialOctree, criterion::SubdivisionCriterion)
     end
 
     return nothing
+end
+
+#=============================================================================
+LEAF CLASSIFICATION (GENERIC)
+
+Generic conservative classification of octree leaves as INTERIOR/BOUNDARY/EXTERIOR
+given a geometry query function. This logic is reusable across different octree
+types (TriangleOctree, node octrees, etc.) by providing an appropriate query closure.
+=============================================================================#
+
+# Classification constants (shared across all octree types)
+const LEAF_UNKNOWN::Int8 = -1
+const LEAF_EXTERIOR::Int8 = 0
+const LEAF_BOUNDARY::Int8 = 1
+const LEAF_INTERIOR::Int8 = 2
+
+# Tolerance constants for classification
+const _CLASSIFICATION_INSET = 1.0e-9  # Corner inset to avoid on-surface probes
+const _CLASSIFY_TOLERANCE_REL = 1.0e-6  # Relative tolerance (scaled by box size)
+const _CLASSIFY_TOLERANCE_ABS = 1.0e-8  # Absolute tolerance floor
+
+"""
+    _inset_corners(bbox_min, bbox_max, inset) -> NTuple{8, SVector{3,T}}
+
+Generate 8 corner points of a box, inset slightly from the boundaries.
+
+The inset prevents exact-on-surface degeneracy during classification.
+"""
+@inline function _inset_corners(
+        bbox_min::SVector{3, T},
+        bbox_max::SVector{3, T},
+        inset::T,
+    ) where {T <: Real}
+    x0, x1 = bbox_min[1] + inset, bbox_max[1] - inset
+    y0, y1 = bbox_min[2] + inset, bbox_max[2] - inset
+    z0, z1 = bbox_min[3] + inset, bbox_max[3] - inset
+
+    return (
+        SVector{3, T}(x0, y0, z0),
+        SVector{3, T}(x1, y0, z0),
+        SVector{3, T}(x0, y1, z0),
+        SVector{3, T}(x1, y1, z0),
+        SVector{3, T}(x0, y0, z1),
+        SVector{3, T}(x1, y0, z1),
+        SVector{3, T}(x0, y1, z1),
+        SVector{3, T}(x1, y1, z1),
+    )
+end
+
+"""
+    _leaf_class_from_signed_distance(sd, tol) -> Int8
+
+Convert signed distance to leaf classification.
+
+Returns:
+- `LEAF_BOUNDARY` if |sd| ≤ tol (on or near surface)
+- `LEAF_INTERIOR` if sd < -tol (inside)
+- `LEAF_EXTERIOR` if sd > tol (outside)
+"""
+@inline function _leaf_class_from_signed_distance(sd, tol)
+    if abs(sd) <= tol
+        return LEAF_BOUNDARY
+    end
+    return sd < 0 ? LEAF_INTERIOR : LEAF_EXTERIOR
+end
+
+"""
+    classify_leaves!(
+        tree::SpatialOctree,
+        geometry_query::Function;
+        tolerance_relative=1e-6,
+        tolerance_absolute=1e-8
+    ) -> Vector{Int8}
+
+Generic conservative classification of octree leaves using a geometry query function.
+
+# Arguments
+- `tree`: The octree to classify
+- `geometry_query`: Function `(point::SVector{3,T}, tol::T) -> Int8` returning
+   `LEAF_INTERIOR`, `LEAF_BOUNDARY`, or `LEAF_EXTERIOR`
+- `tolerance_relative`: Relative tolerance scaled by box size
+- `tolerance_absolute`: Absolute tolerance floor
+
+# Classification Strategy
+Uses 9-point conservative probing (center + 8 inset corners):
+- `LEAF_INTERIOR`: All 9 points are interior
+- `LEAF_EXTERIOR`: All 9 points are exterior
+- `LEAF_BOUNDARY`: Mixed results or any boundary point
+
+# Returns
+Vector of `Int8` classifications for each box:
+- `-1` (`LEAF_UNKNOWN`): Non-leaf nodes
+- `0` (`LEAF_EXTERIOR`): Exterior leaf
+- `1` (`LEAF_BOUNDARY`): Boundary leaf
+- `2` (`LEAF_INTERIOR`): Interior leaf
+"""
+function classify_leaves!(
+        tree::SpatialOctree{E, T},
+        geometry_query::Function;
+        tolerance_relative::Real = _CLASSIFY_TOLERANCE_REL,
+        tolerance_absolute::Real = _CLASSIFY_TOLERANCE_ABS,
+    ) where {E, T <: Real}
+    n_boxes = tree.num_boxes[]
+    classification = fill(LEAF_UNKNOWN, n_boxes)
+    leaves = all_leaves(tree)
+
+    # Classify each leaf
+    for leaf_idx in leaves
+        classification[leaf_idx] = _classify_leaf_conservative(
+            tree,
+            leaf_idx,
+            geometry_query,
+            T(tolerance_relative),
+            T(tolerance_absolute),
+        )
+    end
+
+    return classification
+end
+
+"""
+    _classify_leaf_conservative(tree, leaf_idx, geometry_query, tol_rel, tol_abs) -> Int8
+
+Conservative classification of a single leaf using 9-point probing.
+"""
+function _classify_leaf_conservative(
+        tree::SpatialOctree{E, T},
+        leaf_idx::Int,
+        geometry_query::Function,
+        tol_rel::T,
+        tol_abs::T,
+    ) where {E, T <: Real}
+    bbox_min, bbox_max = box_bounds(tree, leaf_idx)
+    h = box_size(tree, leaf_idx)
+
+    # Compute tolerances
+    inset = max(T(_CLASSIFICATION_INSET), h * tol_rel)
+    tol = max(tol_abs, h * tol_rel)
+
+    # Probe center + 8 inset corners
+    center = box_center(tree, leaf_idx)
+    corners = _inset_corners(bbox_min, bbox_max, inset)
+
+    # Classify all 9 points
+    classes = map(p -> geometry_query(p, tol), (center, corners...))
+
+    # Conservative classification logic
+    any(==(LEAF_BOUNDARY), classes) && return LEAF_BOUNDARY
+    all(==(LEAF_INTERIOR), classes) && return LEAF_INTERIOR
+    all(==(LEAF_EXTERIOR), classes) && return LEAF_EXTERIOR
+
+    # Mixed classification → boundary
+    return LEAF_BOUNDARY
 end

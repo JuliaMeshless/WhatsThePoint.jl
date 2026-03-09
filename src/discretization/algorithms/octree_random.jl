@@ -17,12 +17,12 @@ generate random points inside the mesh. It's much faster than rejection sampling
 # Constructors
 ```julia
 # From mesh (recommended) — builds octree automatically with classified leaves
-OctreeRandom(mesh::SimpleMesh)                          # Auto h_min
-OctreeRandom(mesh; h_min=0.01, boundary_oversampling=2.0)  # Custom h_min
+OctreeRandom(mesh::SimpleMesh)                                  # Auto min_ratio
+OctreeRandom(mesh; min_ratio=1e-6, boundary_oversampling=2.0)   # Custom min_ratio
 
 # From file path — loads mesh then builds octree
 OctreeRandom("bunny.stl")
-OctreeRandom("bunny.stl"; h_min=0.01)
+OctreeRandom("bunny.stl"; min_ratio=1e-6)
 
 # From pre-built octree (advanced)
 OctreeRandom(octree::TriangleOctree)
@@ -36,30 +36,32 @@ OctreeRandom(octree, oversampling; verify_interior=false)
 
 # Usage Examples
 
-## Recommended Usage
+## Basic Usage
 ```julia
 using WhatsThePoint
 
 mesh = GeoIO.load("bunny.stl").geometry
 boundary = PointBoundary(mesh)
-cloud = discretize(boundary, OctreeRandom(mesh); max_points=100_000)
+
+# OctreeRandom ignores spacing (uniform random generation)
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom(mesh), max_points=100_000)
 ```
 
-## With Spacing (backward compatible)
+## With Pre-built Octree
 ```julia
-octree = TriangleOctree(mesh; h_min=0.01, classify_leaves=true)
-cloud = discretize(boundary, 1.0u"m"; alg=OctreeRandom(octree), max_points=10_000)
+octree = TriangleOctree(mesh; min_ratio=1e-6, classify_leaves=true)
+cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom(octree), max_points=10_000)
 ```
 
 ## With Custom Oversampling
 ```julia
 alg = OctreeRandom(mesh; boundary_oversampling=2.5)
-cloud = discretize(boundary, alg; max_points=10_000)
+cloud = discretize(boundary, ConstantSpacing(1m); alg=alg, max_points=10_000)
 ```
 
 # Notes
 - The mesh convenience constructor always sets `classify_leaves=true`
-- When `h_min` is omitted, it is computed as `bbox_diagonal / (2 * cbrt(n_triangles))`
+- When `min_ratio` is omitted, it is computed as `1 / (2 * cbrt(n_triangles))`
 - The `spacing` parameter is **not used** (random uniform distribution)
 - For spacing-based discretization, use SlakKosec or VanDerSandeFornberg
 - Actual point count may be slightly less than `max_points` due to boundary filtering
@@ -108,29 +110,32 @@ function OctreeRandom(
 end
 
 """
-    _auto_h_min(::Type{T}, mesh::SimpleMesh) where {T}
+    _auto_min_ratio(::Type{T}, mesh::SimpleMesh) where {T}
 
-Compute a default `h_min` for octree construction based on mesh geometry.
+Compute a default `min_ratio` for octree construction.
 
-Heuristic: `bbox_diagonal / (2 * cbrt(n_triangles))`. Scales leaf size to the
-mesh's characteristic triangle spacing so the octree resolves surface detail
-without excessive subdivision.
+Heuristic: `1 / (2 * cbrt(n_triangles))`.
+
+Since `TriangleOctree` expects `min_ratio` (minimum box size as fraction of
+domain diagonal), this gives a scale-adaptive default without introducing
+absolute-size parameters.
 """
-function _auto_h_min(::Type{T}, mesh::SimpleMesh) where {T}
-    bbox_min, bbox_max = _compute_bbox(T, mesh)
-    diagonal = norm(bbox_max - bbox_min)
+function _auto_min_ratio(::Type{T}, mesh::SimpleMesh) where {T}
     n = Meshes.nelements(mesh)
-    return diagonal / (2 * cbrt(T(n)))
+    return inv(T(2) * cbrt(T(n)))
 end
 
 """
-    OctreeRandom(mesh::SimpleMesh; h_min=nothing, max_triangles_per_box=50,
-                 boundary_oversampling=2.0, verify_interior=false, verify_orientation=true)
+    OctreeRandom(mesh::SimpleMesh;
+                 min_ratio=nothing,
+                 tolerance_relative=1e-6,
+                 boundary_oversampling=2.0,
+                 verify_interior=false,
+                 verify_orientation=true)
 
 Convenience constructor that builds a classified `TriangleOctree` internally.
 
-When `h_min` is not provided, an automatic value is computed from the mesh's
-bounding box diagonal and triangle count.
+When `min_ratio` is not provided, an automatic value is computed from triangle count.
 
 # Example
 ```julia
@@ -141,18 +146,18 @@ cloud = discretize(boundary, alg; max_points=100_000)
 """
 function OctreeRandom(
         mesh::SimpleMesh{M, C};
-        h_min = nothing,
-        max_triangles_per_box::Int = 50,
+        min_ratio = nothing,
+        tolerance_relative::Real = 1.0e-6,
         boundary_oversampling::Real = 2.0,
         verify_interior::Bool = false,
         verify_orientation::Bool = true,
     ) where {M <: Manifold, C <: CRS}
     T = Float64
-    h_min_val = isnothing(h_min) ? _auto_h_min(T, mesh) : T(ustrip(h_min))
+    min_ratio_val = isnothing(min_ratio) ? _auto_min_ratio(T, mesh) : T(min_ratio)
     octree = TriangleOctree(
         mesh;
-        h_min = h_min_val,
-        max_triangles_per_box,
+        tolerance_relative = tolerance_relative,
+        min_ratio = min_ratio_val,
         classify_leaves = true,
         verify_orientation,
     )
