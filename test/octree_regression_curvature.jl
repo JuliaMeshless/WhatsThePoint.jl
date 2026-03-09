@@ -9,11 +9,11 @@
     end
 
     mesh = GeoIO.load(TestData.BIFURCATION_PATH).geometry
-    octree = TriangleOctree(mesh; classify_leaves=true)
+    octree = TriangleOctree(mesh; classify_leaves = true)
 
     bbox_min, bbox_max = _compute_bbox(Float64, octree.mesh)
     diagonal = norm(bbox_max - bbox_min)
-    ε = max(diagonal * 1e-5, 1e-8)
+    ε = max(diagonal * 1.0e-5, 1.0e-8)
 
     n_tri = Meshes.nelements(octree.mesh)
     n_samples = min(128, n_tri)
@@ -54,7 +54,7 @@ end
     end
 
     mesh = GeoIO.load(TestData.BIFURCATION_PATH).geometry
-    octree = TriangleOctree(mesh; classify_leaves=true)
+    octree = TriangleOctree(mesh; classify_leaves = true)
 
     leaves = all_leaves(octree.tree)
     interior_leaves = [i for i in leaves if octree.leaf_classification[i] == LEAF_INTERIOR]
@@ -75,10 +75,10 @@ end
         bbox_min, bbox_max = box_bounds(octree.tree, leaf_idx)
 
         for _ in 1:5
-            p = bbox_min + rand(SVector{3,Float64}) .* (bbox_max - bbox_min)
+            p = bbox_min + rand(SVector{3, Float64}) .* (bbox_max - bbox_min)
             sd = _compute_signed_distance_octree(p, octree.mesh, octree.tree)
             global n_checked += 1
-            global positive_sd_count += sd > 1e-10 ? 1 : 0
+            global positive_sd_count += sd > 1.0e-10 ? 1 : 0
         end
     end
 

@@ -2,7 +2,7 @@
 
 @testitem "isinside with TriangleOctree" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
-    octree = TriangleOctree(mesh; classify_leaves=true)
+    octree = TriangleOctree(mesh; classify_leaves = true)
 
     # Interior point
     @test isinside(SVector(0.5, 0.5, 0.5), octree) == true
@@ -14,7 +14,7 @@ end
 
 @testitem "isinside works without classification" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
-    octree = TriangleOctree(mesh; classify_leaves=false)
+    octree = TriangleOctree(mesh; classify_leaves = false)
 
     @test isnothing(octree.leaf_classification)
 
@@ -28,10 +28,10 @@ end
         closest_point_on_triangle
 
     mesh = OctreeTestData.unit_cube_mesh()
-    octree = TriangleOctree(mesh; classify_leaves=true)
+    octree = TriangleOctree(mesh; classify_leaves = true)
 
     # Brute-force reference implementation
-    function isinside_bruteforce(point::SVector{3,T}, octree) where {T<:Real}
+    function isinside_bruteforce(point::SVector{3, T}, octree) where {T <: Real}
         min_dist = T(Inf)
         for i in 1:Meshes.nelements(octree.mesh)
             v1, v2, v3 = _get_triangle_vertices(T, octree.mesh, i)

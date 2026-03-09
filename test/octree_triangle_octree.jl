@@ -16,11 +16,11 @@ end
     mesh = OctreeTestData.unit_cube_mesh()
 
     # Without classification
-    octree1 = TriangleOctree(mesh; classify_leaves=false)
+    octree1 = TriangleOctree(mesh; classify_leaves = false)
     @test octree1.leaf_classification === nothing
 
     # With classification
-    octree2 = TriangleOctree(mesh; classify_leaves=true)
+    octree2 = TriangleOctree(mesh; classify_leaves = true)
     @test octree2.leaf_classification !== nothing
 
     # Classification values are valid (0=exterior, 1=boundary, 2=interior)
@@ -33,11 +33,11 @@ end
     # Mesh with inconsistent normals (flipped faces)
     pts = [
         Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
     ]
     connec = [
         connect((1, 2, 3), Meshes.Triangle),  # CCW: +z normal
-        connect((1, 4, 3), Meshes.Triangle)   # CW: -z normal (flipped)
+        connect((1, 4, 3), Meshes.Triangle),   # CW: -z normal (flipped)
     ]
     mesh = SimpleMesh(pts, connec)
 
@@ -45,7 +45,7 @@ end
     @test_throws ArgumentError TriangleOctree(mesh)
 
     # Can disable check
-    octree = TriangleOctree(mesh; verify_orientation=false)
+    octree = TriangleOctree(mesh; verify_orientation = false)
     @test octree isa TriangleOctree
     @test !has_consistent_normals(mesh)
 end

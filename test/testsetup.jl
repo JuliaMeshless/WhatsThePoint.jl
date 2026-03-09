@@ -14,7 +14,7 @@
     using OrderedCollections: LittleDict
     using CoordRefSystems
 
-    _relative_spacing(domain; divisor=8) = ConstantSpacing(
+    _relative_spacing(domain; divisor = 8) = ConstantSpacing(
         norm(Meshes.boundingbox(domain).max - Meshes.boundingbox(domain).min) / divisor
     )
 end

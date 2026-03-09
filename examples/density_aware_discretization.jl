@@ -23,14 +23,14 @@ boundary = WhatsThePoint.PointBoundary(mesh)
 println("Building spacing function (fine near boundary, coarse in interior)...")
 spacing = BoundaryLayerSpacing(
     WhatsThePoint.points(boundary);
-    at_wall=0.6m,        # Fine spacing at the boundary surface
-    bulk=4.0m,           # Coarse spacing in the interior
-    layer_thickness=8.0m # Boundary layer thickness
+    at_wall = 0.6m,        # Fine spacing at the boundary surface
+    bulk = 4.0m,           # Coarse spacing in the interior
+    layer_thickness = 8.0m # Boundary layer thickness
 )
 
 println("Building DensityAwareOctree and generating points...")
-alg = DensityAwareOctree(mesh; placement=:jittered, boundary_oversampling=2.0)
-@time cloud = discretize(boundary, spacing; alg=alg, max_points=200_000)
+alg = DensityAwareOctree(mesh; placement = :jittered, boundary_oversampling = 2.0)
+@time cloud = discretize(boundary, spacing; alg = alg, max_points = 200_000)
 
 vol_pts = WhatsThePoint.points(WhatsThePoint.volume(cloud))
 println("Generated volume points: $(length(vol_pts))")
@@ -74,25 +74,28 @@ for p in bnd_pts
     push!(bz, Float32(ustrip(c[3])))
 end
 
-fig = Figure(size=(1200, 850))
-ax = Axis3(fig[1, 1],
-    title="Density-aware discretization (volume color = log10(1/h^3))",
-    xlabel="x", ylabel="y", zlabel="z",
+fig = Figure(size = (1200, 850))
+ax = Axis3(
+    fig[1, 1],
+    title = "Density-aware discretization (volume color = log10(1/h^3))",
+    xlabel = "x", ylabel = "y", zlabel = "z",
 )
 
 # Show boundary as neutral context
-scatter!(ax, bx, by, bz;
-    color=(:gray60, 0.10),
-    markersize=1.1,
+scatter!(
+    ax, bx, by, bz;
+    color = (:gray60, 0.1),
+    markersize = 1.1,
 )
 
-plt = scatter!(ax, xs, ys, zs;
-    color=logρ,
-    colormap=:viridis,
-    colorrange=(q02, q98),
-    markersize=2.5,
+plt = scatter!(
+    ax, xs, ys, zs;
+    color = logρ,
+    colormap = :viridis,
+    colorrange = (q02, q98),
+    markersize = 2.5,
 )
 
-Colorbar(fig[1, 2], plt, label="log10(1 / h^3)")
+Colorbar(fig[1, 2], plt, label = "log10(1 / h^3)")
 
 display(fig)
