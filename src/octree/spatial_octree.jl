@@ -739,9 +739,31 @@ function classify_leaves!(
 end
 
 """
+    _box_corners(bbox_min, bbox_max) -> Tuple
+
+Generate 8 corner points of a 3D bounding box.
+"""
+@inline function _box_corners(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
+    x0, x1 = bbox_min[1], bbox_max[1]
+    y0, y1 = bbox_min[2], bbox_max[2]
+    z0, z1 = bbox_min[3], bbox_max[3]
+
+    return (
+        SVector{3, T}(x0, y0, z0),
+        SVector{3, T}(x1, y0, z0),
+        SVector{3, T}(x0, y1, z0),
+        SVector{3, T}(x1, y1, z0),
+        SVector{3, T}(x0, y0, z1),
+        SVector{3, T}(x1, y0, z1),
+        SVector{3, T}(x0, y1, z1),
+        SVector{3, T}(x1, y1, z1),
+    )
+end
+
+"""
     _classify_leaf_conservative(tree, leaf_idx, geometry_query, tol_rel, tol_abs) -> Int8
 
-Conservative classification of a single leaf using 9-point probing with actual box corners.
+Conservative 9-point classification (center + 8 corners).
 """
 function _classify_leaf_conservative(
         tree::SpatialOctree{E, T},
@@ -752,36 +774,17 @@ function _classify_leaf_conservative(
     ) where {E, T <: Real}
     bbox_min, bbox_max = box_bounds(tree, leaf_idx)
     h = box_size(tree, leaf_idx)
-
-    # Compute tolerance
     tol = max(tol_abs, h * tol_rel)
 
-    # Probe center + 8 actual box corners (no inset for high-curvature accuracy)
     center = box_center(tree, leaf_idx)
-
-    x0, x1 = bbox_min[1], bbox_max[1]
-    y0, y1 = bbox_min[2], bbox_max[2]
-    z0, z1 = bbox_min[3], bbox_max[3]
-
-    corners = (
-        SVector{3, T}(x0, y0, z0),
-        SVector{3, T}(x1, y0, z0),
-        SVector{3, T}(x0, y1, z0),
-        SVector{3, T}(x1, y1, z0),
-        SVector{3, T}(x0, y0, z1),
-        SVector{3, T}(x1, y0, z1),
-        SVector{3, T}(x0, y1, z1),
-        SVector{3, T}(x1, y1, z1),
-    )
+    corners = _box_corners(bbox_min, bbox_max)
 
     # Classify all 9 points
     classes = map(p -> geometry_query(p, tol), (center, corners...))
 
-    # Conservative classification logic
+    # Conservative logic
     any(==(LEAF_BOUNDARY), classes) && return LEAF_BOUNDARY
     all(==(LEAF_INTERIOR), classes) && return LEAF_INTERIOR
     all(==(LEAF_EXTERIOR), classes) && return LEAF_EXTERIOR
-
-    # Mixed classification → boundary
-    return LEAF_BOUNDARY
+    return LEAF_BOUNDARY  # Mixed → boundary
 end
