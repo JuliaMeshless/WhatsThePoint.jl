@@ -65,3 +65,61 @@ function (s::Power)(p::Union{Point, Vec})
     x, _ = findmin_turbo(distance.(p, s.boundary))
     return s.base_size * x^s.growth_rate
 end
+
+"""
+    BoundaryLayerSpacing <: VariableSpacing
+
+Smooth spacing transition from fine spacing at the boundary to coarse spacing in the bulk.
+
+Uses physical boundary layer intuition with clear parameters:
+- `at_wall`: Spacing at the boundary surface (fine)
+- `bulk`: Spacing far from boundaries (coarse)
+- `layer_thickness`: Distance over which transition occurs
+
+# Example
+```julia
+# Fine 0.5m spacing at walls, coarse 10m in bulk, 8m boundary layer
+spacing = BoundaryLayerSpacing(boundary, at_wall=0.5m, bulk=10m, layer_thickness=8m)
+```
+
+Internally uses sigmoid: `h(d) = at_wall + (bulk - at_wall) * σ(d)`
+where `σ(d) = 1 / (1 + exp(-(d - δ/2) / (δ/6)))` and δ = layer_thickness.
+"""
+struct BoundaryLayerSpacing{B, L} <: VariableSpacing
+    boundary::Any
+    at_wall::B
+    bulk::B
+    layer_thickness::L
+end
+
+function BoundaryLayerSpacing(boundary_points; at_wall, bulk, layer_thickness)
+    # Validate inputs
+    δ = Float64(ustrip(layer_thickness))
+    δ > 0 || throw(ArgumentError("layer_thickness must be positive, got $layer_thickness"))
+
+    # Ensure at_wall and bulk have compatible types
+    B = promote_type(typeof(at_wall), typeof(bulk))
+    h_wall = convert(B, at_wall)
+    h_bulk = convert(B, bulk)
+
+    return BoundaryLayerSpacing{B, typeof(layer_thickness)}(
+        boundary_points,
+        h_wall,
+        h_bulk,
+        layer_thickness,
+    )
+end
+
+function (s::BoundaryLayerSpacing)(p::Union{Point, Vec})
+    # Distance to nearest boundary point
+    x, _ = findmin_turbo(distance.(p, s.boundary))
+    d = Float64(ustrip(x))
+
+    # Sigmoid transition: center at δ/2, width ≈ δ/6 (smooth S-curve over boundary layer)
+    δ = Float64(ustrip(s.layer_thickness))
+    center = δ / 2
+    width = δ / 6
+
+    σ = inv(1 + exp(-(d - center) / width))
+    return s.at_wall + (s.bulk - s.at_wall) * σ
+end
