@@ -4,37 +4,49 @@
 Octree-based volume point generation with spacing-aware refinement.
 
 Uses two octrees:
-- **Triangle octree**: Geometry representation and inside/outside classification
-- **Node octree**: Spacing-adaptive spatial partitioning for point allocation
+- **Triangle octree**: Geometry representation and inside/outside classification (can be coarse)
+- **Node octree**: Spacing-adaptive spatial partitioning for point allocation (automatically refined)
 
 # Constructors
 ```julia
-# From mesh (recommended)
+# Simple automatic (recommended)
 AdaptiveOctree(mesh::SimpleMesh)
-AdaptiveOctree(mesh; min_ratio=auto, placement=:random, boundary_oversampling=2.0)
+
+# Spacing-aware automatic (for boundary layers)
+spacing = BoundaryLayerSpacing(...; at_wall=0.01m, bulk=1.0m, layer_thickness=0.5m)
+AdaptiveOctree(mesh; spacing, alpha=1.0)
+
+# Manual control (expert mode)
+AdaptiveOctree(mesh; min_ratio=1e-2, node_min_ratio=1e-4, alpha=1.0)
 
 # From file
-AdaptiveOctree("model.stl"; placement=:jittered)
+AdaptiveOctree("model.stl"; spacing)
 
 # From pre-built octree
-AdaptiveOctree(octree::TriangleOctree; placement=:random)
+AdaptiveOctree(octree::TriangleOctree; node_min_ratio=1e-4)
 ```
 
 # Parameters
 - `placement::Symbol` - Point placement: `:random` (default), `:jittered`, or `:lattice`
 - `boundary_oversampling::Float64` - Oversampling factor for boundary regions (default: 2.0)
 - `alpha::Float64` - Subdivision aggressiveness: boxes are at most `alpha*h_local` (default: 2.0, use 1.0-1.5 for fine boundary layers)
+- `min_ratio::Float64` - Triangle octree minimum box size ratio (default: auto from triangle count)
+- `node_min_ratio::Float64` - Node octree minimum box size ratio (default: auto from spacing if provided, else same as min_ratio)
+- `spacing::AbstractSpacing` - Optional spacing hint for automatic node_min_ratio computation
 
 # Examples
 ```julia
-# Uniform distribution
+# Uniform distribution (simple)
 alg = AdaptiveOctree(mesh)
 cloud = discretize(boundary, ConstantSpacing(1m); alg, max_points=100_000)
 
-# Adaptive boundary layer
-spacing = BoundaryLayerSpacing(points(boundary); at_wall=0.1m, bulk=2.0m, layer_thickness=5.0m)
-alg = AdaptiveOctree(mesh; placement=:jittered)
+# Adaptive boundary layer (spacing-aware automatic)
+spacing = BoundaryLayerSpacing(points(boundary); at_wall=0.01m, bulk=2.0m, layer_thickness=5.0m)
+alg = AdaptiveOctree(mesh; spacing, alpha=1.0)
 cloud = discretize(boundary, spacing; alg, max_points=100_000)
+
+# Expert: separate control of geometry and spacing resolution
+alg = AdaptiveOctree(mesh; min_ratio=1e-2, node_min_ratio=1e-4, alpha=1.0)
 ```
 """
 struct AdaptiveOctree{M<:Manifold,C<:CRS,T<:Real} <: AbstractNodeGenerationAlgorithm
@@ -42,11 +54,13 @@ struct AdaptiveOctree{M<:Manifold,C<:CRS,T<:Real} <: AbstractNodeGenerationAlgor
     boundary_oversampling::Float64
     placement::Symbol
     alpha::Float64  # Subdivision aggressiveness: boxes are at most alpha*h_local
+    node_min_ratio::T  # Node octree minimum box size ratio (can be much finer than triangle octree)
 end
 
 # Constructors
 function AdaptiveOctree(
     triangle_octree::TriangleOctree{M,C,T};
+    node_min_ratio::Union{Nothing,Real}=nothing,
     boundary_oversampling::Real=2.0,
     placement::Symbol=:random,
     alpha::Real=2.0,
@@ -55,12 +69,24 @@ function AdaptiveOctree(
     placement in (:random, :jittered, :lattice) ||
         throw(ArgumentError("placement must be :random, :jittered, or :lattice"))
     alpha > 0 || throw(ArgumentError("alpha must be positive"))
-    return AdaptiveOctree{M,C,T}(triangle_octree, Float64(boundary_oversampling), placement, Float64(alpha))
+
+    # Default: use triangle octree's min_ratio
+    node_ratio = isnothing(node_min_ratio) ? triangle_octree.tree.min_ratio : T(node_min_ratio)
+
+    return AdaptiveOctree{M,C,T}(
+        triangle_octree,
+        Float64(boundary_oversampling),
+        placement,
+        Float64(alpha),
+        node_ratio
+    )
 end
 
 function AdaptiveOctree(
     mesh::SimpleMesh{M,C};
-    min_ratio=nothing,
+    spacing::Union{Nothing,AbstractSpacing}=nothing,
+    min_ratio::Union{Nothing,Real}=nothing,
+    node_min_ratio::Union{Nothing,Real}=nothing,
     tolerance_relative::Real=1.0e-6,
     boundary_oversampling::Real=2.0,
     placement::Symbol=:random,
@@ -68,15 +94,50 @@ function AdaptiveOctree(
     verify_orientation::Bool=true,
 ) where {M,C}
     T = Float64
-    min_ratio_val = isnothing(min_ratio) ? _auto_min_ratio(T, mesh) : T(min_ratio)
+
+    # Triangle octree: geometry-based or user override
+    tri_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, mesh) : T(min_ratio)
     triangle_octree = TriangleOctree(
         mesh;
         tolerance_relative,
-        min_ratio=min_ratio_val,
+        min_ratio=tri_min_ratio,
         classify_leaves=true,
         verify_orientation,
     )
-    return AdaptiveOctree(triangle_octree; boundary_oversampling, placement, alpha)
+
+    # Node octree: spacing-aware automatic or user override
+    node_ratio = if !isnothing(node_min_ratio)
+        # User provided explicit node_min_ratio
+        T(node_min_ratio)
+    elseif !isnothing(spacing)
+        # Compute from spacing
+        h_min = _extract_min_spacing(spacing)
+        if !isnothing(h_min)
+            # Compute domain size (strip units to get Float64)
+            bbox = Meshes.boundingbox(mesh)
+            extents = bbox.max - bbox.min
+            # Get maximum extent value, stripping units
+            max_extent = maximum([T(ustrip(extents[i])) for i in 1:length(extents)])
+
+            # Allow node octree to subdivide alpha times finer than minimum spacing
+            # This ensures we can properly resolve the spacing function
+            T(h_min / T(alpha)) / max_extent
+        else
+            # Unknown spacing type, fall back to triangle octree ratio
+            tri_min_ratio
+        end
+    else
+        # No spacing hint, use triangle octree ratio
+        tri_min_ratio
+    end
+
+    return AdaptiveOctree{M,C,T}(
+        triangle_octree,
+        Float64(boundary_oversampling),
+        placement,
+        Float64(alpha),
+        node_ratio
+    )
 end
 
 AdaptiveOctree(filepath::String; kwargs...) = AdaptiveOctree(GeoIO.load(filepath).geometry; kwargs...)
@@ -88,13 +149,30 @@ AdaptiveOctree(filepath::String; kwargs...) = AdaptiveOctree(GeoIO.load(filepath
 """
     _auto_min_ratio(::Type{T}, mesh) where {T}
 
-Compute a default `min_ratio` for octree construction based on triangle count.
+Compute a default `min_ratio` for triangle octree construction based on triangle count.
 Heuristic: `1 / (2 * cbrt(n_triangles))`
 """
 function _auto_min_ratio(::Type{T}, mesh::SimpleMesh) where {T}
     n = Meshes.nelements(mesh)
     return inv(T(2) * cbrt(T(n)))
 end
+
+"""
+    _extract_min_spacing(spacing)
+
+Extract the minimum spacing value from a spacing object.
+Uses explicit fields - no sampling required.
+"""
+function _extract_min_spacing(spacing::ConstantSpacing)
+    return Float64(ustrip(spacing.Δx))
+end
+
+function _extract_min_spacing(spacing::BoundaryLayerSpacing)
+    return Float64(ustrip(spacing.at_wall))
+end
+
+# Fallback for other spacing types: return nothing to indicate unknown
+_extract_min_spacing(::AbstractSpacing) = nothing
 
 """
     _rand_point_in_box(bbox_min, bbox_max)
@@ -245,10 +323,27 @@ function _box_may_contain_interior(node_tree, box_idx, triangle_octree)
     T = Float64
     bbox_min, bbox_max = box_bounds(node_tree, box_idx)
     h = box_size(node_tree, box_idx)
-    inset = max(T(_CLASSIFICATION_INSET), h * T(_CLASSIFY_TOLERANCE_REL))
+    # Use actual corners (no inset) to avoid missing thin features in high-curvature regions
     tol = max(T(_CLASSIFY_TOLERANCE_ABS), h * T(_CLASSIFY_TOLERANCE_REL))
 
-    for pt in (box_center(node_tree, box_idx), _inset_corners(bbox_min, bbox_max, inset)...)
+    # Test center + 8 actual corners
+    center = box_center(node_tree, box_idx)
+    x0, x1 = bbox_min[1], bbox_max[1]
+    y0, y1 = bbox_min[2], bbox_max[2]
+    z0, z1 = bbox_min[3], bbox_max[3]
+
+    corners = (
+        SVector{3,T}(x0, y0, z0),
+        SVector{3,T}(x1, y0, z0),
+        SVector{3,T}(x0, y1, z0),
+        SVector{3,T}(x1, y1, z0),
+        SVector{3,T}(x0, y0, z1),
+        SVector{3,T}(x1, y0, z1),
+        SVector{3,T}(x0, y1, z1),
+        SVector{3,T}(x1, y1, z1),
+    )
+
+    for pt in (center, corners...)
         _mesh_geometry_query(pt, tol, triangle_octree) != LEAF_EXTERIOR && return true
     end
     return false
@@ -265,13 +360,13 @@ function _subdivide_node_octree!(node_tree, box_idx, criterion, triangle_octree)
     end
 end
 
-function _build_node_octree(triangle_octree, spacing, alpha)
+function _build_node_octree(triangle_octree, spacing, alpha, node_min_ratio)
     T = Float64
     bbox_min, bbox_max = bounding_box(triangle_octree.tree)
     node_tree = SpatialOctree{Int,T}(bbox_min, triangle_octree.tree.root_size; initial_capacity=1000)
 
     diagonal = norm(bbox_max - bbox_min)
-    criterion = SpacingCriterion(spacing, diagonal; alpha)
+    criterion = SpacingCriterion(spacing, diagonal; alpha, min_ratio=node_min_ratio)
 
     _subdivide_node_octree!(node_tree, 1, criterion, triangle_octree)
     balance_octree!(node_tree, criterion)
@@ -316,11 +411,6 @@ function _generate_from_leaves(leaves::LeafGroup, tree, n_points, placement)
     T = Float64
     counts = _allocate_counts_by_volume(leaves.weights, n_points)
 
-    # DEBUG: Check allocation distribution
-    nonzero_counts = count(>(0), counts)
-    max_count = isempty(counts) ? 0 : maximum(counts)
-    println("DEBUG: _generate_from_leaves - $(length(leaves.indices)) leaves, $n_points points -> $nonzero_counts leaves with points (max: $max_count per leaf)")
-
     points = SVector{3,T}[]
     sizehint!(points, n_points)
 
@@ -349,9 +439,18 @@ function _discretize_volume(
     T = Float64
 
     # Build and classify node octree
-    node_tree = _build_node_octree(alg.triangle_octree, spacing, alg.alpha)
-    classification = _classify_node_leaves(node_tree, alg.triangle_octree)
-    interior, near_surface = _collect_weighted_leaves(node_tree, classification, spacing)
+    print("  Building node octree...")
+    t1 = @elapsed node_tree = _build_node_octree(alg.triangle_octree, spacing, alg.alpha, alg.node_min_ratio)
+    n_leaves = length(collect(all_leaves(node_tree)))
+    println(" done ($(n_leaves) leaves, $(round(t1, digits=2))s)")
+
+    print("  Classifying node octree leaves...")
+    t2 = @elapsed classification = _classify_node_leaves(node_tree, alg.triangle_octree)
+    println(" done ($(round(t2, digits=2))s)")
+
+    print("  Collecting weighted leaves...")
+    t3 = @elapsed interior, near_surface = _collect_weighted_leaves(node_tree, classification, spacing)
+    println(" done (interior: $(length(interior.indices)), near_surface: $(length(near_surface.indices)), $(round(t3, digits=2))s)")
 
     # Allocate points proportionally to weighted volumes
     total_weight = sum(interior.weights; init=zero(T)) + sum(near_surface.weights; init=zero(T))
@@ -360,41 +459,40 @@ function _discretize_volume(
     interior_ratio = sum(interior.weights; init=zero(T)) / total_weight
     n_interior = round(Int, max_points * interior_ratio)
     n_near_surface = max_points - n_interior
-
-    # DEBUG: Print weight statistics
-    println("=== DEBUG: Weight Distribution ===")
-    println("Interior leaves: ", length(interior.indices))
-    println("Near-surface leaves: ", length(near_surface.indices))
-    println("Interior weight range: ", isempty(interior.weights) ? "empty" : "$(minimum(interior.weights)) to $(maximum(interior.weights))")
-    println("Near-surface weight range: ", isempty(near_surface.weights) ? "empty" : "$(minimum(near_surface.weights)) to $(maximum(near_surface.weights))")
-    println("Points allocated - interior: $n_interior, near_surface: $n_near_surface")
+    println("  Allocating $n_interior interior + $n_near_surface near-surface points")
 
     # Generate points
     raw_points = SVector{3, T}[]
     sizehint!(raw_points, max_points)
 
-    interior_points = _generate_from_leaves(interior, node_tree, n_interior, alg.placement)
-    println("DEBUG: Generated $(length(interior_points)) interior points")
+    print("  Generating interior points...")
+    t4 = @elapsed interior_points = _generate_from_leaves(interior, node_tree, n_interior, alg.placement)
+    println(" done ($(length(interior_points)) points, $(round(t4, digits=2))s)")
     append!(raw_points, interior_points)
 
     n_candidates = round(Int, n_near_surface * alg.boundary_oversampling)
-    candidates = _generate_from_leaves(near_surface, node_tree, n_candidates, alg.placement)
-    println("DEBUG: Generated $(length(candidates)) near-surface candidates (target: $n_candidates)")
+    print("  Generating near-surface candidates...")
+    t5 = @elapsed candidates = _generate_from_leaves(near_surface, node_tree, n_candidates, alg.placement)
+    println(" done ($(length(candidates)) candidates, $(round(t5, digits=2))s)")
 
-    # Filter candidates (fast operation, no progress bar needed)
+    # Filter candidates
+    print("  Filtering candidates (isinside check)...")
     n_accepted = 0
-    for p in candidates
-        if isinside(p, alg.triangle_octree)
-            push!(raw_points, p)
-            n_accepted += 1
+    t6 = @elapsed begin
+        for p in candidates
+            if isinside(p, alg.triangle_octree)
+                push!(raw_points, p)
+                n_accepted += 1
+            end
+            length(raw_points) >= n_interior + n_near_surface && break
         end
-        length(raw_points) >= n_interior + n_near_surface && break
     end
-    println("DEBUG: Accepted $n_accepted near-surface points (target: $n_near_surface)")
+    println(" done ($n_accepted accepted, $(round(t6, digits=2))s)")
 
     # Fill deficit if near-surface rejection left us short
     if length(raw_points) < max_points
         deficit = max_points - length(raw_points)
+        println("  Filling deficit of $deficit points...")
         cumw = isempty(interior.weights) ? T[] : cumsum(interior.weights)
         totalw = isempty(cumw) ? zero(T) : cumw[end]
 
