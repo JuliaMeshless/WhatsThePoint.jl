@@ -40,6 +40,7 @@ include("octree/traits.jl")
 include("octree/spatial_octree.jl")
 include("octree/geometric_utils.jl")
 include("octree/triangle_octree.jl")
+include("octree/spacing_criterion.jl")
 export TriangleOctree, num_leaves, num_triangles, has_consistent_normals
 
 include("points.jl")
@@ -81,7 +82,7 @@ include("discretization/spacings.jl")
 export AbstractSpacing, ConstantSpacing, LogLike, Power, BoundaryLayerSpacing
 
 include("discretization/discretization.jl")
-export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, AdaptiveOctree
+export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, SpacingDrivenMethod
 export discretize
 
 include("repel.jl")

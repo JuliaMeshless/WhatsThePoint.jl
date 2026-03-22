@@ -21,11 +21,11 @@ spacing = BoundaryLayerSpacing(
     layer_thickness = 3.0m
 )
 
-# AdaptiveOctree automatically adapts to variable spacing
+# SpacingDrivenMethod automatically adapts to variable spacing function
 # Pass spacing to constructor for automatic node_min_ratio computation
 # Use smaller alpha for more aggressive subdivision with fine boundary layers
-println("\nBuilding AdaptiveOctree (triangle octree construction)...")
-@time alg = AdaptiveOctree(mesh; spacing, placement = :jittered, boundary_oversampling = 2.0, alpha = 1.0)
+println("\nBuilding SpacingDrivenMethod (triangle octree construction)...")
+@time alg = SpacingDrivenMethod(mesh; spacing, placement = :jittered, boundary_oversampling = 2.0, alpha = 1.0)
 println("Node octree min_ratio: $(alg.node_min_ratio)")
 
 println("\nDiscretizing volume (node octree + point generation)...")

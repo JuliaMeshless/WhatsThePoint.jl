@@ -4,7 +4,7 @@ abstract type AbstractNodeGenerationAlgorithm end
 include("algorithms/fornberg_flyer.jl")
 include("algorithms/vandersande_fornberg.jl")
 include("algorithms/slak_kosec.jl")
-include("algorithms/adaptive_octree.jl")
+include("algorithms/spacing_driven_method.jl")
 
 """
     discretize(bnd::PointBoundary, spacing; alg=auto, max_points=10_000_000)

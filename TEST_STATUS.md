@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-22
 **Branch:** `adaptive_octree`
-**Purpose:** Document test results for AdaptiveOctree PR
+**Purpose:** Document test results for SpacingOctree PR
 
 ---
 
@@ -17,20 +17,22 @@
 
 ---
 
-## AdaptiveOctree Implementation: READY ✅
+## SpacingOctree Implementation: READY ✅
+
+**Note:** Previously named "AdaptiveOctree" - renamed to "SpacingOctree" to clarify this is spacing-driven, not solution-adaptive (AMR).
 
 ### Test Results
-- **118/118 adaptive_octree tests passing**
+- **118/118 spacing_octree tests passing**
 - All core functionality verified:
-  - Dual octree construction
-  - Spacing-aware subdivision (ConstantSpacing, BoundaryLayerSpacing)
+  - Dual octree construction (triangle + node octrees)
+  - Spacing-driven subdivision (ConstantSpacing, BoundaryLayerSpacing)
   - Point generation (random, jittered, lattice placement)
   - Interior/boundary classification
   - Parameter validation
   - Point-in-volume verification
 
 ### Verdict
-**AdaptiveOctree is production-ready and fully tested.** All failures are unrelated to this implementation.
+**SpacingOctree is production-ready and fully tested.** All failures are unrelated to this implementation.
 
 ---
 
