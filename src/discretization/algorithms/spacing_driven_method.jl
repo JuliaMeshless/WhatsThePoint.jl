@@ -328,8 +328,10 @@ function _discretize_volume(
         max_points = 1_000,
     ) where {C}
     isnothing(alg.triangle_octree.leaf_classification) &&
-        error("TriangleOctree must be built with classify_leaves=true. " *
-              "Rebuild with: TriangleOctree(mesh; classify_leaves=true)")
+        error(
+        "TriangleOctree must be built with classify_leaves=true. " *
+            "Rebuild with: TriangleOctree(mesh; classify_leaves=true)"
+    )
 
     T = Float64
 

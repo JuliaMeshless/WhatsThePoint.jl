@@ -110,7 +110,7 @@ end
     # With spacing=0.2m and alpha=2.0: h_box (17m) > alpha*spacing (0.4m) → should subdivide
     fine_spacing = ConstantSpacing(0.2m)
     alpha = 2.0
-    node_min_ratio = 1e-6
+    node_min_ratio = 1.0e-6
 
     # Build node octree
     node_tree = WhatsThePoint.build_node_octree(tri_octree, fine_spacing, alpha, node_min_ratio)
@@ -131,7 +131,7 @@ end
     mesh = OctreeTestData.unit_cube_mesh()
     tri_octree = TriangleOctree(mesh; classify_leaves = true)
     spacing = ConstantSpacing(0.3m)
-    node_min_ratio = 1e-6
+    node_min_ratio = 1.0e-6
 
     # Build with aggressive subdivision (small alpha)
     node_tree_aggressive = WhatsThePoint.build_node_octree(tri_octree, spacing, 1.0, node_min_ratio)
@@ -159,8 +159,8 @@ end
     spacing_coarse = ConstantSpacing(0.8m)    # Coarse, less subdivision
 
     # Use small alpha to trigger subdivision
-    node_tree_fine = WhatsThePoint.build_node_octree(tri_octree, spacing_fine, 2.0, 1e-6)
-    node_tree_coarse = WhatsThePoint.build_node_octree(tri_octree, spacing_coarse, 2.0, 1e-6)
+    node_tree_fine = WhatsThePoint.build_node_octree(tri_octree, spacing_fine, 2.0, 1.0e-6)
+    node_tree_coarse = WhatsThePoint.build_node_octree(tri_octree, spacing_coarse, 2.0, 1.0e-6)
 
     leaves_fine = length(WhatsThePoint.all_leaves(node_tree_fine))
     leaves_coarse = length(WhatsThePoint.all_leaves(node_tree_coarse))
@@ -178,7 +178,7 @@ end
     spacing = ConstantSpacing(0.2m)
 
     # Build and classify node octree
-    node_tree = WhatsThePoint.build_node_octree(tri_octree, spacing, 2.0, 1e-6)
+    node_tree = WhatsThePoint.build_node_octree(tri_octree, spacing, 2.0, 1.0e-6)
     classifications = WhatsThePoint.classify_node_octree(node_tree, tri_octree)
 
     # classifications is a Vector{Int8} indexed by box indices
