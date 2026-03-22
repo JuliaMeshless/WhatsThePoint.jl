@@ -53,8 +53,7 @@ discretize
 SlakKosec
 VanDerSandeFornberg
 FornbergFlyer
-DensityAwareOctree
-OctreeRandom
+SpacingDrivenMethod
 ConstantSpacing
 BoundaryLayerSpacing
 LogLike
