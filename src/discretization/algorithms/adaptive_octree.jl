@@ -69,11 +69,11 @@ function AdaptiveOctree(
     T = Float64
 
     # Triangle octree: geometry-based or user override
-    tri_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, mesh) : T(min_ratio)
+    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, mesh) : T(min_ratio)
     triangle_octree = TriangleOctree(
         mesh;
         tolerance_relative,
-        min_ratio = tri_min_ratio,
+        min_ratio = geometry_min_ratio,
         classify_leaves = true,
         verify_orientation,
     )
@@ -90,18 +90,20 @@ function AdaptiveOctree(
             bbox = Meshes.boundingbox(mesh)
             extents = bbox.max - bbox.min
             # Get maximum extent value, stripping units
-            max_extent = maximum([T(ustrip(extents[i])) for i in 1:length(extents)])
+            extent_values = [T(ustrip(extents[i])) for i in 1:length(extents)]
+            max_extent = maximum(extent_values)
 
-            # Allow node octree to subdivide alpha times finer than minimum spacing
-            # This ensures we can properly resolve the spacing function
-            T(h_min / T(alpha)) / max_extent
+            # Node octree must resolve features alpha times smaller than minimum spacing
+            # to properly capture spacing variations across the domain
+            min_resolvable_size = h_min / T(alpha)
+            T(min_resolvable_size) / max_extent
         else
             # Unknown spacing type, fall back to triangle octree ratio
-            tri_min_ratio
+            geometry_min_ratio
         end
     else
         # No spacing hint, use triangle octree ratio
-        tri_min_ratio
+        geometry_min_ratio
     end
 
     return AdaptiveOctree{M, C, T}(
@@ -193,26 +195,27 @@ function _allocate_counts_by_volume(
     base = floor.(Int, expected)
     counts .+= base
 
-    leftover = remaining - sum(base)
-    if leftover > 0
-        frac = expected .- base
+    unallocated_count = remaining - sum(base)
+    if unallocated_count > 0
+        fractional_parts = expected .- base
 
         if dither
-            # Probabilistic rounding: each fractional part becomes a probability
-            # This spreads points more uniformly when total_count << n
-            total_frac = sum(frac)
-            cumulative = cumsum(frac)
+            # Probabilistic rounding distributes leftover points randomly weighted by
+            # fractional parts. This avoids clustering when total_count << n (e.g., 10 points
+            # across 1000 boxes). Each box's fractional part becomes its selection probability.
+            total_fractional = sum(fractional_parts)
+            cumulative = cumsum(fractional_parts)
 
-            for _ in 1:leftover
-                r = rand(T) * total_frac
+            for _ in 1:unallocated_count
+                r = rand(T) * total_fractional
                 idx = searchsortedfirst(cumulative, r)
                 idx = clamp(idx, 1, n)
                 counts[idx] += 1
             end
         else
             # Deterministic largest-remainder
-            idxs = sortperm(frac; rev = true)
-            for i in 1:leftover
+            idxs = sortperm(fractional_parts; rev = true)
+            for i in 1:unallocated_count
                 counts[idxs[i]] += 1
             end
         end
@@ -236,15 +239,15 @@ function _generate_points_in_box(
     placement == :random && return [_rand_point_in_box(bbox_min, bbox_max) for _ in 1:n]
 
     # For :jittered and :lattice, use regular grid structure
-    m = max(1, ceil(Int, cbrt(n)))
-    h = (bbox_max - bbox_min) / T(m)
+    grid_divisions = ceil(Int, cbrt(n))  # n > 0 guaranteed by early return above
+    cell_size = (bbox_max - bbox_min) / T(grid_divisions)
     pts = SVector{3, T}[]
     sizehint!(pts, n)
 
-    for k in 0:(m - 1), j in 0:(m - 1), i in 0:(m - 1)
+    for k in 0:(grid_divisions - 1), j in 0:(grid_divisions - 1), i in 0:(grid_divisions - 1)
         length(pts) >= n && break
-        cell_min = bbox_min + SVector{3, T}(T(i), T(j), T(k)) .* h
-        pt = placement == :lattice ? cell_min + h / T(2) : cell_min + rand(SVector{3, T}) .* h
+        cell_min = bbox_min + SVector{3, T}(T(i), T(j), T(k)) .* cell_size
+        pt = placement == :lattice ? cell_min + cell_size / T(2) : cell_min + rand(SVector{3, T}) .* cell_size
         push!(pts, pt)
     end
 
@@ -267,7 +270,7 @@ function SpacingCriterion(spacing, diagonal; alpha = 2.0, min_ratio = 1.0e-6)
 end
 
 @inline function _spacing_value(::Type{T}, spacing, p::SVector{3, T}) where {T}
-    return T(ustrip(spacing(Point(p[1], p[2], p[3]))))
+    return T(ustrip(spacing(Point(p...))))
 end
 
 function should_subdivide(c::SpacingCriterion{T}, tree, box_idx) where {T}
@@ -352,7 +355,10 @@ function _collect_weighted_leaves(node_tree, classification, spacing)
         cls = classification[leaf_idx]
         if cls == LEAF_INTERIOR || cls == LEAF_BOUNDARY
             h_local = max(_spacing_value(T, spacing, box_center(node_tree, leaf_idx)), sqrt(eps(T)))
-            weight = box_size(node_tree, leaf_idx)^3 / h_local^3
+            # Weight by volume-to-spacing ratio: larger boxes or finer spacing get more points
+            box_volume = box_size(node_tree, leaf_idx)^3
+            spacing_volume = h_local^3
+            weight = box_volume / spacing_volume
 
             group = cls == LEAF_INTERIOR ? interior : near_surface
             push!(group.indices, leaf_idx)
@@ -409,10 +415,12 @@ function _discretize_volume(
     println(" done (interior: $(length(interior.indices)), near_surface: $(length(near_surface.indices)), $(round(t3, digits = 2))s)")
 
     # Allocate points proportionally to weighted volumes
-    total_weight = sum(interior.weights; init = zero(T)) + sum(near_surface.weights; init = zero(T))
+    interior_total_weight = sum(interior.weights; init = zero(T))
+    near_surface_total_weight = sum(near_surface.weights; init = zero(T))
+    total_weight = interior_total_weight + near_surface_total_weight
     total_weight <= zero(T) && return PointVolume(Point{𝔼{3}, C}[])
 
-    interior_ratio = sum(interior.weights; init = zero(T)) / total_weight
+    interior_ratio = interior_total_weight / total_weight
     n_interior = round(Int, max_points * interior_ratio)
     n_near_surface = max_points - n_interior
     println("  Allocating $n_interior interior + $n_near_surface near-surface points")
@@ -449,12 +457,12 @@ function _discretize_volume(
     if length(raw_points) < max_points
         deficit = max_points - length(raw_points)
         println("  Filling deficit of $deficit points...")
-        cumw = isempty(interior.weights) ? T[] : cumsum(interior.weights)
-        totalw = isempty(cumw) ? zero(T) : cumw[end]
+        cumulative_weights = isempty(interior.weights) ? T[] : cumsum(interior.weights)
+        total_weight = isempty(cumulative_weights) ? zero(T) : cumulative_weights[end]
 
         for _ in 1:deficit
-            if totalw > zero(T)
-                idx = clamp(searchsortedfirst(cumw, rand(T) * totalw), 1, length(interior.indices))
+            if total_weight > zero(T)
+                idx = clamp(searchsortedfirst(cumulative_weights, rand(T) * total_weight), 1, length(interior.indices))
                 bbox_min, bbox_max = box_bounds(node_tree, interior.indices[idx])
                 push!(raw_points, _rand_point_in_box(bbox_min, bbox_max))
             end
@@ -462,5 +470,5 @@ function _discretize_volume(
     end
 
     # Convert to Point objects
-    return PointVolume([Point(pt[1], pt[2], pt[3]) for pt in raw_points])
+    return PointVolume([Point(pt...) for pt in raw_points])
 end
