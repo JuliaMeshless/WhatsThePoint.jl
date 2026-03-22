@@ -13,6 +13,7 @@ function _discretize_volume(
         spacing::ConstantSpacing,
         ::FornbergFlyer;
         max_points = 10_000,
+        repel_iters = 0,  # Not implemented for FornbergFlyer (2D)
     ) where {C}
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)

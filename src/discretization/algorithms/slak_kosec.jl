@@ -79,6 +79,7 @@ function _discretize_volume(
         spacing::AbstractSpacing,
         alg::SlakKosec;
         max_points = 1_000,
+        repel_iters = 0,  # Not implemented for SlakKosec
     ) where {C}
     seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)

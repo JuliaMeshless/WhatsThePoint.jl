@@ -13,6 +13,7 @@ function _discretize_volume(
         spacing::ConstantSpacing,
         ::VanDerSandeFornberg;
         max_points = 10_000_000,
+        repel_iters = 0,  # Not implemented for VanDerSandeFornberg
     ) where {C}
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)

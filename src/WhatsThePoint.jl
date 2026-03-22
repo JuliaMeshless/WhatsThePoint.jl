@@ -40,7 +40,9 @@ include("octree/traits.jl")
 include("octree/spatial_octree.jl")
 include("octree/geometric_utils.jl")
 include("octree/triangle_octree.jl")
+include("octree/projection.jl")
 export TriangleOctree, num_leaves, num_triangles, has_consistent_normals
+export project_to_mesh
 
 include("points.jl")
 export emptyspace

@@ -16,23 +16,23 @@ println("Boundary has $(length(WhatsThePoint.points(boundary))) points")
 # Define boundary layer spacing: fine at walls, coarse in bulk
 spacing = BoundaryLayerSpacing(
     WhatsThePoint.points(boundary);
-    at_wall = 0.8m,
-    bulk = 4.0m,
-    layer_thickness = 3.0m
+    at_wall=0.8m,
+    bulk=4.0m,
+    layer_thickness=3.0m
 )
 
 # AdaptiveOctree automatically adapts to variable spacing
 # Pass spacing to constructor for automatic node_min_ratio computation
 # Use smaller alpha for more aggressive subdivision with fine boundary layers
 println("\nBuilding AdaptiveOctree (triangle octree construction)...")
-@time alg = AdaptiveOctree(mesh; spacing, placement = :jittered, boundary_oversampling = 2.0, alpha = 1.0)
+@time alg = AdaptiveOctree(mesh; spacing, placement=:jittered, boundary_oversampling=2.0, alpha=1.0)
 println("Node octree min_ratio: $(alg.node_min_ratio)")
 
 println("\nDiscretizing volume (node octree + point generation)...")
-@time cloud = discretize(boundary, spacing; alg, max_points = 600_000)
+@time cloud = discretize(boundary, spacing; alg, max_points=200_000, repel_iters=2)
 
 println("\nGenerated $(length(WhatsThePoint.volume(cloud))) volume points")
 
 # Visualize
 println("\nVisualizing...")
-@time visualize(cloud; markersize = 0.15)
+@time visualize(cloud; markersize=0.15)

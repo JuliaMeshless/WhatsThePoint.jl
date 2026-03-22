@@ -13,7 +13,7 @@ function ranges_from_permutation(permutations::AbstractVector)
     num_elems = length.(permutations)
     # use cumsum here
     ends = map(i -> sum(num_elems[begin:i]), 1:length(num_elems))
-    ranges = [(e - num_elems[i] + 1):e for (i, e) in enumerate(ends)]
+    ranges = [(e-num_elems[i]+1):e for (i, e) in enumerate(ends)]
     return ranges
 end
 
@@ -32,4 +32,11 @@ function _angle(u::SVector{2}, v::SVector{2}) # preserve sign
 end
 
 _angle(u::SVector{3}, v::SVector{3}) = atan(norm(u × v), u ⋅ v) * u"rad" # discard sign
-_angle(u::Vec, v::Vec) = ∠(u, v)
+_angle(u::Meshes.Vec, v::Meshes.Vec) = ∠(u, v)
+
+# Internal normalization helpers for code paths that accept either Point or Vec.
+_as_coords(x::Meshes.Vec) = x
+_as_coords(x) = to(x)
+
+_as_point(x::Meshes.Point) = x
+_as_point(x) = Point(_as_coords(x)...)

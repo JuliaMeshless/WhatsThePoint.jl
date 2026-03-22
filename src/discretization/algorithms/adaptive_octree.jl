@@ -388,6 +388,7 @@ function _discretize_volume(
         spacing::AbstractSpacing,
         alg::AdaptiveOctree;
         max_points = 1_000,
+        repel_iters = 0,
     ) where {C}
     isnothing(alg.triangle_octree.leaf_classification) &&
         error("TriangleOctree must be built with classify_leaves=true")
@@ -461,6 +462,17 @@ function _discretize_volume(
         end
     end
 
-    # Convert to Point objects
-    return PointVolume([Point(pt[1], pt[2], pt[3]) for pt in raw_points])
+    # Convert to Point objects and create volume
+    volume_points = [Point(pt[1], pt[2], pt[3]) for pt in raw_points]
+    new_volume = PointVolume(volume_points)
+
+    # Apply repel optimization if requested
+    if repel_iters > 0
+        println("  Applying repel optimization ($repel_iters iterations)...")
+        temp_cloud = PointCloud(boundary(cloud), new_volume, NoTopology())
+        optimized_cloud, _ = repel(temp_cloud, spacing, alg.triangle_octree; max_iters = repel_iters)
+        return volume(optimized_cloud)
+    end
+
+    return new_volume
 end

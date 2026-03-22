@@ -4,15 +4,17 @@ abstract type VariableSpacing <: AbstractSpacing end
 # Helper function for computing Euclidean distance between points
 # Used by variable spacing implementations
 # Requires Euclidean manifold - uses flat space distance metric
-distance(p1::Point{𝔼{N}}, p2::Point{𝔼{N}}) where {N} = evaluate(Euclidean(), p1, p2)
-distance(p1::Vec{N}, p2::Vec{N}) where {N} = evaluate(Euclidean(), p1, p2)
+distance(p1::Meshes.Point{𝔼{N}}, p2::Meshes.Point{𝔼{N}}) where {N} = evaluate(Euclidean(), _as_coords(p1), _as_coords(p2))
+distance(p1::Meshes.Vec{N}, p2::Meshes.Vec{N}) where {N} = evaluate(Euclidean(), _as_coords(p1), _as_coords(p2))
+distance(p1::Meshes.Point{𝔼{N}}, p2::Meshes.Vec{N}) where {N} = evaluate(Euclidean(), _as_coords(p1), _as_coords(p2))
+distance(p1::Meshes.Vec{N}, p2::Meshes.Point{𝔼{N}}) where {N} = evaluate(Euclidean(), _as_coords(p1), _as_coords(p2))
 
 """
     ConstantSpacing{L<:Unitful.Length} <: AbstractSpacing
 
 Constant node spacing.
 """
-struct ConstantSpacing{L <: Unitful.Length} <: AbstractSpacing
+struct ConstantSpacing{L<:Unitful.Length} <: AbstractSpacing
     Δx::L
 end
 (s::ConstantSpacing)() = s.Δx
@@ -26,7 +28,7 @@ Node spacing based on a log-like function of the distance to nearest boundary ``
     the growth rate as ``a = 1 - (g - 1)`` where ``g`` is the conventional growth rate
     parameter.
 """
-struct LogLike{B, G} <: VariableSpacing
+struct LogLike{B,G} <: VariableSpacing
     boundary::Any
     base_size::B
     growth_rate::G
@@ -37,8 +39,8 @@ function LogLike(cloud::PointCloud, base_size, growth_rate)
     return LogLike(points(cloud), base_size, growth_rate)
 end
 
-function (s::LogLike)(p::Union{Point, Vec})
-    x, _ = findmin_turbo(distance.(p, s.boundary))
+function (s::LogLike)(p::Union{Point,Vec})
+    x, _ = findmin_turbo(map(q -> distance(p, q), s.boundary))
     inv_growth = 1 - (s.growth_rate - 1)
     a = s.base_size * inv_growth  # characteristic length scale with proper units
     return s.base_size * x / (a + x)
@@ -50,19 +52,19 @@ end
 Node spacing based on a power of the distance to nearest boundary ``x^{g}`` where ``x`` is
     the distance to the nearest boundary and ``g`` is the growth_rate.
 """
-struct Power{B, G} <: VariableSpacing
+struct Power{B,G} <: VariableSpacing
     boundary::Any
     base_size::B
     growth_rate::G
     function Power(cloud::PointCloud, surfaces, base_size::Real, growth_rate::Real)
         # TODO extract only points/surfaces used for growth rate
         error("TODO extract only points/surfaces used for growth rate")
-        return new{B, G}(points, base_size, growth_rate)
+        return new{B,G}(points, base_size, growth_rate)
     end
 end
 
-function (s::Power)(p::Union{Point, Vec})
-    x, _ = findmin_turbo(distance.(p, s.boundary))
+function (s::Power)(p::Union{Point,Vec})
+    x, _ = findmin_turbo(map(q -> distance(p, q), s.boundary))
     return s.base_size * x^s.growth_rate
 end
 
@@ -85,7 +87,7 @@ spacing = BoundaryLayerSpacing(boundary, at_wall=0.5m, bulk=10m, layer_thickness
 Internally uses sigmoid: `h(d) = at_wall + (bulk - at_wall) * σ(d)`
 where `σ(d) = 1 / (1 + exp(-(d - δ/2) / (δ/6)))` and δ = layer_thickness.
 """
-struct BoundaryLayerSpacing{B, L} <: VariableSpacing
+struct BoundaryLayerSpacing{B,L} <: VariableSpacing
     boundary::Any
     at_wall::B
     bulk::B
@@ -102,7 +104,7 @@ function BoundaryLayerSpacing(boundary_points; at_wall, bulk, layer_thickness)
     h_wall = convert(B, at_wall)
     h_bulk = convert(B, bulk)
 
-    return BoundaryLayerSpacing{B, typeof(layer_thickness)}(
+    return BoundaryLayerSpacing{B,typeof(layer_thickness)}(
         boundary_points,
         h_wall,
         h_bulk,
@@ -110,9 +112,9 @@ function BoundaryLayerSpacing(boundary_points; at_wall, bulk, layer_thickness)
     )
 end
 
-function (s::BoundaryLayerSpacing)(p::Union{Point, Vec})
+function (s::BoundaryLayerSpacing)(p::Union{Point,Vec})
     # Distance to nearest boundary point
-    x, _ = findmin_turbo(distance.(p, s.boundary))
+    x, _ = findmin_turbo(map(q -> distance(p, q), s.boundary))
     d = Float64(ustrip(x))
 
     # Sigmoid transition: center at δ/2, width ≈ δ/6 (smooth S-curve over boundary layer)

@@ -7,7 +7,7 @@ include("algorithms/slak_kosec.jl")
 include("algorithms/adaptive_octree.jl")
 
 """
-    discretize(bnd::PointBoundary, spacing; alg=auto, max_points=10_000_000)
+    discretize(bnd::PointBoundary, spacing; alg=auto, max_points=10_000_000, repel_iters=0)
 
 Generate volume points for the given boundary and return a new PointCloud.
 
@@ -17,13 +17,15 @@ Generate volume points for the given boundary and return a new PointCloud.
 # Keyword Arguments
 - `alg`: Discretization algorithm (default: `SlakKosec()` for 3D)
 - `max_points`: Maximum number of volume points to generate
+- `repel_iters`: Number of repel optimization iterations (default: 0, disabled)
+  When > 0, applies spacing-aware node repulsion with boundary projection
 
 # Example
 ```julia
 mesh = GeoIO.load("model.stl").geometry
 boundary = PointBoundary(mesh)
-octree = TriangleOctree(mesh; min_ratio=1e-6)
-cloud = discretize(boundary, 3.0m; alg=SlakKosec(octree), max_points=100_000)
+alg = AdaptiveOctree(mesh; spacing)
+cloud = discretize(boundary, spacing; alg, max_points=100_000, repel_iters=100)
 ```
 """
 function discretize(
@@ -31,9 +33,10 @@ function discretize(
         spacing::AbstractSpacing;
         alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
         max_points = 10_000_000,
+        repel_iters = 0,
     )
     cloud = PointCloud(bnd)
-    new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
+    new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points, repel_iters = repel_iters)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
