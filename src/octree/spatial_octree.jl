@@ -638,34 +638,6 @@ const _CLASSIFY_TOLERANCE_REL = 1.0e-6  # Relative tolerance (scaled by box size
 const _CLASSIFY_TOLERANCE_ABS = 1.0e-8  # Absolute tolerance floor
 
 """
-    _inset_corners(bbox_min, bbox_max, inset) -> NTuple{8, SVector{3,T}}
-
-Generate 8 corner points of a box, inset slightly from the boundaries.
-
-The inset prevents exact-on-surface degeneracy during classification.
-"""
-@inline function _inset_corners(
-        bbox_min::SVector{3, T},
-        bbox_max::SVector{3, T},
-        inset::T,
-    ) where {T <: Real}
-    x0, x1 = bbox_min[1] + inset, bbox_max[1] - inset
-    y0, y1 = bbox_min[2] + inset, bbox_max[2] - inset
-    z0, z1 = bbox_min[3] + inset, bbox_max[3] - inset
-
-    return (
-        SVector{3, T}(x0, y0, z0),
-        SVector{3, T}(x1, y0, z0),
-        SVector{3, T}(x0, y1, z0),
-        SVector{3, T}(x1, y1, z0),
-        SVector{3, T}(x0, y0, z1),
-        SVector{3, T}(x1, y0, z1),
-        SVector{3, T}(x0, y1, z1),
-        SVector{3, T}(x1, y1, z1),
-    )
-end
-
-"""
     _leaf_class_from_signed_distance(sd, tol) -> Int8
 
 Convert signed distance to leaf classification.

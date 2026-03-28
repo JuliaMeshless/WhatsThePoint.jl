@@ -1,5 +1,5 @@
 """
-    SpacingDrivenMethod <: AbstractNodeGenerationAlgorithm
+    OctreeSpacing <: AbstractNodeGenerationAlgorithm
 
 Spacing-driven volume discretization algorithm.
 
@@ -24,14 +24,14 @@ local spacing requirements.
 # Examples
 ```julia
 # Automatic (recommended)
-alg = SpacingDrivenMethod(mesh; spacing, alpha=1.0)
+alg = OctreeSpacing(mesh; spacing, alpha=1.0)
 cloud = discretize(boundary, spacing; alg, max_points=100_000)
 
 # Manual geometry resolution
-alg = SpacingDrivenMethod(mesh; min_ratio=1e-3, spacing, alpha=1.0)
+alg = OctreeSpacing(mesh; min_ratio=1e-3, spacing, alpha=1.0)
 ```
 """
-struct SpacingDrivenMethod{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
+struct OctreeSpacing{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
     triangle_octree::TriangleOctree{M, C, T}
     boundary_oversampling::Float64
     placement::Symbol
@@ -40,7 +40,7 @@ struct SpacingDrivenMethod{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGe
 end
 
 # Constructors
-function SpacingDrivenMethod(
+function OctreeSpacing(
         triangle_octree::TriangleOctree{M, C, T};
         node_min_ratio::Union{Nothing, Real} = nothing,
         boundary_oversampling::Real = 2.0,
@@ -55,7 +55,7 @@ function SpacingDrivenMethod(
     # Default: use triangle octree's min_ratio
     node_ratio = isnothing(node_min_ratio) ? triangle_octree.tree.min_ratio : T(node_min_ratio)
 
-    return SpacingDrivenMethod{M, C, T}(
+    return OctreeSpacing{M, C, T}(
         triangle_octree,
         Float64(boundary_oversampling),
         placement,
@@ -64,7 +64,7 @@ function SpacingDrivenMethod(
     )
 end
 
-function SpacingDrivenMethod(
+function OctreeSpacing(
         mesh::SimpleMesh{M, C};
         spacing::Union{Nothing, AbstractSpacing} = nothing,
         min_ratio::Union{Nothing, Real} = nothing,
@@ -115,7 +115,7 @@ function SpacingDrivenMethod(
         geometry_min_ratio
     end
 
-    return SpacingDrivenMethod{M, C, T}(
+    return OctreeSpacing{M, C, T}(
         triangle_octree,
         Float64(boundary_oversampling),
         placement,
@@ -124,7 +124,7 @@ function SpacingDrivenMethod(
     )
 end
 
-SpacingDrivenMethod(filepath::String; kwargs...) = SpacingDrivenMethod(GeoIO.load(filepath).geometry; kwargs...)
+OctreeSpacing(filepath::String; kwargs...) = OctreeSpacing(GeoIO.load(filepath).geometry; kwargs...)
 
 # ============================================================================
 # Helper functions
@@ -324,7 +324,7 @@ end
 function _discretize_volume(
         cloud::PointCloud{𝔼{3}, C},
         spacing::AbstractSpacing,
-        alg::SpacingDrivenMethod;
+        alg::OctreeSpacing;
         max_points = 1_000,
     ) where {C}
     isnothing(alg.triangle_octree.leaf_classification) &&

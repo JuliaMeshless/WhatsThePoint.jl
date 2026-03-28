@@ -1,13 +1,13 @@
-# Tests for SpacingDrivenMethod discretization algorithm
+# Tests for OctreeSpacing discretization algorithm
 
-@testitem "SpacingDrivenMethod with ConstantSpacing" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing with ConstantSpacing" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(42)
 
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
 
-    alg = SpacingDrivenMethod(mesh)
+    alg = OctreeSpacing(mesh)
     cloud = discretize(bnd, ConstantSpacing(1m); alg, max_points = 100)
 
     @test cloud isa PointCloud
@@ -15,7 +15,7 @@
     @test length(WhatsThePoint.volume(cloud)) <= 100
 end
 
-@testitem "SpacingDrivenMethod with BoundaryLayerSpacing" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing with BoundaryLayerSpacing" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(42)
 
@@ -28,7 +28,7 @@ end
         layer_thickness = 2.0m
     )
 
-    alg = SpacingDrivenMethod(mesh)
+    alg = OctreeSpacing(mesh)
     cloud = discretize(bnd, spacing; alg, max_points = 100)
 
     @test cloud isa PointCloud
@@ -36,7 +36,7 @@ end
     @test length(WhatsThePoint.volume(cloud)) <= 100
 end
 
-@testitem "SpacingDrivenMethod points are inside" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing points are inside" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(123)
 
@@ -44,7 +44,7 @@ end
     bnd = PointBoundary(mesh)
     spacing = ConstantSpacing(1.0m)
 
-    alg = SpacingDrivenMethod(mesh)
+    alg = OctreeSpacing(mesh)
     cloud = discretize(bnd, spacing; alg, max_points = 100)
 
     # All points should be inside via octree check
@@ -56,7 +56,7 @@ end
     end
 end
 
-@testitem "SpacingDrivenMethod with placement strategies" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing with placement strategies" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(456)
 
@@ -64,7 +64,7 @@ end
     bnd = PointBoundary(mesh)
 
     for placement in (:random, :jittered, :lattice)
-        alg = SpacingDrivenMethod(mesh; placement)
+        alg = OctreeSpacing(mesh; placement)
         cloud = discretize(bnd, ConstantSpacing(1m); alg, max_points = 50)
 
         @test cloud isa PointCloud
@@ -73,32 +73,32 @@ end
     end
 end
 
-@testitem "SpacingDrivenMethod errors on unclassified octree" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing errors on unclassified octree" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
     octree = TriangleOctree(mesh; classify_leaves = false)
 
     @test_throws ErrorException discretize(
         bnd, ConstantSpacing(1m);
-        alg = SpacingDrivenMethod(octree), max_points = 50
+        alg = OctreeSpacing(octree), max_points = 50
     )
 end
 
-@testitem "SpacingDrivenMethod invalid placement throws" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing invalid placement throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     octree = TriangleOctree(mesh; classify_leaves = true)
 
-    @test_throws ArgumentError SpacingDrivenMethod(octree; placement = :invalid)
+    @test_throws ArgumentError OctreeSpacing(octree; placement = :invalid)
 end
 
-@testitem "SpacingDrivenMethod invalid oversampling throws" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing invalid oversampling throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     octree = TriangleOctree(mesh; classify_leaves = true)
 
-    @test_throws ArgumentError SpacingDrivenMethod(octree; boundary_oversampling = -1.0)
+    @test_throws ArgumentError OctreeSpacing(octree; boundary_oversampling = -1.0)
 end
 
-@testitem "SpacingDrivenMethod octree actually subdivides with fine spacing" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing octree actually subdivides with fine spacing" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(789)
 
@@ -124,7 +124,7 @@ end
     @test num_leaves >= 8  # At least one level of subdivision (8 children)
 end
 
-@testitem "SpacingDrivenMethod subdivision respects alpha parameter" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing subdivision respects alpha parameter" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(202)
 
@@ -145,7 +145,7 @@ end
     @test leaves_aggressive > leaves_conservative
 end
 
-@testitem "SpacingDrivenMethod variable spacing produces adaptive octree" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing variable spacing produces adaptive octree" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(303)
 
@@ -172,7 +172,7 @@ end
     @test leaves_coarse >= 1
 end
 
-@testitem "SpacingDrivenMethod node octree classification works" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing node octree classification works" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     tri_octree = TriangleOctree(mesh; classify_leaves = true)
     spacing = ConstantSpacing(0.2m)
@@ -196,7 +196,7 @@ end
     end
 end
 
-@testitem "SpacingDrivenMethod generates points with subdivided octree" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing generates points with subdivided octree" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(404)
 
@@ -205,7 +205,7 @@ end
     fine_spacing = ConstantSpacing(0.15m)
 
     # Create algorithm with fine spacing (triggers subdivision)
-    alg = SpacingDrivenMethod(mesh; spacing = fine_spacing, alpha = 2.0)
+    alg = OctreeSpacing(mesh; spacing = fine_spacing, alpha = 2.0)
     cloud = discretize(bnd, fine_spacing; alg, max_points = 500)
 
     # Verify points were generated
@@ -219,7 +219,7 @@ end
     end
 end
 
-@testitem "SpacingDrivenMethod deficit filling" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing deficit filling" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(505)
 
@@ -231,7 +231,7 @@ end
     # Use moderate spacing but very low oversampling (< 1.0)
     # This ensures not enough candidates are generated for near-surface
     spacing = ConstantSpacing(0.8m)
-    alg = SpacingDrivenMethod(mesh; spacing, boundary_oversampling = 0.5, placement = :random)
+    alg = OctreeSpacing(mesh; spacing, boundary_oversampling = 0.5, placement = :random)
 
     # Request many points - deficit filling should activate
     cloud = discretize(bnd, spacing; alg, max_points = 200)
@@ -241,7 +241,7 @@ end
     # May be less than 200 if deficit filling doesn't fully compensate
 end
 
-@testitem "SpacingDrivenMethod with BoundaryLayerSpacing constructor" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing with BoundaryLayerSpacing constructor" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(606)
 
@@ -257,7 +257,7 @@ end
     )
 
     # Pass spacing to constructor - this exercises _extract_min_spacing for node_min_ratio calculation
-    alg = SpacingDrivenMethod(mesh; spacing, alpha = 1.5)
+    alg = OctreeSpacing(mesh; spacing, alpha = 1.5)
     cloud = discretize(bnd, spacing; alg, max_points = 50)
 
     @test cloud isa PointCloud
@@ -265,15 +265,15 @@ end
     @test alg.node_min_ratio < 1.0  # Should have computed a ratio
 end
 
-@testitem "SpacingDrivenMethod string filepath constructor" setup = [TestData, CommonImports] begin
+@testitem "OctreeSpacing string filepath constructor" setup = [TestData, CommonImports] begin
     # Test convenience constructor that accepts filepath string
-    alg = SpacingDrivenMethod(TestData.BOX_PATH)
+    alg = OctreeSpacing(TestData.BOX_PATH)
 
-    @test alg isa SpacingDrivenMethod
+    @test alg isa OctreeSpacing
     @test alg.triangle_octree isa WhatsThePoint.TriangleOctree
 end
 
-@testitem "SpacingDrivenMethod fractional point allocation" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing fractional point allocation" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(707)
 
@@ -283,7 +283,7 @@ end
 
     # Use parameters that create fractional allocations across multiple boxes
     spacing = ConstantSpacing(0.25m)  # Creates multiple boxes with fractional point counts
-    alg = SpacingDrivenMethod(mesh; spacing, alpha = 1.8)
+    alg = OctreeSpacing(mesh; spacing, alpha = 1.8)
 
     # Request specific point count that requires fractional distribution
     cloud = discretize(bnd, spacing; alg, max_points = 150)

@@ -53,7 +53,7 @@ discretize
 SlakKosec
 VanDerSandeFornberg
 FornbergFlyer
-SpacingDrivenMethod
+OctreeSpacing
 ConstantSpacing
 BoundaryLayerSpacing
 LogLike
