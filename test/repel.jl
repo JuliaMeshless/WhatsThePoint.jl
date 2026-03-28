@@ -1,3 +1,18 @@
+@testitem "repel convergence success" setup = [TestData, CommonImports] begin
+    # Test repel with high tolerance to trigger successful convergence
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 20)
+
+    # Use very high tolerance so it converges immediately
+    new_cloud, conv = repel(cloud, spacing; max_iters = 100, tol = 1000.0)
+
+    @test conv isa Vector{<:AbstractFloat}
+    @test length(conv) < 100  # Should converge before max_iters
+    @test length(volume(new_cloud)) > 0
+end
+
 @testitem "repel basic behavior" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)

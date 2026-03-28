@@ -23,11 +23,19 @@ end
     @test length(b) == N
     @test size(b) == (N,)
 
+    # Test bounds checking (before adding surface2)
+    @test_throws BoundsError b[N + 1]
+    @test_throws BoundsError b[N + 100]
+
     points = rand(Point, N)
     surf = PointSurface(points)
     @test_throws ArgumentError b[:surface1] = surf
     b[:surface2] = surf
     @test b[:surface2] == surf
+
+    # Test indexing across multiple surfaces (exercises offset += length(surf))
+    @test b[N + 1] isa SurfaceElement  # Access first element of surface2
+    @test b[N + 5] isa SurfaceElement  # Access later element in surface2
 
     @testset "iterate" begin
         points = rand(Point, N)

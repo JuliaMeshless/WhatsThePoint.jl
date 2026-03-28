@@ -3,6 +3,7 @@
 @testitem "ConstantSpacing" setup = [CommonImports] begin
     s = ConstantSpacing(1.0m)
     @test s(Point(0.0, 0.0, 0.0)) == 1.0m
+    @test s() == 1.0m  # Test no-argument callable
 end
 
 @testitem "BoundaryLayerSpacing monotonicity" setup = [CommonImports] begin
@@ -112,4 +113,61 @@ end
     @test cloud isa PointCloud
     @test length(volume(cloud)) > 0
     @test length(volume(cloud)) <= 30
+end
+
+@testitem "SlakKosec with variable spacing exercises calculate_ninit" setup = [TestData, CommonImports] begin
+    # Test SlakKosec with variable spacing to exercise calculate_ninit(::VariableSpacing)
+    bnd = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = BoundaryLayerSpacing(
+        WhatsThePoint.points(bnd);
+        at_wall = 0.8m,
+        bulk = 4.0m,
+        layer_thickness = 2.0m
+    )
+
+    # This exercises calculate_ninit(cloud::PointCloud{𝔼{3}}, s::VariableSpacing)
+    cloud = discretize(bnd, spacing; alg = SlakKosec(octree), max_points = 30)
+    @test cloud isa PointCloud
+    @test length(volume(cloud)) > 0
+    @test length(volume(cloud)) <= 30
+end
+
+@testitem "LogLike spacing" setup = [CommonImports] begin
+    # Test LogLike spacing type with small boundary (LogLike is O(n) per query)
+    points = [Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0)]
+    cloud = PointCloud(PointBoundary(points))
+
+    # Create LogLike spacing (growth_rate = 1.5, NOT 2.0 which gives constant spacing)
+    spacing = WhatsThePoint.LogLike(cloud, 0.5m, 1.5)
+
+    # Test spacing evaluation
+    test_point = Point(5.0, 0.0, 0.0)
+    h = spacing(test_point)
+    @test h isa Unitful.Length
+    @test h > 0m
+
+    # Verify spacing increases with distance from boundary
+    near_point = Point(0.1, 0.0, 0.0)  # Very close to first boundary point
+    far_point = Point(5.0, 0.0, 0.0)   # Midpoint between boundary points
+    @test spacing(near_point) < spacing(far_point)
+end
+
+@testitem "BoundaryLayerSpacing validation" setup = [TestData, CommonImports] begin
+    # Test that BoundaryLayerSpacing validates layer_thickness > 0
+    bnd = PointBoundary(TestData.BOX_PATH)
+
+    @test_throws ArgumentError BoundaryLayerSpacing(
+        WhatsThePoint.points(bnd);
+        at_wall = 0.5m,
+        bulk = 5.0m,
+        layer_thickness = -1.0m  # Invalid: negative thickness
+    )
+
+    @test_throws ArgumentError BoundaryLayerSpacing(
+        WhatsThePoint.points(bnd);
+        at_wall = 0.5m,
+        bulk = 5.0m,
+        layer_thickness = 0.0m  # Invalid: zero thickness
+    )
 end

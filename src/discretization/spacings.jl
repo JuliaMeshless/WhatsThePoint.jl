@@ -49,16 +49,14 @@ end
 
 Node spacing based on a power of the distance to nearest boundary ``x^{g}`` where ``x`` is
     the distance to the nearest boundary and ``g`` is the growth_rate.
+
+Note: This type is currently undocumented and not recommended for use.
+Use `BoundaryLayerSpacing` or `LogLike` for production work.
 """
 struct Power{B, G} <: VariableSpacing
     boundary::Any
     base_size::B
     growth_rate::G
-    function Power(cloud::PointCloud, surfaces, base_size::Real, growth_rate::Real)
-        # TODO extract only points/surfaces used for growth rate
-        error("TODO extract only points/surfaces used for growth rate")
-        return new{B, G}(points, base_size, growth_rate)
-    end
 end
 
 function (s::Power)(p::Union{Point, Vec})

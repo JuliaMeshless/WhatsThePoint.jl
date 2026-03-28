@@ -218,3 +218,77 @@ end
         @test isinside(sv, alg.triangle_octree) == true
     end
 end
+
+@testitem "SpacingDrivenMethod deficit filling" setup = [CommonImports, OctreeTestData] begin
+    using Random
+    Random.seed!(505)
+
+    # Trigger deficit filling by using low boundary_oversampling
+    # This causes near-surface rejection to leave us short of max_points
+    mesh = OctreeTestData.unit_cube_mesh()
+    bnd = PointBoundary(mesh)
+
+    # Use moderate spacing but very low oversampling (< 1.0)
+    # This ensures not enough candidates are generated for near-surface
+    spacing = ConstantSpacing(0.8m)
+    alg = SpacingDrivenMethod(mesh; spacing, boundary_oversampling = 0.5, placement = :random)
+
+    # Request many points - deficit filling should activate
+    cloud = discretize(bnd, spacing; alg, max_points = 200)
+
+    @test cloud isa PointCloud
+    @test length(WhatsThePoint.volume(cloud)) > 0
+    # May be less than 200 if deficit filling doesn't fully compensate
+end
+
+@testitem "SpacingDrivenMethod with BoundaryLayerSpacing constructor" setup = [CommonImports, OctreeTestData] begin
+    using Random
+    Random.seed!(606)
+
+    # Test that passing BoundaryLayerSpacing to constructor works (exercises _extract_min_spacing)
+    mesh = OctreeTestData.unit_cube_mesh()
+    bnd = PointBoundary(mesh)
+
+    spacing = BoundaryLayerSpacing(
+        WhatsThePoint.points(bnd);
+        at_wall = 0.3m,
+        bulk = 3.0m,
+        layer_thickness = 1.5m
+    )
+
+    # Pass spacing to constructor - this exercises _extract_min_spacing for node_min_ratio calculation
+    alg = SpacingDrivenMethod(mesh; spacing, alpha = 1.5)
+    cloud = discretize(bnd, spacing; alg, max_points = 50)
+
+    @test cloud isa PointCloud
+    @test length(WhatsThePoint.volume(cloud)) > 0
+    @test alg.node_min_ratio < 1.0  # Should have computed a ratio
+end
+
+@testitem "SpacingDrivenMethod string filepath constructor" setup = [TestData, CommonImports] begin
+    # Test convenience constructor that accepts filepath string
+    alg = SpacingDrivenMethod(TestData.BOX_PATH)
+
+    @test alg isa SpacingDrivenMethod
+    @test alg.triangle_octree isa WhatsThePoint.TriangleOctree
+end
+
+@testitem "SpacingDrivenMethod fractional point allocation" setup = [CommonImports, OctreeTestData] begin
+    using Random
+    Random.seed!(707)
+
+    # Test case that triggers fractional allocation logic
+    mesh = OctreeTestData.unit_cube_mesh()
+    bnd = PointBoundary(mesh)
+
+    # Use parameters that create fractional allocations across multiple boxes
+    spacing = ConstantSpacing(0.25m)  # Creates multiple boxes with fractional point counts
+    alg = SpacingDrivenMethod(mesh; spacing, alpha = 1.8)
+
+    # Request specific point count that requires fractional distribution
+    cloud = discretize(bnd, spacing; alg, max_points = 150)
+
+    @test cloud isa PointCloud
+    @test length(WhatsThePoint.volume(cloud)) > 0
+    @test length(WhatsThePoint.volume(cloud)) <= 150
+end
