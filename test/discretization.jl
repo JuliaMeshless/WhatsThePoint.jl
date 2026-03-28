@@ -64,3 +64,52 @@ end
     cloud = discretize(bnd, spacing; alg = SlakKosec(octree), max_points = 20)
     @test length(volume(cloud)) == 20  # Should hit cap
 end
+
+@testitem "discretize accepts bare Unitful.Length" setup = [TestData, CommonImports] begin
+    # Test convenience overload that wraps bare Length in ConstantSpacing
+    bnd = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+
+    # Should accept 3.0m instead of ConstantSpacing(3.0m)
+    cloud = discretize(bnd, 3.0m; alg = SlakKosec(octree), max_points = 30)
+    @test cloud isa PointCloud
+    @test length(volume(cloud)) > 0
+    @test length(volume(cloud)) <= 30
+end
+
+@testitem "discretize works with PointCloud input" setup = [TestData, CommonImports] begin
+    # Test discretize(cloud::PointCloud, ...) overload
+    bnd = PointBoundary(TestData.BOX_PATH)
+    cloud = PointCloud(bnd)  # Empty volume
+
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(bnd)
+
+    # Discretize the empty cloud
+    filled_cloud = discretize(cloud, spacing; alg = SlakKosec(octree), max_points = 30)
+    @test filled_cloud isa PointCloud
+    @test length(volume(filled_cloud)) > 0
+    @test length(volume(filled_cloud)) <= 30
+
+    # Convenience overload with bare Length
+    filled_cloud2 = discretize(cloud, 3.0m; alg = SlakKosec(octree), max_points = 25)
+    @test filled_cloud2 isa PointCloud
+    @test length(volume(filled_cloud2)) > 0
+end
+
+@testitem "SlakKosec with BoundaryLayerSpacing" setup = [TestData, CommonImports] begin
+    # Test SlakKosec with variable spacing (exercises calculate_ninit for VariableSpacing)
+    bnd = PointBoundary(TestData.BOX_PATH)
+    spacing = BoundaryLayerSpacing(
+        WhatsThePoint.points(bnd);
+        at_wall = 0.5m,
+        bulk = 5.0m,
+        layer_thickness = 2.0m
+    )
+
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    cloud = discretize(bnd, spacing; alg = SlakKosec(octree), max_points = 30)
+    @test cloud isa PointCloud
+    @test length(volume(cloud)) > 0
+    @test length(volume(cloud)) <= 30
+end
