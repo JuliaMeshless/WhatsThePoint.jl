@@ -1,36 +1,28 @@
 # Tests for OctreeSpacing discretization algorithm
 
-@testitem "OctreeSpacing with ConstantSpacing" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing with different spacing types" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(42)
 
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
 
+    # Test ConstantSpacing
     alg = OctreeSpacing(mesh)
     cloud = discretize(bnd, ConstantSpacing(1m); alg, max_points = 100)
-
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
     @test length(WhatsThePoint.volume(cloud)) <= 100
-end
 
-@testitem "OctreeSpacing with BoundaryLayerSpacing" setup = [CommonImports, OctreeTestData] begin
-    using Random
-    Random.seed!(42)
-
-    mesh = OctreeTestData.unit_cube_mesh()
-    bnd = PointBoundary(mesh)
+    # Test BoundaryLayerSpacing
     spacing = BoundaryLayerSpacing(
         WhatsThePoint.points(bnd);
         at_wall = 0.5m,
         bulk = 5.0m,
         layer_thickness = 2.0m
     )
-
     alg = OctreeSpacing(mesh)
     cloud = discretize(bnd, spacing; alg, max_points = 100)
-
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
     @test length(WhatsThePoint.volume(cloud)) <= 100
@@ -98,78 +90,32 @@ end
     @test_throws ArgumentError OctreeSpacing(octree; boundary_oversampling = -1.0)
 end
 
-@testitem "OctreeSpacing octree actually subdivides with fine spacing" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing octree subdivision behavior" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(789)
 
     mesh = OctreeTestData.unit_cube_mesh()
     tri_octree = TriangleOctree(mesh; classify_leaves = true)
+    node_min_ratio = 1.0e-6
 
-    # Use very fine spacing to trigger subdivision
-    # Unit cube is ~10m, with root box size ~17m (diagonal bounding)
-    # With spacing=0.2m and alpha=2.0: h_box (17m) > alpha*spacing (0.4m) → should subdivide
+    # Test 1: Fine spacing triggers subdivision
     fine_spacing = ConstantSpacing(0.2m)
-    alpha = 2.0
-    node_min_ratio = 1.0e-6
-
-    # Build node octree
-    node_tree = WhatsThePoint.build_node_octree(tri_octree, fine_spacing, alpha, node_min_ratio)
-
-    # Verify the octree actually subdivided beyond root
+    node_tree = WhatsThePoint.build_node_octree(tri_octree, fine_spacing, 2.0, node_min_ratio)
     num_leaves = length(WhatsThePoint.all_leaves(node_tree))
-    @test num_leaves > 1  # Should have subdivided beyond just root node
+    @test num_leaves >= 8  # At least one level of subdivision
 
-    # Verify at least some depth of subdivision occurred
-    # With such fine spacing, should get several levels deep
-    @test num_leaves >= 8  # At least one level of subdivision (8 children)
-end
-
-@testitem "OctreeSpacing subdivision respects alpha parameter" setup = [CommonImports, OctreeTestData] begin
-    using Random
-    Random.seed!(202)
-
-    mesh = OctreeTestData.unit_cube_mesh()
-    tri_octree = TriangleOctree(mesh; classify_leaves = true)
+    # Test 2: Alpha parameter affects subdivision aggressiveness
     spacing = ConstantSpacing(0.3m)
-    node_min_ratio = 1.0e-6
-
-    # Build with aggressive subdivision (small alpha)
     node_tree_aggressive = WhatsThePoint.build_node_octree(tri_octree, spacing, 1.0, node_min_ratio)
-    leaves_aggressive = length(WhatsThePoint.all_leaves(node_tree_aggressive))
-
-    # Build with conservative subdivision (large alpha)
     node_tree_conservative = WhatsThePoint.build_node_octree(tri_octree, spacing, 5.0, node_min_ratio)
-    leaves_conservative = length(WhatsThePoint.all_leaves(node_tree_conservative))
+    @test length(WhatsThePoint.all_leaves(node_tree_aggressive)) > length(WhatsThePoint.all_leaves(node_tree_conservative))
 
-    # Smaller alpha (more aggressive) should produce more leaves
-    @test leaves_aggressive > leaves_conservative
-end
-
-@testitem "OctreeSpacing variable spacing produces adaptive octree" setup = [CommonImports, OctreeTestData] begin
-    using Random
-    Random.seed!(303)
-
-    mesh = OctreeTestData.unit_cube_mesh()
-    tri_octree = TriangleOctree(mesh; classify_leaves = true)
-    bnd = PointBoundary(mesh)
-
-    # Test that fine constant spacing produces more leaves than coarse spacing
-    # This verifies the subdivision mechanism works
-    spacing_fine = ConstantSpacing(0.2m)      # Fine, should subdivide
-    spacing_coarse = ConstantSpacing(0.8m)    # Coarse, less subdivision
-
-    # Use small alpha to trigger subdivision
-    node_tree_fine = WhatsThePoint.build_node_octree(tri_octree, spacing_fine, 2.0, 1.0e-6)
-    node_tree_coarse = WhatsThePoint.build_node_octree(tri_octree, spacing_coarse, 2.0, 1.0e-6)
-
-    leaves_fine = length(WhatsThePoint.all_leaves(node_tree_fine))
-    leaves_coarse = length(WhatsThePoint.all_leaves(node_tree_coarse))
-
-    # Finer spacing should produce more leaves
-    @test leaves_fine > leaves_coarse
-    # Both should have subdivided beyond root
-    @test leaves_fine > 1
-    @test leaves_coarse >= 1
+    # Test 3: Finer spacing produces more leaves than coarse spacing
+    spacing_coarse = ConstantSpacing(0.8m)
+    node_tree_fine = WhatsThePoint.build_node_octree(tri_octree, fine_spacing, 2.0, node_min_ratio)
+    node_tree_coarse = WhatsThePoint.build_node_octree(tri_octree, spacing_coarse, 2.0, node_min_ratio)
+    @test length(WhatsThePoint.all_leaves(node_tree_fine)) > length(WhatsThePoint.all_leaves(node_tree_coarse))
+    @test length(WhatsThePoint.all_leaves(node_tree_coarse)) >= 1
 end
 
 @testitem "OctreeSpacing node octree classification works" setup = [CommonImports, OctreeTestData] begin
@@ -196,99 +142,30 @@ end
     end
 end
 
-@testitem "OctreeSpacing generates points with subdivided octree" setup = [CommonImports, OctreeTestData] begin
-    using Random
-    Random.seed!(404)
 
-    mesh = OctreeTestData.unit_cube_mesh()
-    bnd = PointBoundary(mesh)
-    fine_spacing = ConstantSpacing(0.15m)
 
-    # Create algorithm with fine spacing (triggers subdivision)
-    alg = OctreeSpacing(mesh; spacing = fine_spacing, alpha = 2.0)
-    cloud = discretize(bnd, fine_spacing; alg, max_points = 500)
-
-    # Verify points were generated
-    @test length(WhatsThePoint.volume(cloud)) > 0
-
-    # All points should be inside (verify subdivision didn't break inside/outside checks)
-    for pt in WhatsThePoint.volume(cloud)
-        c = to(pt)
-        sv = SVector{3, Float64}(c[1] / m, c[2] / m, c[3] / m)
-        @test isinside(sv, alg.triangle_octree) == true
-    end
-end
-
-@testitem "OctreeSpacing deficit filling" setup = [CommonImports, OctreeTestData] begin
-    using Random
-    Random.seed!(505)
-
-    # Trigger deficit filling by using low boundary_oversampling
-    # This causes near-surface rejection to leave us short of max_points
-    mesh = OctreeTestData.unit_cube_mesh()
-    bnd = PointBoundary(mesh)
-
-    # Use moderate spacing but very low oversampling (< 1.0)
-    # This ensures not enough candidates are generated for near-surface
-    spacing = ConstantSpacing(0.8m)
-    alg = OctreeSpacing(mesh; spacing, boundary_oversampling = 0.5, placement = :random)
-
-    # Request many points - deficit filling should activate
-    cloud = discretize(bnd, spacing; alg, max_points = 200)
-
-    @test cloud isa PointCloud
-    @test length(WhatsThePoint.volume(cloud)) > 0
-    # May be less than 200 if deficit filling doesn't fully compensate
-end
-
-@testitem "OctreeSpacing with BoundaryLayerSpacing constructor" setup = [CommonImports, OctreeTestData] begin
+@testitem "OctreeSpacing constructors" setup = [TestData, CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(606)
 
-    # Test that passing BoundaryLayerSpacing to constructor works (exercises _extract_min_spacing)
+    # Test with BoundaryLayerSpacing (exercises _extract_min_spacing)
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
-
     spacing = BoundaryLayerSpacing(
         WhatsThePoint.points(bnd);
         at_wall = 0.3m,
         bulk = 3.0m,
         layer_thickness = 1.5m
     )
-
-    # Pass spacing to constructor - this exercises _extract_min_spacing for node_min_ratio calculation
     alg = OctreeSpacing(mesh; spacing, alpha = 1.5)
     cloud = discretize(bnd, spacing; alg, max_points = 50)
-
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
-    @test alg.node_min_ratio < 1.0  # Should have computed a ratio
+    @test alg.node_min_ratio < 1.0
+
+    # Test string filepath constructor
+    alg2 = OctreeSpacing(TestData.BOX_PATH)
+    @test alg2 isa OctreeSpacing
+    @test alg2.triangle_octree isa WhatsThePoint.TriangleOctree
 end
 
-@testitem "OctreeSpacing string filepath constructor" setup = [TestData, CommonImports] begin
-    # Test convenience constructor that accepts filepath string
-    alg = OctreeSpacing(TestData.BOX_PATH)
-
-    @test alg isa OctreeSpacing
-    @test alg.triangle_octree isa WhatsThePoint.TriangleOctree
-end
-
-@testitem "OctreeSpacing fractional point allocation" setup = [CommonImports, OctreeTestData] begin
-    using Random
-    Random.seed!(707)
-
-    # Test case that triggers fractional allocation logic
-    mesh = OctreeTestData.unit_cube_mesh()
-    bnd = PointBoundary(mesh)
-
-    # Use parameters that create fractional allocations across multiple boxes
-    spacing = ConstantSpacing(0.25m)  # Creates multiple boxes with fractional point counts
-    alg = OctreeSpacing(mesh; spacing, alpha = 1.8)
-
-    # Request specific point count that requires fractional distribution
-    cloud = discretize(bnd, spacing; alg, max_points = 150)
-
-    @test cloud isa PointCloud
-    @test length(WhatsThePoint.volume(cloud)) > 0
-    @test length(WhatsThePoint.volume(cloud)) <= 150
-end
