@@ -171,17 +171,15 @@ Generate a random point uniformly distributed in a bounding box.
 end
 
 """
-    _allocate_counts_by_volume(volumes, total_count; ensure_one=false, dither=true)
+    _allocate_counts_by_volume(volumes, total_count; ensure_one=false)
 
-Proportionally allocate counts to volumes.
-- `dither=true`: Probabilistic rounding (reduces clustering)
-- `dither=false`: Deterministic largest-remainder
+Proportionally allocate counts to volumes using probabilistic rounding.
+Fractional parts become selection probabilities, reducing clustering.
 """
 function _allocate_counts_by_volume(
         volumes::Vector{T},
         total_count::Int;
         ensure_one::Bool = false,
-        dither::Bool = true,
     ) where {T <: Real}
     n = length(volumes)
     n == 0 && return Int[]
@@ -207,26 +205,17 @@ function _allocate_counts_by_volume(
     unallocated_count = remaining - sum(base)
     if unallocated_count > 0
         fractional_parts = expected .- base
+        # Probabilistic rounding distributes leftover points randomly weighted by
+        # fractional parts. This avoids clustering when total_count << n (e.g., 10 points
+        # across 1000 boxes). Each box's fractional part becomes its selection probability.
+        total_fractional = sum(fractional_parts)
+        cumulative = cumsum(fractional_parts)
 
-        if dither
-            # Probabilistic rounding distributes leftover points randomly weighted by
-            # fractional parts. This avoids clustering when total_count << n (e.g., 10 points
-            # across 1000 boxes). Each box's fractional part becomes its selection probability.
-            total_fractional = sum(fractional_parts)
-            cumulative = cumsum(fractional_parts)
-
-            for _ in 1:unallocated_count
-                r = rand(T) * total_fractional
-                idx = searchsortedfirst(cumulative, r)
-                idx = clamp(idx, 1, n)
-                counts[idx] += 1
-            end
-        else
-            # Deterministic largest-remainder
-            idxs = sortperm(fractional_parts; rev = true)
-            for i in 1:unallocated_count
-                counts[idxs[i]] += 1
-            end
+        for _ in 1:unallocated_count
+            r = rand(T) * total_fractional
+            idx = searchsortedfirst(cumulative, r)
+            idx = clamp(idx, 1, n)
+            counts[idx] += 1
         end
     end
 
@@ -322,7 +311,7 @@ end
 # ============================================================================
 
 function _discretize_volume(
-        cloud::PointCloud{𝔼{3}, C},
+        _cloud::PointCloud{𝔼{3}, C},
         spacing::AbstractSpacing,
         alg::OctreeSpacing;
         max_points = 1_000,
