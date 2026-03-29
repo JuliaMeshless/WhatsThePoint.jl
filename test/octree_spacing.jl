@@ -143,7 +143,6 @@ end
 end
 
 
-
 @testitem "OctreeSpacing constructors" setup = [TestData, CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(606)
@@ -168,4 +167,3 @@ end
     @test alg2 isa OctreeSpacing
     @test alg2.triangle_octree isa WhatsThePoint.TriangleOctree
 end
-

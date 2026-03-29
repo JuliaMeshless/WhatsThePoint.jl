@@ -23,9 +23,6 @@ function isinside(testpoint::Point{𝔼{2}}, cloud::PointCloud{𝔼{2}})
     return isinside(testpoint, points(boundary(cloud)))
 end
 
-function isinside(testpoint::Point{𝔼{2}}, surf::Union{PointCloud{𝔼{2}}, PointSurface{𝔼{2}}})
-    return isinside(testpoint, point(surf))
-end
 function isinside(testpoint::Point{𝔼{2}}, surf::PointSurface{𝔼{2}})
     return isinside(testpoint, point(surf))
 end

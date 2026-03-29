@@ -79,7 +79,7 @@ include("isinside.jl")
 export isinside
 
 include("discretization/spacings.jl")
-export AbstractSpacing, ConstantSpacing, LogLike, Power, BoundaryLayerSpacing
+export AbstractSpacing, ConstantSpacing, LogLike, BoundaryLayerSpacing
 
 include("discretization/discretization.jl")
 export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, OctreeSpacing

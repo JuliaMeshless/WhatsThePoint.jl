@@ -45,26 +45,6 @@ function (s::LogLike)(p::Union{Point, Vec})
 end
 
 """
-    Power <: VariableSpacing
-
-Node spacing based on a power of the distance to nearest boundary ``x^{g}`` where ``x`` is
-    the distance to the nearest boundary and ``g`` is the growth_rate.
-
-Note: This type is currently undocumented and not recommended for use.
-Use `BoundaryLayerSpacing` or `LogLike` for production work.
-"""
-struct Power{B, G} <: VariableSpacing
-    boundary::Any
-    base_size::B
-    growth_rate::G
-end
-
-function (s::Power)(p::Union{Point, Vec})
-    x, _ = findmin_turbo(distance.(p, s.boundary))
-    return s.base_size * x^s.growth_rate
-end
-
-"""
     BoundaryLayerSpacing <: VariableSpacing
 
 Smooth spacing transition from fine spacing at the boundary to coarse spacing in the bulk.
