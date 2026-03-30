@@ -5,6 +5,7 @@
     using Meshes: Euclidean, 🌐, Vec, SimpleMesh, connect, Box, PointSet, Geometry, to
     using Random
     using FileIO
+    using GeoIO
     using Unitful
     using Unitful: m, °, @u_str
     using StaticArrays
@@ -12,6 +13,10 @@
     using StructArrays
     using OrderedCollections: LittleDict
     using CoordRefSystems
+
+    _relative_spacing(domain; divisor = 8) = ConstantSpacing(
+        norm(Meshes.boundingbox(domain).max - Meshes.boundingbox(domain).min) / divisor
+    )
 end
 
 @testmodule TestData begin

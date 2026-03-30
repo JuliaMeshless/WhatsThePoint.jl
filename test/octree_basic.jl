@@ -273,6 +273,27 @@ end
     @test octree.coords[grandchildren[1]] == SVector(0, 0, 0, 4)
 end
 
+@testitem "SpatialOctree can_subdivide criteria" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, can_subdivide,
+        MaxElementsCriterion, SizeCriterion, AndCriterion
+
+    origin = SVector(0.0, 0.0, 0.0)
+    octree = SpatialOctree{Int, Float64}(origin, 10.0)
+
+    # MaxElementsCriterion: always true (no physical limit)
+    @test can_subdivide(MaxElementsCriterion(50), octree, 1) == true
+    @test can_subdivide(MaxElementsCriterion(0), octree, 1) == true
+
+    # SizeCriterion: checks box_size > h_min
+    @test can_subdivide(SizeCriterion(5.0), octree, 1) == true   # 10 > 5
+    @test can_subdivide(SizeCriterion(15.0), octree, 1) == false  # 10 < 15
+    @test can_subdivide(SizeCriterion(10.0), octree, 1) == false  # 10 == 10
+
+    # AndCriterion: all criteria must pass
+    @test can_subdivide(AndCriterion(MaxElementsCriterion(50), SizeCriterion(5.0)), octree, 1) == true
+    @test can_subdivide(AndCriterion(MaxElementsCriterion(50), SizeCriterion(15.0)), octree, 1) == false
+end
+
 @testitem "SpatialOctree all_boxes" setup = [CommonImports] begin
     using WhatsThePoint: SpatialOctree, subdivide!, all_boxes
 

@@ -19,16 +19,38 @@ The `max_points` parameter is a safety limit that prevents runaway point generat
 | [`SlakKosec`](@ref) | 3D | Yes | Sphere-based candidate generation |
 | [`VanDerSandeFornberg`](@ref) | 3D | Yes (`ConstantSpacing` only) | Grid projection with sphere packing |
 | [`FornbergFlyer`](@ref) | 2D | Yes (`ConstantSpacing` only) | 1D projection with height-field fill |
-| [`OctreeRandom`](@ref) | 3D | No | Octree-guided random point generation |
+| [`Octree`](@ref) | 3D | Yes (variable-friendly) | Octree-guided adaptive fill using local spacing |
 
 ![Algorithm comparison](assets/algorithm-comparison.png)
 
 ### Choosing an Algorithm
 
 - **2D problems:** Use [`FornbergFlyer`](@ref) — it is the only 2D algorithm and is selected by default for 2D boundaries.
-- **3D with variable spacing:** Use [`SlakKosec`](@ref) — it is the only 3D algorithm supporting `LogLike` spacing.
+- **3D with variable spacing:** Use [`Octree`](@ref) with [`BoundaryLayerSpacing`](@ref) for strong near-wall refinement, or [`SlakKosec`](@ref) with `LogLike` for simpler variable spacing.
 - **3D with uniform spacing:** [`SlakKosec`](@ref) (default) or [`VanDerSandeFornberg`](@ref) both work. SlakKosec is more general; VanDerSandeFornberg can be faster for simple geometries.
-- **Large 3D meshes:** Use [`OctreeRandom`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Octree](isinside_octree.md) page.
+- **Large 3D meshes:** Use [`Octree`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Octree](isinside_octree.md) page.
+
+## Octree Algorithm
+
+Adaptive 3D octree-based algorithm that uses the provided spacing function to decide local point density. This makes it suitable for boundary-layer-style discretizations.
+
+```julia
+mesh = GeoIO.load("model.stl").geometry
+boundary = PointBoundary(mesh)
+
+spacing = BoundaryLayerSpacing(
+	points(boundary);
+	at_wall=0.6m,
+	bulk=4.0m,
+	layer_thickness=8.0m,
+)
+
+alg = Octree(mesh; placement=:jittered, boundary_oversampling=2.0)
+cloud = discretize(boundary, spacing; alg=alg, max_points=200_000)
+```
+
+For a complete runnable script, see:
+- [examples/octree_boundary_layer.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/octree_boundary_layer.jl)
 
 ## SlakKosec
 
@@ -42,7 +64,7 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 cloud = discretize(boundary, spacing; alg=SlakKosec(20))
 
 # With octree acceleration for faster isinside queries
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 cloud = discretize(boundary, spacing; alg=SlakKosec(20, octree))
 ```
@@ -69,37 +91,9 @@ cloud = discretize(boundary, ConstantSpacing(0.1mm); alg=FornbergFlyer())
 
 This is the default (and only) algorithm for 2D boundaries.
 
-## OctreeRandom
-
-Generates volume points directly from an octree decomposition of the domain. The octree classifies leaf nodes as interior, boundary, or exterior. Interior leaves are filled with random points directly (100% acceptance rate), while boundary leaves are oversampled and filtered with the octree-accelerated `isinside` test.
-
-**No spacing parameter is needed** — point density is controlled by the octree resolution (`h_min`).
-
-```julia
-# From a mesh file (recommended — auto-computes h_min)
-cloud = discretize(boundary, OctreeRandom("model.stl"))
-
-# With explicit h_min
-cloud = discretize(boundary, OctreeRandom("model.stl"; h_min=0.5))
-
-# From a pre-built TriangleOctree
-octree = TriangleOctree("model.stl"; h_min=0.5)
-cloud = discretize(boundary, OctreeRandom(octree))
-
-# With custom boundary oversampling (default: 2.0)
-cloud = discretize(boundary, OctreeRandom(octree, 3.0))
-```
-
-Parameters:
-- `h_min` — Minimum octree box size. Auto-computed from mesh diagonal and triangle count if omitted.
-- `max_triangles_per_box` — Maximum triangles per leaf before subdivision (default: 50).
-- `boundary_oversampling` — Oversampling factor for boundary leaves (default: 2.0). Higher values improve boundary coverage at the cost of more rejected candidates.
-- `verify_interior` — Verify generated interior points with `isinside` (default: `false`). Usually unnecessary since leaf classification is reliable.
-- `verify_orientation` — Check mesh normal consistency before building the octree (default: `true`).
-
 ## Spacing Types
 
-Spacing controls point density for algorithms that require it (all except `OctreeRandom`).
+Spacing controls point density for all algorithms.
 
 ### ConstantSpacing
 
@@ -110,6 +104,25 @@ spacing = ConstantSpacing(1mm)
 ```
 
 Works with all algorithms.
+
+### BoundaryLayerSpacing
+
+Variable spacing specifically designed for boundary-layer refinement.
+
+```julia
+spacing = BoundaryLayerSpacing(
+	points(boundary);
+	at_wall=0.6m,
+	bulk=4.0m,
+	layer_thickness=8.0m,
+)
+```
+
+- `at_wall` controls the smallest spacing near the boundary.
+- `bulk` controls the largest spacing far from the boundary.
+- `layer_thickness` sets how fast spacing transitions from wall to bulk.
+
+Works especially well with [`Octree`](@ref).
 
 ### LogLike
 

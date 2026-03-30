@@ -77,14 +77,15 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 # VanDerSandeFornberg — grid projection with sphere packing
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
 
-# OctreeRandom — octree-guided random generation (no spacing needed)
-cloud = discretize(boundary, OctreeRandom("model.stl"; h_min=0.5))
+# Octree — octree-guided adaptive density from spacing function
+bl_spacing = BoundaryLayerSpacing(points(boundary); at_wall=0.6m, bulk=4.0m, layer_thickness=8.0m)
+cloud = discretize(boundary, bl_spacing; alg=Octree("model.stl"), max_points=200_000)
 ```
 
 `SlakKosec` can also accept a `TriangleOctree` for accelerated point-in-volume queries:
 
 ```julia
-octree = TriangleOctree("model.stl"; h_min=0.5)
+octree = TriangleOctree("model.stl"; min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
 
@@ -114,6 +115,8 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 ```
 
 See the [Discretization](discretization.md) page for detailed descriptions of each algorithm and spacing type.
+For a complete runnable example, see
+[examples/octree_boundary_layer.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/octree_boundary_layer.jl).
 
 ## Node Repulsion
 

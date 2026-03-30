@@ -57,7 +57,7 @@ Pkg.add(url="https://github.com/JuliaMeshless/WhatsThePoint.jl")
 
 **Pipeline**
 - Import surface meshes (STL, OBJ, any GeoIO.jl format)
-- Multiple discretization algorithms: `SlakKosec`, `VanDerSandeFornberg` (3D), `FornbergFlyer` (2D), `OctreeRandom`
+- Multiple discretization algorithms: `SlakKosec`, `VanDerSandeFornberg` (3D), `FornbergFlyer` (2D), `Octree`
 - Node repulsion for distribution optimization (Miotti 2023)
 - k-nearest neighbor and radius-based topology for meshless stencils
 - Export to VTK
