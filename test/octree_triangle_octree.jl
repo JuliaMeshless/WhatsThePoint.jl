@@ -59,3 +59,22 @@ end
         @test_skip "box.stl not available"
     end
 end
+
+@testitem "TriangleOctree length" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+    octree = TriangleOctree(mesh)
+    @test length(octree) == 12
+end
+
+@testitem "isinside with Meshes.jl Point types" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+    octree = TriangleOctree(mesh; classify_leaves = true)
+
+    # Single Point
+    @test isinside(Point(0.5, 0.5, 0.5), octree) == true
+    @test isinside(Point(-0.5, 0.5, 0.5), octree) == false
+
+    # Vector of Points
+    results = isinside([Point(0.5, 0.5, 0.5), Point(-0.5, 0.5, 0.5)], octree)
+    @test results == [true, false]
+end

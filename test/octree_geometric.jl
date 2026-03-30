@@ -117,3 +117,18 @@ end
     # Distance should be sqrt(0.5^2 + 1^2) ≈ 1.118
     @test d ≈ sqrt(0.5^2 + 1.0^2) atol = 1.0e-10
 end
+
+@testitem "Triangle-Box Intersection triangle-normal separation" setup = [CommonImports] begin
+    using WhatsThePoint: triangle_box_intersection
+
+    box_min = SVector(0.0, 0.0, 0.0)
+    box_max = SVector(1.0, 1.0, 1.0)
+
+    # Triangle whose XYZ projections overlap the box but whose plane is separated.
+    # Plane equation: x + y + z = 4. Box corner sum is at most 3, so plane is outside.
+    # XYZ projections: x in [0,4], y in [0,4], z in [0,4] — all overlap [0,1].
+    v1 = SVector(4.0, 0.0, 0.0)
+    v2 = SVector(0.0, 4.0, 0.0)
+    v3 = SVector(0.0, 0.0, 4.0)
+    @test triangle_box_intersection(v1, v2, v3, box_min, box_max) == false
+end

@@ -53,3 +53,12 @@ end
         @test isinside(point, octree) == isinside_bruteforce(point, octree)
     end
 end
+
+@testitem "isinside with SVector vector" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+    octree = TriangleOctree(mesh; classify_leaves = true)
+
+    points = [SVector(0.5, 0.5, 0.5), SVector(-0.5, 0.5, 0.5), SVector(0.3, 0.3, 0.3)]
+    results = isinside(points, octree)
+    @test results == [true, false, true]
+end
