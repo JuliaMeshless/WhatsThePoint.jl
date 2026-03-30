@@ -8,9 +8,10 @@ function import_surface(filepath::String)
     geo = GeoIO.load(filepath)
     mesh = geo.geometry
     points = map(centroid, elements(mesh))
-    n = try
+    n = if hasproperty(geo, :normal)
         geo.normal
-    catch
+    else
+        @info "No normals found in file, computing via PCA"
         compute_normals(points)
     end
     normals = map(x -> ustrip.(x / norm(x)), n)

@@ -20,7 +20,7 @@ Meshes.crs(::Type{<:SurfaceElement{M, C}}) where {M, C} = C
 Meshes.crs(se::SurfaceElement) = crs(se.point)
 
 """
-    struct PointSurface{M,C,S,T} <: AbstractSurface{M,C}
+    struct PointSurface{M,C,S,T,G} <: AbstractSurface{M,C}
 
 This is a typical representation of a surface via points.
 
@@ -29,20 +29,21 @@ This is a typical representation of a surface via points.
 - `C<:CRS` - coordinate reference system
 - `S` - shadow type
 - `T<:AbstractTopology` - topology type for surface-local connectivity
+- `G<:StructVector` - storage type for surface elements
 """
-struct PointSurface{M <: Manifold, C <: CRS, S, T <: AbstractTopology} <: AbstractSurface{M, C}
-    geoms::StructVector{SurfaceElement}
+struct PointSurface{M <: Manifold, C <: CRS, S, T <: AbstractTopology, G <: StructVector} <: AbstractSurface{M, C}
+    geoms::G
     shadow::S
     topology::T
     function PointSurface(
-            geoms::StructVector{SurfaceElement},
+            geoms::G,
             shadow::S = nothing,
             topology::T = NoTopology(),
-        ) where {S, T <: AbstractTopology}
+        ) where {G <: StructVector, S, T <: AbstractTopology}
         p = first(geoms.point)
         M = manifold(p)
         C = crs(p)
-        return new{M, C, S, T}(geoms, shadow, topology)
+        return new{M, C, S, T, G}(geoms, shadow, topology)
     end
 end
 

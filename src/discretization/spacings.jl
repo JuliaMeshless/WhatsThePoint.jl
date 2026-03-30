@@ -7,6 +7,16 @@ abstract type VariableSpacing <: AbstractSpacing end
 distance(p1::Point{𝔼{N}}, p2::Point{𝔼{N}}) where {N} = evaluate(Euclidean(), p1, p2)
 distance(p1::Vec{N}, p2::Vec{N}) where {N} = evaluate(Euclidean(), p1, p2)
 
+# Find minimum distance from point p to any point in boundary without allocating
+function _min_distance(p, boundary)
+    dmin = distance(p, first(boundary))
+    @inbounds for i in 2:length(boundary)
+        d = distance(p, boundary[i])
+        dmin = ifelse(d < dmin, d, dmin)
+    end
+    return dmin
+end
+
 """
     ConstantSpacing{L<:Unitful.Length} <: AbstractSpacing
 
@@ -26,8 +36,8 @@ Node spacing based on a log-like function of the distance to nearest boundary ``
     the growth rate as ``a = 1 - (g - 1)`` where ``g`` is the conventional growth rate
     parameter.
 """
-struct LogLike{B, G} <: VariableSpacing
-    boundary::Any
+struct LogLike{B, G, P} <: VariableSpacing
+    boundary::P
     base_size::B
     growth_rate::G
 end
@@ -38,7 +48,7 @@ function LogLike(cloud::PointCloud, base_size, growth_rate)
 end
 
 function (s::LogLike)(p::Union{Point, Vec})
-    x, _ = findmin_turbo(distance.(p, s.boundary))
+    x = _min_distance(p, s.boundary)
     inv_growth = 1 - (s.growth_rate - 1)
     a = s.base_size * inv_growth  # characteristic length scale with proper units
     return s.base_size * x / (a + x)
@@ -63,8 +73,8 @@ spacing = BoundaryLayerSpacing(boundary, at_wall=0.5m, bulk=10m, layer_thickness
 Internally uses sigmoid: `h(d) = at_wall + (bulk - at_wall) * σ(d)`
 where `σ(d) = 1 / (1 + exp(-(d - δ/2) / (δ/6)))` and δ = layer_thickness.
 """
-struct BoundaryLayerSpacing{B, L} <: VariableSpacing
-    boundary::Any
+struct BoundaryLayerSpacing{B, L, P} <: VariableSpacing
+    boundary::P
     at_wall::B
     bulk::B
     layer_thickness::L
@@ -80,7 +90,7 @@ function BoundaryLayerSpacing(boundary_points; at_wall, bulk, layer_thickness)
     h_wall = convert(B, at_wall)
     h_bulk = convert(B, bulk)
 
-    return BoundaryLayerSpacing{B, typeof(layer_thickness)}(
+    return BoundaryLayerSpacing{B, typeof(layer_thickness), typeof(boundary_points)}(
         boundary_points,
         h_wall,
         h_bulk,
@@ -90,7 +100,7 @@ end
 
 function (s::BoundaryLayerSpacing)(p::Union{Point, Vec})
     # Distance to nearest boundary point
-    x, _ = findmin_turbo(distance.(p, s.boundary))
+    x = _min_distance(p, s.boundary)
     d = Float64(ustrip(x))
 
     # Sigmoid transition: center at δ/2, width ≈ δ/6 (smooth S-curve over boundary layer)
