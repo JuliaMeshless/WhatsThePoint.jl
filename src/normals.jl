@@ -95,20 +95,23 @@ function orient_normals!(
         normals[start] = -normals[start]
     end
 
-    # Depth-first traversal of minimum spanning tree
+    # Iterative DFS traversal of minimum spanning tree (avoids stack overflow on large clouds)
     parents = dfs_parents(g_mst, start)
     visited = falses(length(parents))
-    function visit(ivertex)
-        visited[ivertex] = true
+    stack = Int[start]
+    visited[start] = true
+    while !isempty(stack)
+        ivertex = pop!(stack)
         if normals[ivertex] ⋅ normals[parents[ivertex]] < 0
             normals[ivertex] = -normals[ivertex]
         end
         for nb in Graphs.neighbors(g_mst, ivertex)
-            !visited[nb] && visit(nb)
+            if !visited[nb]
+                visited[nb] = true
+                push!(stack, nb)
+            end
         end
-        return
     end
-    visit(start)
 
     return nothing
 end

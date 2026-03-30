@@ -41,6 +41,7 @@ function isinside(
 end
 
 function _greens(testpoint::Point{𝔼{N}}, surf::PointSurface{𝔼{N}, C}) where {N, C <: CRS}
+    T = CoordRefSystems.mactype(C)
     _greens_kernel = let testpoint = testpoint
         geom -> begin
             (; point, normal, area) = geom
@@ -48,6 +49,6 @@ function _greens(testpoint::Point{𝔼{N}}, surf::PointSurface{𝔼{N}, C}) wher
             return area * dist ⋅ normal / norm(dist)^3
         end
     end
-    g = tmapreduce(_greens_kernel, +, surf; init = 0.0)
+    g = tmapreduce(_greens_kernel, +, surf; init = zero(T))
     return g # true ∇G⋅n eval should be divided by -4π here
 end

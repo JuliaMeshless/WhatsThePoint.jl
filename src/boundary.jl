@@ -31,7 +31,10 @@ end
 
 function PointBoundary(points)
     normals = compute_normals(points)
-    areas = zeros(length(points)) * Unitful.m^2
+    C = crs(first(points))
+    T = CoordRefSystems.mactype(C)
+    L = lentype(C)
+    areas = zeros(typeof(zero(T) * oneunit(L)^2), length(points))
     return PointBoundary(points, normals, areas)
 end
 

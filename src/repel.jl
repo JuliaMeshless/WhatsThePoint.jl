@@ -10,22 +10,22 @@ function repel(
         cloud::PointCloud{𝔼{N}, C},
         spacing;
         β = 0.2,
-        α = minimum(spacing(to(cloud))) * 0.05,
+        α = minimum(spacing.(to(cloud))) * 0.05,
         k = 21,
-        max_iters = 1.0e3,
+        max_iters = 1000,
         tol = 1.0e-6,
     ) where {N, C <: CRS}
     # Miotti 2023
     α = ustrip(α)
-    p = collect(volume(cloud).points)
+    p = copy(volume(cloud).points)
     p_old = deepcopy(p)
     npoints = length(p)
     all_p = points(cloud)
     method = KNearestSearch(all_p, k)
 
-    all_spacings = spacing(all_p)
-    convergence = let s = all_spacings
-        (p, p_old) -> norm(p .- p_old, Inf) ./ s
+    vol_spacings = ustrip.(spacing.(p))
+    convergence = let s = vol_spacings
+        (p, p_old) -> norm(ustrip.(norm.(p .- p_old)) ./ s, Inf)
     end
 
     conv = Float64[]
@@ -45,14 +45,14 @@ function repel(
 
             repel_force = sum(zip(neighborhood, rij)) do z
                 xj, r = z
-                F(r / s) * (xi - xj) / r
+                @inbounds F(r / s) * (xi - xj) / r
             end
 
             return xi + Vec(s * α * repel_force)
         end
         push!(conv, convergence(p, p_old))
-        if all(x -> norm(x, Inf) < tol, conv[end])
-            println("Node repel finished in $i iterations. Convergence = ($conv[end])")
+        if conv[end] < tol
+            println("Node repel finished in $i iterations. Convergence = $(conv[end])")
             break
         end
         i = i + 1
