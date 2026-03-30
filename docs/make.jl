@@ -21,7 +21,7 @@ makedocs(;
         "Guide" => "guide.md",
         "Concepts" => "concepts.md",
         "Discretization" => "discretization.md",
-        "Octree" => "octree.md",
+        "Octree Algorithm" => "octree.md",
         "Boundary & Normals" => "boundary_normals.md",
         "Point-in-Volume & Octree" => "isinside_octree.md",
         "Node Repulsion" => "repel.md",

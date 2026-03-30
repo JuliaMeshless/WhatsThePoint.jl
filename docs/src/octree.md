@@ -2,7 +2,7 @@
 CurrentModule = WhatsThePoint
 ```
 
-# Octree
+# Octree Algorithm
 
 `Octree` is a 3D discretization algorithm that uses a spacing function (for example `BoundaryLayerSpacing`) to adapt point density:
 
