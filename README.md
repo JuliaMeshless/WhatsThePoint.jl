@@ -19,7 +19,7 @@ A Julia package for generating and manipulating point clouds for meshless PDE me
 - **Volume discretization** with multiple algorithms:
   - `SlakKosec` and `VanDerSandeFornberg` (3D)
   - `FornbergFlyer` (2D)
-  - `OctreeRandom` — octree-guided random point generation (3D)
+  - `Octree` — octree-guided adaptive point generation (3D)
 - **Octree-accelerated spatial queries** via `TriangleOctree` for fast point-in-volume testing
 - **Normal computation and orientation** using PCA with MST+DFS consistent orientation (Hoppe 1992)
 - **Node repulsion** for optimizing point distributions (Miotti 2023)

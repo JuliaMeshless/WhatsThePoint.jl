@@ -18,15 +18,11 @@ WhatsThePoint.jl is a Julia package providing tools for manipulating point cloud
 # Run full test suite
 julia --project -e 'using Pkg; Pkg.test()'
 
-# Run individual test file (from test/ directory)
-using SafeTestsets
-@safetestset "PointCloud" begin
-    include("cloud.jl")
-end
-
 # Build documentation locally
 julia --project=docs docs/make.jl
 ```
+
+Tests use `TestItemRunner.jl` with `@testitem` macros — each test item is self-contained and runs independently. There is no way to run a single test file in isolation; `@run_package_tests` discovers and runs all `@testitem` blocks.
 
 ## High-Level Architecture
 
@@ -62,14 +58,22 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 - `shadow.jl` - Shadow point generation
 - `surface_operations.jl` - Split, combine, add surfaces to boundaries
 
+### Octree Spatial Indexing (`src/octree/`)
+- `spatial_octree.jl` - Core octree data structure with adaptive subdivision and 2:1 balancing
+- `triangle_octree.jl` - `TriangleOctree` for mesh-aware spatial queries and leaf classification
+- `spacing_criterion.jl` - `SpacingCriterion` for spacing-driven octree subdivision
+- `geometric_utils.jl` - Triangle-box intersection tests
+- `traits.jl` - Octree trait definitions
+
 ### Discretization (`src/discretization/`)
-Three algorithms available with **important 2D vs 3D considerations:**
+Four algorithms available with **important 2D vs 3D considerations:**
 
 - **SlakKosec** (3D only, default) - `algorithms/slak_kosec.jl`
 - **VanDerSandeFornberg** (3D only) - `algorithms/vandersande_fornberg.jl`
 - **FornbergFlyer** (2D only) - `algorithms/fornberg_flyer.jl`
+- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill
 
-Spacing types in `spacings.jl`: ConstantSpacing, LogLike, Power
+Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing
 
 ### Optimization (`src/`)
 - `repel.jl` - Node repulsion algorithm (Miotti 2023) for improving point distribution quality
@@ -82,7 +86,7 @@ WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and 
 
 - `compute_normals` / `orient_normals!` - Uses PCA and Euclidean dot products
 - `discretize` algorithms - Euclidean point generation
-- `repel!` - Euclidean distance-based repulsion
+- `repel` - Euclidean distance-based repulsion
 - `isinside` (Green's function) - Euclidean norms
 - `distance` - Explicitly uses Euclidean metric
 - `generate_shadows` - Euclidean vector arithmetic
@@ -94,7 +98,7 @@ WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and 
 ### 2D vs 3D Algorithm Differences
 The discretization algorithms are dimension-specific:
 - 2D geometries: Must use `FornbergFlyer()`
-- 3D geometries: Use `SlakKosec()` (default) or `VanDerSandeFornberg()`
+- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()`, or `Octree()`
 
 ### Normal Orientation Strategy
 Normal computation and orientation uses a two-step process (Hoppe 1992):
@@ -106,7 +110,7 @@ This approach handles arbitrary surface topologies without requiring manifold as
 ### Point-in-Volume Testing
 Different algorithms for different dimensions:
 - **2D:** Winding number algorithm
-- **3D:** Green's function approach
+- **3D:** Green's function approach, or `TriangleOctree`-accelerated O(1) queries for large meshes
 
 ### Surface Import Behavior
 When importing meshes (e.g., STL files), the package uses **face centers** as boundary points, not vertices. This is important for understanding point distributions after import.
@@ -204,8 +208,8 @@ using GLMakie
 # Visualize point cloud
 visualize(cloud; markersize=0.15)
 
-# Visualize normals
-visualize_normals(boundary)
+# Visualize boundary
+visualize(boundary; markersize=0.15)
 ```
 
 ## Key Functions Reference
@@ -229,18 +233,33 @@ Tests use `TestItemRunner.jl` with `@testitem` macros:
 
 ```
 test/
-├── runtests.jl          # Main orchestrator (@run_package_tests)
-├── testsetup.jl         # Common imports and test data
-├── points.jl            # Point utilities tests
-├── normals.jl           # Normal computation tests
-├── surface.jl           # PointSurface tests
-├── boundary.jl          # PointBoundary tests
-├── cloud.jl             # PointCloud tests
-├── topology.jl          # Topology tests (KNNTopology, RadiusTopology)
-├── isinside.jl          # Point-in-volume tests
+├── runtests.jl                  # Main orchestrator (@run_package_tests)
+├── testsetup.jl                 # Common imports and test data (CommonImports, TestData, OctreeTestData)
+├── points.jl                    # Point utilities tests
+├── normals.jl                   # Normal computation tests
+├── surface.jl                   # PointSurface tests
+├── boundary.jl                  # PointBoundary tests
+├── cloud.jl                     # PointCloud tests
+├── volume.jl                    # PointVolume tests
+├── topology.jl                  # Topology tests (KNNTopology, RadiusTopology)
+├── isinside.jl                  # Point-in-volume tests
+├── discretization.jl            # Discretization algorithm tests
+├── repel.jl                     # Node repulsion tests
+├── shadow.jl                    # Shadow point tests
+├── surface_operations.jl        # Split/combine surface tests
+├── neighbors.jl                 # Neighbor query tests
+├── metrics.jl                   # Distribution metrics tests
+├── utils.jl                     # Utility function tests
+├── io.jl                        # Import/export tests
+├── octree.jl                    # Octree discretization algorithm tests
+├── octree_basic.jl              # Octree data structure tests
+├── octree_geometric.jl          # Octree geometry tests
+├── octree_isinside.jl           # Octree-accelerated isinside tests
+├── octree_triangle_octree.jl    # TriangleOctree tests
+├── octree_regression_curvature.jl # Octree curvature regression tests
 └── data/
-    ├── bifurcation.stl  # Test data (24,780 points)
-    └── box.stl          # Test data
+    ├── bifurcation.stl          # Test data (24,780 points)
+    └── box.stl                  # Test data
 ```
 
 ## CI/CD

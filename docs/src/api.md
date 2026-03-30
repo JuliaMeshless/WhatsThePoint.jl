@@ -53,11 +53,10 @@ discretize
 SlakKosec
 VanDerSandeFornberg
 FornbergFlyer
-OctreeSpacing
+Octree
 ConstantSpacing
 BoundaryLayerSpacing
 LogLike
-Power
 ```
 
 ## Boundary Operations

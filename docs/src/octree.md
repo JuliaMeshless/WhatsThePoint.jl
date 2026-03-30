@@ -2,9 +2,9 @@
 CurrentModule = WhatsThePoint
 ```
 
-# Density-aware Octree
+# Octree
 
-`DensityAwareOctree` is a 3D discretization algorithm that uses a spacing function (for example `BoundaryLayerSpacing`) to adapt point density:
+`Octree` is a 3D discretization algorithm that uses a spacing function (for example `BoundaryLayerSpacing`) to adapt point density:
 
 - finer near walls/boundaries,
 - coarser in the bulk interior.
@@ -28,7 +28,7 @@ spacing = BoundaryLayerSpacing(
     layer_thickness=8.0m,
 )
 
-alg = DensityAwareOctree(mesh)
+alg = Octree(mesh)
 cloud = discretize(boundary, spacing; alg=alg, max_points=200_000)
 ```
 
@@ -37,27 +37,26 @@ cloud = discretize(boundary, spacing; alg=alg, max_points=200_000)
 The constructor supports the same octree controls used elsewhere, plus placement options for candidate generation:
 
 - octree refinement controls (`tolerance_relative`, `min_ratio`)
-- placement mode (`:center` or `:jittered`)
+- placement mode (`:random`, `:jittered`, or `:lattice`)
 - boundary leaf oversampling (`boundary_oversampling`)
 - orientation and safety checks (`verify_orientation`, etc.)
 
-See [`DensityAwareOctree`](@ref) and [`BoundaryLayerSpacing`](@ref) in the API reference for the exact signatures.
+See [`Octree`](@ref) and [`BoundaryLayerSpacing`](@ref) in the API reference for the exact signatures.
 
 ## Included Example Script
 
 A full runnable example is included in this repository:
 
-- [examples/density_aware_discretization.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/density_aware_discretization.jl)
+- [examples/octree_boundary_layer.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/octree_boundary_layer.jl)
 
 The script demonstrates:
 
 1. building `BoundaryLayerSpacing`,
-2. running `DensityAwareOctree`,
-3. colorizing generated volume points by a density proxy (`log10(1/h^3)`),
-4. visualizing the result with Makie.
+2. running `Octree`,
+3. visualizing the result with Makie.
 
 ## Notes
 
-- `DensityAwareOctree` is 3D only.
-- For uniform spacing, `SlakKosec` and `OctreeRandom` are still good alternatives.
+- `Octree` is 3D only.
+- For uniform spacing, `SlakKosec` is a good alternative.
 - If your model scale changes significantly, tune `at_wall`, `bulk`, and `layer_thickness` in physical units.

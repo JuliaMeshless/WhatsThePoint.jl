@@ -77,12 +77,9 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 # VanDerSandeFornberg — grid projection with sphere packing
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
 
-# DensityAwareOctree — octree-guided adaptive density from spacing function
+# Octree — octree-guided adaptive density from spacing function
 bl_spacing = BoundaryLayerSpacing(points(boundary); at_wall=0.6m, bulk=4.0m, layer_thickness=8.0m)
-cloud = discretize(boundary, bl_spacing; alg=DensityAwareOctree("model.stl"), max_points=200_000)
-
-# OctreeRandom — octree-guided random generation (spacing ignored)
-cloud = discretize(boundary, ConstantSpacing(1m); alg=OctreeRandom("model.stl"; min_ratio=1e-6))
+cloud = discretize(boundary, bl_spacing; alg=Octree("model.stl"), max_points=200_000)
 ```
 
 `SlakKosec` can also accept a `TriangleOctree` for accelerated point-in-volume queries:
@@ -118,8 +115,8 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 ```
 
 See the [Discretization](discretization.md) page for detailed descriptions of each algorithm and spacing type.
-For a complete runnable density-aware example, see
-[examples/density_aware_discretization.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/density_aware_discretization.jl).
+For a complete runnable example, see
+[examples/octree_boundary_layer.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/octree_boundary_layer.jl).
 
 ## Node Repulsion
 

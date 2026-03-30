@@ -1,6 +1,6 @@
-# Tests for OctreeSpacing discretization algorithm
+# Tests for Octree discretization algorithm
 
-@testitem "OctreeSpacing with different spacing types" setup = [CommonImports, OctreeTestData] begin
+@testitem "Octree with different spacing types" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(42)
 
@@ -8,7 +8,7 @@
     bnd = PointBoundary(mesh)
 
     # Test ConstantSpacing
-    alg = OctreeSpacing(mesh)
+    alg = Octree(mesh)
     cloud = discretize(bnd, ConstantSpacing(1m); alg, max_points = 100)
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
@@ -21,14 +21,14 @@
         bulk = 5.0m,
         layer_thickness = 2.0m
     )
-    alg = OctreeSpacing(mesh)
+    alg = Octree(mesh)
     cloud = discretize(bnd, spacing; alg, max_points = 100)
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
     @test length(WhatsThePoint.volume(cloud)) <= 100
 end
 
-@testitem "OctreeSpacing points are inside" setup = [CommonImports, OctreeTestData] begin
+@testitem "Octree points are inside" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(123)
 
@@ -36,7 +36,7 @@ end
     bnd = PointBoundary(mesh)
     spacing = ConstantSpacing(1.0m)
 
-    alg = OctreeSpacing(mesh)
+    alg = Octree(mesh)
     cloud = discretize(bnd, spacing; alg, max_points = 100)
 
     # All points should be inside via octree check
@@ -48,7 +48,7 @@ end
     end
 end
 
-@testitem "OctreeSpacing with placement strategies" setup = [CommonImports, OctreeTestData] begin
+@testitem "Octree with placement strategies" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(456)
 
@@ -56,7 +56,7 @@ end
     bnd = PointBoundary(mesh)
 
     for placement in (:random, :jittered, :lattice)
-        alg = OctreeSpacing(mesh; placement)
+        alg = Octree(mesh; placement)
         cloud = discretize(bnd, ConstantSpacing(1m); alg, max_points = 50)
 
         @test cloud isa PointCloud
@@ -65,32 +65,32 @@ end
     end
 end
 
-@testitem "OctreeSpacing errors on unclassified octree" setup = [CommonImports, OctreeTestData] begin
+@testitem "Octree errors on unclassified octree" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
     octree = TriangleOctree(mesh; classify_leaves = false)
 
     @test_throws ErrorException discretize(
         bnd, ConstantSpacing(1m);
-        alg = OctreeSpacing(octree), max_points = 50
+        alg = Octree(octree), max_points = 50
     )
 end
 
-@testitem "OctreeSpacing invalid placement throws" setup = [CommonImports, OctreeTestData] begin
+@testitem "Octree invalid placement throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     octree = TriangleOctree(mesh; classify_leaves = true)
 
-    @test_throws ArgumentError OctreeSpacing(octree; placement = :invalid)
+    @test_throws ArgumentError Octree(octree; placement = :invalid)
 end
 
-@testitem "OctreeSpacing invalid oversampling throws" setup = [CommonImports, OctreeTestData] begin
+@testitem "Octree invalid oversampling throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     octree = TriangleOctree(mesh; classify_leaves = true)
 
-    @test_throws ArgumentError OctreeSpacing(octree; boundary_oversampling = -1.0)
+    @test_throws ArgumentError Octree(octree; boundary_oversampling = -1.0)
 end
 
-@testitem "OctreeSpacing octree subdivision behavior" setup = [CommonImports, OctreeTestData] begin
+@testitem "Octree octree subdivision behavior" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(789)
 
@@ -118,7 +118,7 @@ end
     @test length(WhatsThePoint.all_leaves(node_tree_coarse)) >= 1
 end
 
-@testitem "OctreeSpacing node octree classification works" setup = [CommonImports, OctreeTestData] begin
+@testitem "Octree node octree classification works" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     tri_octree = TriangleOctree(mesh; classify_leaves = true)
     spacing = ConstantSpacing(0.2m)
@@ -143,7 +143,7 @@ end
 end
 
 
-@testitem "OctreeSpacing constructors" setup = [TestData, CommonImports, OctreeTestData] begin
+@testitem "Octree constructors" setup = [TestData, CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(606)
 
@@ -156,14 +156,14 @@ end
         bulk = 3.0m,
         layer_thickness = 1.5m
     )
-    alg = OctreeSpacing(mesh; spacing, alpha = 1.5)
+    alg = Octree(mesh; spacing, alpha = 1.5)
     cloud = discretize(bnd, spacing; alg, max_points = 50)
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
     @test alg.node_min_ratio < 1.0
 
     # Test string filepath constructor
-    alg2 = OctreeSpacing(TestData.BOX_PATH)
-    @test alg2 isa OctreeSpacing
+    alg2 = Octree(TestData.BOX_PATH)
+    @test alg2 isa Octree
     @test alg2.triangle_octree isa WhatsThePoint.TriangleOctree
 end
