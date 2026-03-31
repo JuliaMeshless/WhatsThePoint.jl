@@ -91,7 +91,7 @@ end
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
     coords = to(cloud)
-    @test coords isa Vector
+    @test coords isa AbstractVector
     @test length(coords) == N
     @test all(c -> c isa AbstractVector, coords)
 
