@@ -2,18 +2,13 @@
     points = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
-    shadow = ShadowPoints(2m, 2)
 
     geoms = StructArray{SurfaceElement}((points, normals, areas))
-    surf = PointSurface(geoms, nothing, NoTopology())
+    surf = PointSurface(geoms, NoTopology())
 
     surf = PointSurface(points, normals, areas)
     @test length(surf) == 10
     @test surf.geoms isa StructVector
-
-    surf = PointSurface(points, normals, areas; shadow = shadow)
-    @test length(surf) == 10
-    @test surf.shadow == shadow
 
     surf = PointSurface(points, normals)
     @test length(surf) == 10
@@ -26,9 +21,6 @@
     surf = PointSurface(TestData.BIFURCATION_PATH)
     @test length(surf) == 24780
     @test surf.geoms isa StructVector
-
-    surf_with_shadow = surf(shadow)
-    @test surf_with_shadow.shadow == shadow
 
     # Test constructor from SubDomain (view of a Domain)
     domain = PointSet(points)
@@ -132,7 +124,6 @@ end
     points = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
-    shadow = ShadowPoints(2m, 2)
 
     surf = PointSurface(points, normals, areas)
     io = IOBuffer()
@@ -141,15 +132,7 @@ end
     @test contains(output, "PointSurface")
     @test contains(output, "Number of points: 10")
     @test contains(output, "Area:")
-    @test contains(output, "Shadow:")
     @test contains(output, "Topology: NoTopology")
-
-    surf_with_shadow = PointSurface(points, normals, areas; shadow = shadow)
-    io = IOBuffer()
-    show(io, MIME("text/plain"), surf_with_shadow)
-    output = String(take!(io))
-    @test contains(output, "Shadow:")
-    @test contains(output, "2")
 
     # Test pretty printing with topology
     surf_with_topo = set_topology(surf, KNNTopology, 5)
