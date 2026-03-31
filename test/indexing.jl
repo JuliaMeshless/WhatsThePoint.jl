@@ -65,13 +65,13 @@ end
 
     # Round-trip: local_to_global -> global_to_local
     for i in 1:N
-        name, local_idx = global_to_local(cloud, local_to_global(cloud, :surface1, i))
-        @test name == :surface1
+        local n, local_idx = global_to_local(cloud, local_to_global(cloud, :surface1, i))
+        @test n == :surface1
         @test local_idx == i
     end
     for i in 1:5
-        name, local_idx = global_to_local(cloud, volume_to_global(cloud, i))
-        @test name == :volume
+        local n, local_idx = global_to_local(cloud, volume_to_global(cloud, i))
+        @test n == :volume
         @test local_idx == i
     end
 end
