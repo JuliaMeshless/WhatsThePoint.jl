@@ -34,8 +34,6 @@ function Base.setindex!(cloud::PointCloud, surf::PointSurface, name::Symbol)
     return nothing
 end
 function Base.getindex(cloud::PointCloud, index::Int)
-    b = boundary(cloud)
-    v = volume(cloud)
     if index > length(cloud)
         throw(
             BoundsError(
@@ -43,7 +41,12 @@ function Base.getindex(cloud::PointCloud, index::Int)
             ),
         )
     end
-    return index <= length(b) ? b[index] : v[index - length(b)]
+    component, local_idx = global_to_local(cloud, index)
+    if component === :volume
+        return volume(cloud)[local_idx]
+    else
+        return point(cloud[component])[local_idx]
+    end
 end
 function Base.iterate(cloud::PointCloud, state = 1)
     return state > length(cloud) ? nothing : (cloud[state], state + 1)
@@ -62,6 +65,40 @@ normal(cloud::PointCloud) = mapreduce(normal, vcat, surfaces(cloud))
 area(cloud::PointCloud) = mapreduce(area, vcat, surfaces(cloud))
 
 hassurface(cloud::PointCloud, name) = hassurface(boundary(cloud), name)
+
+# Index-space conversion utilities
+
+"""
+    local_to_global(cloud::PointCloud, name::Symbol, local_idx::Int) -> Int
+
+Convert a surface-local index to a cloud-global index.
+"""
+function local_to_global(cloud::PointCloud, name::Symbol, local_idx::Int)
+    return local_to_global(boundary(cloud), name, local_idx)
+end
+
+"""
+    volume_to_global(cloud::PointCloud, local_idx::Int) -> Int
+
+Convert a volume-local index to a cloud-global index.
+"""
+volume_to_global(cloud::PointCloud, local_idx::Int) = length(boundary(cloud)) + local_idx
+
+"""
+    global_to_local(cloud::PointCloud, global_idx::Int) -> (Symbol, Int)
+
+Convert a cloud-global index to a `(component, local_index)` tuple.
+Returns `(:volume, local_idx)` for volume indices, or
+`(surface_name, local_idx)` for boundary indices.
+"""
+function global_to_local(cloud::PointCloud, global_idx::Int)
+    b = boundary(cloud)
+    if global_idx <= length(b)
+        return global_to_local(b, global_idx)
+    else
+        return (:volume, global_idx - length(b))
+    end
+end
 
 # Topology accessors
 """

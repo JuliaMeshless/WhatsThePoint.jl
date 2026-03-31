@@ -62,10 +62,11 @@ include("volume.jl")
 export PointVolume
 
 include("boundary.jl")
-export PointBoundary, surfaces, namedsurfaces, names, hassurface
+export PointBoundary, surfaces, namedsurfaces, names, hassurface, surface_offset
 
 include("cloud.jl")
 export PointCloud, boundary, volume, topology
+export local_to_global, global_to_local, volume_to_global
 
 include("normals.jl")
 export compute_normals, orient_normals!, update_normals!

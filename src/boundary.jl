@@ -78,6 +78,48 @@ area(boundary::PointBoundary) = mapreduce(area, vcat, surfaces(boundary))
 
 hassurface(boundary::PointBoundary, name) = haskey(namedsurfaces(boundary), name)
 
+# Index-space conversion utilities
+
+"""
+    surface_offset(boundary::PointBoundary, name::Symbol) -> Int
+
+Return the global offset for the start of surface `name` within the boundary.
+The first point of surface `name` has boundary-global index `surface_offset(...) + 1`.
+"""
+function surface_offset(boundary::PointBoundary, name::Symbol)
+    offset = 0
+    for (n, s) in pairs(namedsurfaces(boundary))
+        n == name && return offset
+        offset += length(s)
+    end
+    throw(ArgumentError("Surface :$name not found in boundary"))
+end
+
+"""
+    local_to_global(boundary::PointBoundary, name::Symbol, local_idx::Int) -> Int
+
+Convert a surface-local index to a boundary-global index.
+"""
+function local_to_global(boundary::PointBoundary, name::Symbol, local_idx::Int)
+    return surface_offset(boundary, name) + local_idx
+end
+
+"""
+    global_to_local(boundary::PointBoundary, global_idx::Int) -> (Symbol, Int)
+
+Convert a boundary-global index to a `(surface_name, local_index)` tuple.
+"""
+function global_to_local(boundary::PointBoundary, global_idx::Int)
+    offset = 0
+    for (name, s) in pairs(namedsurfaces(boundary))
+        if global_idx <= offset + length(s)
+            return (name, global_idx - offset)
+        end
+        offset += length(s)
+    end
+    throw(BoundsError(boundary, global_idx))
+end
+
 """
     points(boundary::PointBoundary)
 
@@ -99,12 +141,8 @@ function Base.getindex(boundary::PointBoundary, index::Int)
             ),
         )
     end
-    offset = 0
-    for surf in surfaces(boundary)
-        index <= (length(surf) + offset) && return point(surf)[index - offset]
-        offset += length(surf)
-    end
-    return
+    name, local_idx = global_to_local(boundary, index)
+    return point(boundary[name])[local_idx]
 end
 function Base.setindex!(boundary::PointBoundary, surf::PointSurface, name::Symbol)
     hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))
