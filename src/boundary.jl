@@ -11,11 +11,11 @@ A boundary of points.
 - `C <: CRS`: The coordinate reference system
 """
 struct PointBoundary{M <: Manifold, C <: CRS} <: Domain{M, C}
-    surfaces::LittleDict{Symbol, AbstractSurface{M, C}}
+    surfaces::LittleDict{Symbol, PointSurface{M, C}}
 
     #basic constructor starting from surfaces
     function PointBoundary(
-            surfaces::LittleDict{Symbol, AbstractSurface{M, C}},
+            surfaces::LittleDict{Symbol, <:PointSurface{M, C}},
         ) where {M <: Manifold, C <: CRS}
         return new{M, C}(surfaces)
     end
@@ -25,7 +25,7 @@ function PointBoundary(points, normals, areas)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
-    surfaces = LittleDict{Symbol, AbstractSurface{M, C}}(:surface1 => surf)
+    surfaces = LittleDict{Symbol, PointSurface{M, C}}(:surface1 => surf)
     return PointBoundary(surfaces)
 end
 
@@ -43,7 +43,7 @@ function PointBoundary(filepath::String)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
-    surfaces = LittleDict{Symbol, AbstractSurface{M, C}}(:surface1 => surf)
+    surfaces = LittleDict{Symbol, PointSurface{M, C}}(:surface1 => surf)
     return PointBoundary(surfaces)
 end
 

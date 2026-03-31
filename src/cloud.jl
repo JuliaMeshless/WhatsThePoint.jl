@@ -51,7 +51,7 @@ end
 Base.names(cloud::PointCloud) = names(boundary(cloud))
 
 to(cloud::PointCloud) = to.(points(cloud))
-function to(namedsurfaces::LittleDict{Symbol, <:AbstractSurface})
+function to(namedsurfaces::LittleDict{Symbol, <:PointSurface})
     return mapreduce(to, vcat, values(namedsurfaces))
 end
 boundary(cloud::PointCloud) = cloud.boundary
