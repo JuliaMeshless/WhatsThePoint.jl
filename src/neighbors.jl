@@ -10,12 +10,12 @@ function Meshes.search(
         cloud::Union{PointCloud, PointBoundary, PointSurface},
         method::KNearestSearch,
     )
-    return search.(points(cloud), Ref(method))
+    return collect(search.(points(cloud), Ref(method)))
 end
 
 function Meshes.searchdists(
         cloud::Union{PointCloud, PointBoundary, PointSurface},
         method::KNearestSearch,
     )
-    return searchdists.(points(cloud), Ref(method))
+    return collect(searchdists.(points(cloud), Ref(method)))
 end
