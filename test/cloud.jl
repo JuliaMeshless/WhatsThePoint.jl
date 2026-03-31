@@ -36,7 +36,7 @@ end
         b = PointBoundary(points)
         cloud = PointCloud(b)
         for (i, p) in enumerate(cloud)
-            @test p.point == points[i]
+            @test p == points[i]
         end
     end
 end

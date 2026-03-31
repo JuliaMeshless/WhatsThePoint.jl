@@ -101,7 +101,7 @@ function Base.getindex(boundary::PointBoundary, index::Int)
     end
     offset = 0
     for surf in surfaces(boundary)
-        index <= (length(surf) + offset) && return surf[index - offset]
+        index <= (length(surf) + offset) && return point(surf)[index - offset]
         offset += length(surf)
     end
     return
