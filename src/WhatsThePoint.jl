@@ -9,6 +9,7 @@ using NearestNeighbors
 using ChunkSplitters
 using OhMyThreads: tmap, tmap!, tmapreduce
 using OrderedCollections: LittleDict
+using LazyArrays: Vcat
 using Statistics
 using Random
 using FileIO

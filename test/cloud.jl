@@ -139,7 +139,7 @@ end
     cloud = PointCloud(PointBoundary(boundary_pts))
 
     pts = points(cloud)
-    @test pts isa Vector{<:Point}
+    @test pts isa AbstractVector{<:Point}
     @test length(pts) == N
 
     n_elems = Meshes.nelements(cloud)

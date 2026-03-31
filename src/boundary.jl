@@ -73,8 +73,8 @@ boundingbox(boundary::PointBoundary) = boundingbox(points(boundary))
 boundary(boundary::PointBoundary) = boundary
 namedsurfaces(boundary::PointBoundary) = boundary.surfaces
 surfaces(boundary::PointBoundary) = values(boundary.surfaces)
-normal(boundary::PointBoundary) = mapreduce(normal, vcat, surfaces(boundary))
-area(boundary::PointBoundary) = mapreduce(area, vcat, surfaces(boundary))
+normal(boundary::PointBoundary) = Vcat(map(normal, collect(surfaces(boundary)))...)
+area(boundary::PointBoundary) = Vcat(map(area, collect(surfaces(boundary)))...)
 
 hassurface(boundary::PointBoundary, name) = haskey(namedsurfaces(boundary), name)
 
@@ -125,7 +125,7 @@ end
 
 Return vector of all points from all surfaces in the boundary.
 """
-points(boundary::PointBoundary) = mapreduce(points, vcat, surfaces(boundary))
+points(boundary::PointBoundary) = Vcat(map(points, collect(surfaces(boundary)))...)
 
 Meshes.nelements(boundary::PointBoundary) = length(boundary)
 

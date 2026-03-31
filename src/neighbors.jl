@@ -3,7 +3,7 @@ function Meshes.KNearestSearch(
         k::Int;
         metric = Euclidean(),
     )
-    return KNearestSearch(points(cloud), k; metric = metric)
+    return KNearestSearch(collect(points(cloud)), k; metric = metric)
 end
 
 function Meshes.search(
