@@ -2,7 +2,7 @@
     using WhatsThePoint
     using WhatsThePoint: volume, surfaces, topology
     import Meshes
-    using Meshes: Euclidean, 🌐, Vec, SimpleMesh, connect, Box, PointSet, Geometry, to
+    using Meshes: Euclidean, 🌐, Vec, SimpleMesh, connect, Box, PointSet, to
     using Random
     using FileIO
     using GeoIO

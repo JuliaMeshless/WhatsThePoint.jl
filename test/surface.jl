@@ -50,7 +50,7 @@ end
 
     elem = SurfaceElement(points[1], normals[1], areas[1])
     @test elem isa SurfaceElement
-    @test typeof(elem) <: Geometry
+    @test elem isa SurfaceElement
     @test elem.point == points[1]
     @test elem.normal == normals[1]
     @test elem.area == areas[1]

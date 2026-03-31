@@ -10,7 +10,7 @@ abstract type AbstractSurface{M <: Manifold, C <: CRS} <: Domain{M, C} end
 
 Representation of a point on a `<:PointSurface`.
 """
-struct SurfaceElement{M, C, N, A} <: Geometry{M, C}
+struct SurfaceElement{M, C, N, A}
     point::Point{M, C}
     normal::N
     area::A
