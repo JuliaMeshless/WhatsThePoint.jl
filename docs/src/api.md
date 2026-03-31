@@ -29,6 +29,17 @@ area
 topology
 ```
 
+## Indexing
+
+Index-space conversion utilities for translating between local and global indices.
+
+```@docs
+surface_offset
+local_to_global
+global_to_local
+volume_to_global
+```
+
 ## Topology
 
 Point connectivity for meshless stencils.
