@@ -91,7 +91,7 @@ end
     points = rand(Point, N)
     cloud = PointCloud(PointBoundary(points))
     coords = to(cloud)
-    @test coords isa AbstractVector
+    @test coords isa Vector
     @test length(coords) == N
     @test all(c -> c isa AbstractVector, coords)
 
@@ -139,7 +139,7 @@ end
     cloud = PointCloud(PointBoundary(boundary_pts))
 
     pts = points(cloud)
-    @test pts isa AbstractVector{<:Point}
+    @test pts isa Vector{<:Point}
     @test length(pts) == N
 
     n_elems = Meshes.nelements(cloud)

@@ -158,7 +158,7 @@ end
     @test size(cloud) == (N,)
     @test boundary(cloud) isa PointBoundary
     @test volume(cloud) isa PointVolume
-    @test points(cloud) isa AbstractVector{<:Point}
+    @test points(cloud) isa Vector{<:Point}
     @test Meshes.nelements(cloud) == N
 end
 

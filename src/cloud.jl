@@ -35,11 +35,7 @@ function Base.setindex!(cloud::PointCloud, surf::PointSurface, name::Symbol)
 end
 function Base.getindex(cloud::PointCloud, index::Int)
     if index > length(cloud)
-        throw(
-            BoundsError(
-                "attempt to access PointCloud at index [$index], but there are only $(length(cloud)) points.",
-            ),
-        )
+        throw(BoundsError(cloud, index))
     end
     component, local_idx = global_to_local(cloud, index)
     if component === :volume
@@ -61,8 +57,8 @@ boundary(cloud::PointCloud) = cloud.boundary
 volume(cloud::PointCloud) = cloud.volume
 namedsurfaces(cloud::PointCloud) = namedsurfaces(boundary(cloud))
 surfaces(cloud::PointCloud) = surfaces(boundary(cloud))
-normal(cloud::PointCloud) = Vcat(map(normal, collect(surfaces(cloud)))...)
-area(cloud::PointCloud) = Vcat(map(area, collect(surfaces(cloud)))...)
+normal(cloud::PointCloud) = mapreduce(normal, vcat, surfaces(cloud))
+area(cloud::PointCloud) = mapreduce(area, vcat, surfaces(cloud))
 
 hassurface(cloud::PointCloud, name) = hassurface(boundary(cloud), name)
 
@@ -171,8 +167,7 @@ end
 Return vector of all points (boundary + volume).
 """
 function points(cloud::PointCloud)
-    bnd_arrays = map(points, collect(surfaces(boundary(cloud))))
-    return Vcat(bnd_arrays..., points(volume(cloud)))
+    return vcat(points(boundary(cloud)), points(volume(cloud)))
 end
 function Meshes.nelements(cloud::PointCloud)
     return Meshes.nelements(boundary(cloud)) + Meshes.nelements(volume(cloud))

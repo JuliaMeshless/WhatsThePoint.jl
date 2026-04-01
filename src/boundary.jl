@@ -73,8 +73,8 @@ boundingbox(boundary::PointBoundary) = boundingbox(points(boundary))
 boundary(boundary::PointBoundary) = boundary
 namedsurfaces(boundary::PointBoundary) = boundary.surfaces
 surfaces(boundary::PointBoundary) = values(boundary.surfaces)
-normal(boundary::PointBoundary) = Vcat(map(normal, collect(surfaces(boundary)))...)
-area(boundary::PointBoundary) = Vcat(map(area, collect(surfaces(boundary)))...)
+normal(boundary::PointBoundary) = mapreduce(normal, vcat, surfaces(boundary))
+area(boundary::PointBoundary) = mapreduce(area, vcat, surfaces(boundary))
 
 hassurface(boundary::PointBoundary, name) = haskey(namedsurfaces(boundary), name)
 
@@ -125,7 +125,7 @@ end
 
 Return vector of all points from all surfaces in the boundary.
 """
-points(boundary::PointBoundary) = Vcat(map(points, collect(surfaces(boundary)))...)
+points(boundary::PointBoundary) = mapreduce(points, vcat, surfaces(boundary))
 
 Meshes.nelements(boundary::PointBoundary) = length(boundary)
 
@@ -135,11 +135,7 @@ Base.size(boundary::PointBoundary) = (length(boundary),)
 Base.getindex(boundary::PointBoundary, name::Symbol) = namedsurfaces(boundary)[name]
 function Base.getindex(boundary::PointBoundary, index::Int)
     if index > length(boundary)
-        throw(
-            BoundsError(
-                "attempt to access PointBoundary at index [$index], but there are only $(length(boundary)) points.",
-            ),
-        )
+        throw(BoundsError(boundary, index))
     end
     name, local_idx = global_to_local(boundary, index)
     return point(boundary[name])[local_idx]

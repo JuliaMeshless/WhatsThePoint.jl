@@ -77,9 +77,8 @@ Base.isvalid(::NoTopology) = true
 Build k-nearest neighbor adjacency list from points.
 """
 function _build_knn_neighbors(points, k::Int)
-    pts = collect(points)
-    method = KNearestSearch(pts, k + 1)  # +1 because point is its own nearest neighbor
-    all_neighbors = search.(pts, Ref(method))
+    method = KNearestSearch(points, k + 1)  # +1 because point is its own nearest neighbor
+    all_neighbors = search.(points, Ref(method))
     # Remove self from neighbors (first element)
     return [n[2:end] for n in all_neighbors]
 end
@@ -90,10 +89,9 @@ end
 Build radius-based adjacency list from points.
 """
 function _build_radius_neighbors(points, radius)
-    pts = collect(points)
-    r = _get_radius(radius, pts)
-    method = BallSearch(pts, MetricBall(r))
-    all_neighbors = search.(pts, Ref(method))
+    r = _get_radius(radius, points)
+    method = BallSearch(points, MetricBall(r))
+    all_neighbors = search.(points, Ref(method))
     # Remove self from neighbors
     return [filter(!=(i), n) for (i, n) in enumerate(all_neighbors)]
 end

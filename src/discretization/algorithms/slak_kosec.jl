@@ -80,7 +80,7 @@ function _discretize_volume(
         alg::SlakKosec;
         max_points = 1_000,
     ) where {C}
-    seeds = collect(points(boundary(cloud)))
+    seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
     new_points = Point{𝔼{3}, C}[]
 
