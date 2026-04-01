@@ -35,6 +35,7 @@ end
 
     # Test indexing across multiple surfaces (exercises offset += length(surf))
     @test b[N + 1] isa Point  # Access first element of surface2
+    @test b[N + 1] == point(surf)[1]  # Verify correct value via offset
     @test b[N + 5] isa Point  # Access later element in surface2
 
     @testset "iterate" begin
