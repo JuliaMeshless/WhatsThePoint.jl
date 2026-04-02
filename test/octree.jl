@@ -70,7 +70,7 @@ end
     bnd = PointBoundary(mesh)
     octree = TriangleOctree(mesh; classify_leaves = false)
 
-    @test_throws ErrorException discretize(
+    @test_throws ArgumentError discretize(
         bnd, ConstantSpacing(1m);
         alg = Octree(octree), max_points = 50
     )

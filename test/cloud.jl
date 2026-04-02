@@ -41,6 +41,27 @@ end
     end
 end
 
+@testitem "PointCloud getindex" setup = [CommonImports] begin
+    bnd_pts = rand(Point, 6)
+    vol_pts = rand(Point, 4)
+    cloud = PointCloud(PointBoundary(bnd_pts), PointVolume(vol_pts))
+    @test length(cloud) == 10
+
+    @testset "boundary indices" begin
+        for i in 1:6
+            @test cloud[i] == bnd_pts[i]
+        end
+    end
+
+    @testset "volume indices" begin
+        for i in 1:4
+            @test cloud[6 + i] == vol_pts[i]
+        end
+    end
+
+    @test_throws BoundsError cloud[11]
+end
+
 @testitem "PointCloud generate_shadows" setup = [TestData, CommonImports] begin
     radius = 1.0u"m"
     circle_points = [Point(radius * cos(θ), radius * sin(θ)) for θ in 0:(π / 4):(7π / 4)]
