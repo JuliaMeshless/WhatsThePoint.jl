@@ -1,4 +1,5 @@
 @testitem "surface_offset" setup = [CommonImports] begin
+    using WhatsThePoint: surface_offset
     N = 10
     pts1 = rand(Point, N)
     pts2 = rand(Point, N ÷ 2)
@@ -11,6 +12,7 @@
 end
 
 @testitem "local_to_global boundary" setup = [CommonImports] begin
+    using WhatsThePoint: local_to_global
     N = 10
     pts1 = rand(Point, N)
     pts2 = rand(Point, N ÷ 2)
@@ -24,6 +26,7 @@ end
 end
 
 @testitem "global_to_local boundary" setup = [CommonImports] begin
+    using WhatsThePoint: global_to_local
     N = 10
     pts1 = rand(Point, N)
     pts2 = rand(Point, N ÷ 2)
@@ -38,7 +41,7 @@ end
 end
 
 @testitem "local_to_global and global_to_local cloud" setup = [CommonImports] begin
-    using WhatsThePoint: boundary
+    using WhatsThePoint: boundary, local_to_global, global_to_local, volume_to_global
 
     N = 10
     bnd_pts = rand(Point, N)
