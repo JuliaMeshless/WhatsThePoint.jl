@@ -138,7 +138,7 @@ function Base.getindex(boundary::PointBoundary, index::Int)
         throw(BoundsError(boundary, index))
     end
     name, local_idx = global_to_local(boundary, index)
-    return point(boundary[name])[local_idx]
+    return points(boundary[name])[local_idx]
 end
 function Base.setindex!(boundary::PointBoundary, surf::PointSurface, name::Symbol)
     hassurface(boundary, name) && throw(ArgumentError("surface name already exists."))

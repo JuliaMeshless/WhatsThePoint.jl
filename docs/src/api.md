@@ -111,7 +111,6 @@ metrics
 
 ```@docs
 import_surface
-export_cloud
 save
 ```
 

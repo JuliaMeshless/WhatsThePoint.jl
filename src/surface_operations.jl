@@ -61,7 +61,7 @@ function split_surface!(
         angle::Angle;
         k::Int = 10,
     )
-    points = point(surf)
+    pts = points(surf)
     normals = normal(surf)
     areas = area(surf)
 
@@ -78,13 +78,13 @@ function split_surface!(
     connec = connected_components(g)
     ranges = ranges_from_permutation(connec)
 
-    many_permute!(points, connec, ranges)
+    many_permute!(pts, connec, ranges)
     many_permute!(normals, connec, ranges)
     many_permute!(areas, connec, ranges)
 
     for (i, ids) in enumerate(ranges)
         name = _generate_surface_name(cloud, i)
-        cloud[name] = PointSurface(points[ids], normals[ids], areas[ids])
+        cloud[name] = PointSurface(pts[ids], normals[ids], areas[ids])
     end
 
     return cloud

@@ -21,7 +21,12 @@
     @test occursin("max. distance to 20 nearest neighbors", output)
     @test occursin("min. distance to 20 nearest neighbors", output)
 
-    @test result === nothing
+    @test result isa NamedTuple
+    @test haskey(result, :avg)
+    @test haskey(result, :std)
+    @test haskey(result, :max)
+    @test haskey(result, :min)
+    @test haskey(result, :k)
 end
 
 @testitem "metrics with custom k" setup = [TestData, CommonImports] begin
@@ -47,7 +52,12 @@ end
     @test occursin("max. distance to 10 nearest neighbors", output)
     @test occursin("min. distance to 10 nearest neighbors", output)
 
-    @test result === nothing
+    @test result isa NamedTuple
+    @test haskey(result, :avg)
+    @test haskey(result, :std)
+    @test haskey(result, :max)
+    @test haskey(result, :min)
+    @test haskey(result, :k)
 end
 
 @testitem "metrics with small k" setup = [TestData, CommonImports] begin
@@ -68,7 +78,12 @@ end
 
     @test output isa String
     @test occursin("avg. distance to 5 nearest neighbors", output)
-    @test result === nothing
+    @test result isa NamedTuple
+    @test haskey(result, :avg)
+    @test haskey(result, :std)
+    @test haskey(result, :max)
+    @test haskey(result, :min)
+    @test haskey(result, :k)
 end
 
 @testitem "metrics statistics verification" setup = [TestData, CommonImports] begin
@@ -114,9 +129,15 @@ end
 
     output, result = capture_stdout(() -> metrics(small_cloud; k = 10))
     @test occursin("Cloud Metrics", output)
-    @test result === nothing
+    @test result isa NamedTuple
+    @test haskey(result, :avg)
+    @test haskey(result, :std)
+    @test haskey(result, :max)
+    @test haskey(result, :min)
+    @test haskey(result, :k)
 
     output2, result2 = capture_stdout(() -> metrics(small_cloud; k = 20))
     @test occursin("Cloud Metrics", output2)
-    @test result2 === nothing
+    @test result2 isa NamedTuple
+    @test result2.k == 20
 end

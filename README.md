@@ -49,7 +49,7 @@ spacing = ConstantSpacing(1u"mm")
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
 
 # Optimize point distribution
-cloud, convergence = repel(cloud, spacing; β=0.2, max_iters=1000)
+cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
 
 # Add point connectivity
 cloud = set_topology(cloud, KNNTopology, 21)

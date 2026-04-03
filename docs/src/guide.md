@@ -123,16 +123,20 @@ For a complete runnable example, see
 Discretization gives approximate uniformity; repulsion refines it to minimize interpolation error in the meshless solver.
 
 ```julia
-cloud, convergence = repel(cloud, spacing; β=0.2, max_iters=1000)
+cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
+
+# Collect convergence history via keyword
+conv = Float64[]
+cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 ```
 
-`repel` returns a tuple of `(new_cloud, convergence_vector)`. The new cloud has `NoTopology` since points have moved.
+The returned cloud has `NoTopology` since points have moved.
 
 !!! note "Only volume points are repelled"
     Boundary points remain fixed — only volume (interior) points are moved during repulsion. This preserves the original boundary geometry.
 
 !!! tip "Tuning repulsion"
-    The default parameters (`β=0.2`, `k=21`, `max_iters=1000`) work well for most problems. Check `convergence[end]` to verify the distribution has stabilized. See the [Node Repulsion](repel.md) page for detailed parameter guidance.
+    The default parameters (`β=0.2`, `k=21`, `max_iters=1000`) work well for most problems. Check `conv[end]` to verify the distribution has stabilized. See the [Node Repulsion](repel.md) page for detailed parameter guidance.
 
 ### Verifying Distribution Quality
 
@@ -189,5 +193,5 @@ visualize(boundary; markersize=0.15)
 Save a point cloud to VTK format for use in external tools:
 
 ```julia
-export_cloud("output.vtk", cloud)
+save("output", cloud; format = :vtk)
 ```

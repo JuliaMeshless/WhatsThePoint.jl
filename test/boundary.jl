@@ -3,7 +3,7 @@
     pts = rand(Point, N)
     b = PointBoundary(pts)
     @test all(points(b) .== pts)
-    @test point(b[:surface1]) == pts
+    @test points(b[:surface1]) == pts
 end
 
 @testitem "PointBoundary from file" setup = [TestData, CommonImports] begin
@@ -27,22 +27,22 @@ end
     @test_throws BoundsError b[N + 1]
     @test_throws BoundsError b[N + 100]
 
-    points = rand(Point, N)
-    surf = PointSurface(points)
+    pts2 = rand(Point, N)
+    surf = PointSurface(pts2)
     @test_throws ArgumentError b[:surface1] = surf
     b[:surface2] = surf
     @test b[:surface2] == surf
 
     # Test indexing across multiple surfaces (exercises offset += length(surf))
     @test b[N + 1] isa Point  # Access first element of surface2
-    @test b[N + 1] == point(surf)[1]  # Verify correct value via offset
+    @test b[N + 1] == points(surf)[1]  # Verify correct value via offset
     @test b[N + 5] isa Point  # Access later element in surface2
 
     @testset "iterate" begin
-        points = rand(Point, N)
-        b = PointBoundary(points)
+        iter_pts = rand(Point, N)
+        b = PointBoundary(iter_pts)
         for (i, p) in enumerate(b)
-            @test p == points[i]
+            @test p == iter_pts[i]
         end
     end
 end
@@ -56,7 +56,7 @@ end
     surf2 = PointSurface(points2)
     @test_nowarn b[:newsurface] = surf2
     @test hassurface(b, :newsurface)
-    @test point(b[:newsurface]) == points2
+    @test points(b[:newsurface]) == points2
 
     @test_throws ArgumentError b[:newsurface] = surf2
 end

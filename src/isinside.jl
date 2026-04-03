@@ -24,7 +24,7 @@ function isinside(testpoint::Point{𝔼{2}}, cloud::PointCloud{𝔼{2}})
 end
 
 function isinside(testpoint::Point{𝔼{2}}, surf::PointSurface{𝔼{2}})
-    return isinside(testpoint, point(surf))
+    return isinside(testpoint, points(surf))
 end
 
 function isinside(testpoint::AbstractVector, surf::PointSurface{𝔼{Dim}}) where {Dim}

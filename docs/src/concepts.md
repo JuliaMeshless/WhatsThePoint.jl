@@ -43,7 +43,7 @@ Most types in WhatsThePoint are **immutable**. Operations return new objects rat
 cloud2 = set_topology(cloud, KNNTopology, 21)
 
 # repel returns a new cloud (with NoTopology, since points moved)
-cloud3, convergence = repel(cloud2, spacing)
+cloud3 = repel(cloud2, spacing)
 ```
 
 This design ensures compatibility with automatic differentiation frameworks and prevents stale state — if points move, the old topology object simply isn't used.

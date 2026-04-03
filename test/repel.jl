@@ -6,7 +6,8 @@
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 20)
 
     # Use very high tolerance so it converges immediately
-    new_cloud, conv = repel(cloud, spacing; max_iters = 100, tol = 1000.0)
+    conv = Float64[]
+    new_cloud = repel(cloud, spacing; max_iters = 100, tol = 1000.0, convergence = conv)
 
     @test conv isa Vector{<:AbstractFloat}
     @test length(conv) < 100  # Should converge before max_iters
@@ -24,7 +25,8 @@ end
     original_points = deepcopy(collect(volume(cloud).points))
     original_count = length(volume(cloud))
 
-    new_cloud, conv = repel(cloud, spacing; max_iters = 10)
+    conv = Float64[]
+    new_cloud = repel(cloud, spacing; max_iters = 10, convergence = conv)
 
     # Return type checks
     @test conv isa Vector{<:AbstractFloat}
@@ -58,12 +60,14 @@ end
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
     spacing = _relative_spacing(boundary)
 
+    conv1 = Float64[]
     cloud1 = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
-    _, conv1 = repel(cloud1, spacing; max_iters = 3)
+    repel(cloud1, spacing; max_iters = 3, convergence = conv1)
     @test length(conv1) <= 3
 
+    conv2 = Float64[]
     cloud2 = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
-    _, conv2 = repel(cloud2, spacing; max_iters = 10)
+    repel(cloud2, spacing; max_iters = 10, convergence = conv2)
     @test length(conv2) <= 10
 end
 
@@ -74,7 +78,8 @@ end
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
 
     # Test all parameters together in one call
-    new_cloud, conv = repel(cloud, spacing; β = 0.3, tol = 1.0e-5, max_iters = 5)
+    conv = Float64[]
+    new_cloud = repel(cloud, spacing; β = 0.3, tol = 1.0e-5, max_iters = 5, convergence = conv)
 
     @test conv isa Vector{<:AbstractFloat}
     @test length(conv) <= 5

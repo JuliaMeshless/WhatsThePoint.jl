@@ -41,7 +41,7 @@ function Base.getindex(cloud::PointCloud, index::Int)
     if component === :volume
         return volume(cloud)[local_idx]
     else
-        return point(cloud[component])[local_idx]
+        return points(cloud[component])[local_idx]
     end
 end
 function Base.iterate(cloud::PointCloud, state = 1)

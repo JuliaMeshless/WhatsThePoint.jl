@@ -1,3 +1,16 @@
+"""
+    AbstractSpacing
+
+Interface for spacing functions that control node density during discretization.
+
+Subtypes must be callable with a single `Point` or `Vec` argument and return a `Unitful.Length`
+representing the desired node spacing at that location.
+
+    (s::MySpacing)(p::Union{Point, Vec}) -> Unitful.Length
+
+See [`ConstantSpacing`](@ref), [`LogLike`](@ref), and [`BoundaryLayerSpacing`](@ref) for
+concrete implementations.
+"""
 abstract type AbstractSpacing end
 abstract type VariableSpacing <: AbstractSpacing end
 

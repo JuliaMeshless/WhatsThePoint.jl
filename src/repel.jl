@@ -1,10 +1,11 @@
 """
-    repel(cloud::PointCloud, spacing; β=0.2, α=auto, k=21, max_iters=1000, tol=1e-6)
+    repel(cloud::PointCloud, spacing; β=0.2, α=auto, k=21, max_iters=1000, tol=1e-6, convergence=nothing)
 
 Optimize point distribution via node repulsion (Miotti 2023).
-Returns `(new_cloud, convergence_vector)` tuple.
 
 The returned cloud has `NoTopology` since points have moved.
+
+Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
 """
 function repel(
         cloud::PointCloud{𝔼{N}, C},
@@ -14,6 +15,7 @@ function repel(
         k = 21,
         max_iters = 1000,
         tol = 1.0e-6,
+        convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
     ) where {N, C <: CRS}
     # Miotti 2023
     α = ustrip(α)
@@ -24,7 +26,7 @@ function repel(
     method = KNearestSearch(all_p, k)
 
     vol_spacings = ustrip.(spacing.(p))
-    convergence = let s = vol_spacings
+    convergence_fn = let s = vol_spacings
         (p, p_old) -> norm(ustrip.(norm.(p .- p_old)) ./ s, Inf)
     end
 
@@ -50,7 +52,7 @@ function repel(
 
             return xi + Vec(s * α * repel_force)
         end
-        push!(conv, convergence(p, p_old))
+        push!(conv, convergence_fn(p, p_old))
         if conv[end] < tol
             println("Node repel finished in $i iterations. Convergence = $(conv[end])")
             break
@@ -60,7 +62,9 @@ function repel(
     if i == max_iters
         @warn "Node repel reached maximum number of iterations ($max_iters), Convergence = ($(conv[end]))\n"
     end
+    if !isnothing(convergence)
+        append!(convergence, conv)
+    end
     new_volume = PointVolume(filter(x -> isinside(x, cloud), p))
-    new_cloud = PointCloud(boundary(cloud), new_volume, NoTopology())
-    return (new_cloud, conv)
+    return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
