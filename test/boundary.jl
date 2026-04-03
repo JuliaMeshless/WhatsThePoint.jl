@@ -34,14 +34,15 @@ end
     @test b[:surface2] == surf
 
     # Test indexing across multiple surfaces (exercises offset += length(surf))
-    @test b[N + 1] isa SurfaceElement  # Access first element of surface2
-    @test b[N + 5] isa SurfaceElement  # Access later element in surface2
+    @test b[N + 1] isa Point  # Access first element of surface2
+    @test b[N + 1] == point(surf)[1]  # Verify correct value via offset
+    @test b[N + 5] isa Point  # Access later element in surface2
 
     @testset "iterate" begin
         points = rand(Point, N)
         b = PointBoundary(points)
         for (i, p) in enumerate(b)
-            @test p.point == points[i]
+            @test p == points[i]
         end
     end
 end

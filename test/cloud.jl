@@ -36,9 +36,30 @@ end
         b = PointBoundary(points)
         cloud = PointCloud(b)
         for (i, p) in enumerate(cloud)
-            @test p.point == points[i]
+            @test p == points[i]
         end
     end
+end
+
+@testitem "PointCloud getindex" setup = [CommonImports] begin
+    bnd_pts = rand(Point, 6)
+    vol_pts = rand(Point, 4)
+    cloud = PointCloud(PointBoundary(bnd_pts), PointVolume(vol_pts))
+    @test length(cloud) == 10
+
+    @testset "boundary indices" begin
+        for i in 1:6
+            @test cloud[i] == bnd_pts[i]
+        end
+    end
+
+    @testset "volume indices" begin
+        for i in 1:4
+            @test cloud[6 + i] == vol_pts[i]
+        end
+    end
+
+    @test_throws BoundsError cloud[11]
 end
 
 @testitem "PointCloud generate_shadows" setup = [TestData, CommonImports] begin

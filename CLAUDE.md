@@ -251,10 +251,13 @@ test/
 ├── metrics.jl                   # Distribution metrics tests
 ├── utils.jl                     # Utility function tests
 ├── io.jl                        # Import/export tests
+├── indexing.jl                  # Index-space conversion tests
 ├── octree.jl                    # Octree discretization algorithm tests
 ├── octree_basic.jl              # Octree data structure tests
+├── octree_discretization.jl     # Octree discretization tests
 ├── octree_geometric.jl          # Octree geometry tests
 ├── octree_isinside.jl           # Octree-accelerated isinside tests
+├── octree_spacing_criterion.jl  # Octree spacing criterion tests
 ├── octree_triangle_octree.jl    # TriangleOctree tests
 ├── octree_regression_curvature.jl # Octree curvature regression tests
 └── data/
@@ -264,7 +267,7 @@ test/
 
 ## CI/CD
 
-`.github/workflows/CI.yml` runs on Ubuntu, macOS, Windows with Julia 1.10 and 1.11. Tests trigger on pushes to main, tags, and PRs (excluding docs/license changes).
+`.github/workflows/CI.yml` runs on Ubuntu, macOS, Windows with Julia 1.10, 1.11, and 1.12. Tests trigger on pushes to main, tags, and PRs (excluding docs/license changes).
 
 Documentation builds automatically via `documenter.yml` and deploys to GitHub Pages.
 
