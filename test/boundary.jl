@@ -25,7 +25,7 @@ end
         @test sorted[2] < 0.01
         @test isapprox(sorted[3], 1.0; atol = 0.01)
     end
-    @test all(n -> isapprox(norm(n), 1.0; atol = 1e-10), norms)
+    @test all(n -> isapprox(norm(n), 1.0; atol = 1.0e-10), norms)
 end
 
 @testitem "PointBoundary Base Methods" setup = [TestData, CommonImports] begin

@@ -23,7 +23,6 @@ Common accessor functions for point cloud types.
 
 ```@docs
 points
-point
 normal
 area
 topology
@@ -50,6 +49,7 @@ Volume point generation algorithms and spacing types.
 
 ```@docs
 discretize
+AbstractSpacing
 SlakKosec
 VanDerSandeFornberg
 FornbergFlyer
