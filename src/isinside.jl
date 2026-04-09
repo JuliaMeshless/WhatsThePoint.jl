@@ -36,9 +36,11 @@ end
 
 function _validate_polygon_ordering(pts::AbstractVector{<:Point{𝔼{2}, C}}) where {C}
     n = length(pts)
-    n < 3 && throw(ArgumentError(
-        "need at least 3 points to define a polygon, got $n"
-    ))
+    n < 3 && throw(
+        ArgumentError(
+            "need at least 3 points to define a polygon, got $n"
+        )
+    )
     # Signed area via shoelace formula — zero area indicates self-intersecting
     # (unordered) vertices or collinear points
     T = CoordRefSystems.mactype(C)
@@ -57,12 +59,14 @@ function _validate_polygon_ordering(pts::AbstractVector{<:Point{𝔼{2}, C}}) wh
     end
     sa /= 2
     bbox_area = (xmax - xmin) * (ymax - ymin)
-    if bbox_area > zero(T) && abs(sa) < T(1e-10) * bbox_area
-        throw(ArgumentError(
-            "polygon points do not appear to be ordered sequentially around the boundary; " *
-            "the 2D isinside winding number algorithm requires points ordered in a loop " *
-            "(clockwise or counter-clockwise)"
-        ))
+    if bbox_area > zero(T) && abs(sa) < T(1.0e-10) * bbox_area
+        throw(
+            ArgumentError(
+                "polygon points do not appear to be ordered sequentially around the boundary; " *
+                    "the 2D isinside winding number algorithm requires points ordered in a loop " *
+                    "(clockwise or counter-clockwise)"
+            )
+        )
     end
     return nothing
 end
