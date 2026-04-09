@@ -12,9 +12,20 @@ end
     @test hassurface(b, :surface1)
 end
 
-@testitem "PointBoundary source_mesh" setup = [TestData, CommonImports] begin
-    # TODO: has_source_mesh/source_mesh/NoMesh not yet implemented
-    @test_skip "has_source_mesh not yet implemented"
+@testitem "PointBoundary from SimpleMesh uses mesh normals" setup = [OctreeTestData, CommonImports] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+    b = PointBoundary(mesh)
+    @test length(b) == 12
+
+    norms = normal(b)
+    for n in norms
+        # Each normal should be axis-aligned (one component ≈ ±1, others ≈ 0)
+        sorted = sort(abs.(n))
+        @test sorted[1] < 0.01
+        @test sorted[2] < 0.01
+        @test isapprox(sorted[3], 1.0; atol = 0.01)
+    end
+    @test all(n -> isapprox(norm(n), 1.0; atol = 1e-10), norms)
 end
 
 @testitem "PointBoundary Base Methods" setup = [TestData, CommonImports] begin

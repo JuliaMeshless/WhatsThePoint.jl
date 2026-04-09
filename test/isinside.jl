@@ -48,6 +48,16 @@ end
     @test_throws MethodError isinside([0.5, 0.5], surf)
 end
 
+@testitem "isinside 2D throws on unordered points" setup = [TestData, CommonImports] begin
+    pts = Point.([(0, 0), (1, 1), (1, 0), (0, 1)])
+    @test_throws ArgumentError isinside(Point(0.5, 0.5), pts)
+end
+
+@testitem "isinside 2D throws on too few points" setup = [TestData, CommonImports] begin
+    pts = Point.([(0, 0), (1, 0)])
+    @test_throws ArgumentError isinside(Point(0.5, 0.5), pts)
+end
+
 @testitem "isinside 3D PointBoundary" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     @test isinside(Point(0.5, 0.5, 0.5), boundary)

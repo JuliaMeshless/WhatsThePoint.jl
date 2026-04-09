@@ -49,19 +49,21 @@ end
 
 """
     PointBoundary(mesh::SimpleMesh)
-Create a `PointBoundary` from a `SimpleMesh` 
-by taking the centroids of its elements as points, 
-and computing normals and areas accordingly.
 
-(IMPORTANT: does not use any fancy node sampling, 
-depends on the mesh's discretization, and is not guaranteed 
-to be a good representation of the original geometry. 
-Use with caution.)
+Create a `PointBoundary` from a `SimpleMesh` by taking the centroids of its
+elements as points, normals directly from mesh face geometry, and areas from
+`Meshes.area`.
+
+Note: depends on the mesh's discretization and is not guaranteed to be a good
+representation of the original geometry. Use with caution.
 """
 function PointBoundary(mesh::SimpleMesh)
     points = map(centroid, elements(mesh))
-    normals = compute_normals(points)
-    normals = map(x -> x / norm(x), normals) # normalize normals
+    normals = map(elements(mesh)) do elem
+        n = Meshes.normal(elem)
+        n_sv = SVector(ustrip(n[1]), ustrip(n[2]), ustrip(n[3]))
+        n_sv / norm(n_sv)
+    end
     areas = map(Meshes.area, elements(mesh))
     return PointBoundary(points, normals, areas)
 end

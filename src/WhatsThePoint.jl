@@ -23,7 +23,7 @@ using Unitful
 import Meshes: Manifold, Domain
 import Meshes: centroid, boundingbox, discretize, to, crs
 import Meshes: elements, nelements, lentype, normal, area
-# re-export from Meshes.jl
+# Point, coords, centroid, boundingbox from Meshes.jl; isinside and points defined locally
 export Point, coords, isinside, centroid, boundingbox, points
 export KNearestSearch, BallSearch, MetricBall, search, searchdists
 

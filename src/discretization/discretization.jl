@@ -25,6 +25,11 @@ boundary = PointBoundary(mesh)
 octree = TriangleOctree(mesh; min_ratio=1e-6)
 cloud = discretize(boundary, 3.0m; alg=SlakKosec(octree), max_points=100_000)
 ```
+
+!!! note
+    WhatsThePoint's `discretize` generates volume fill points from a boundary.
+    This differs from Meshes.jl's `discretize` which converts continuous geometry
+    into a mesh. No dispatch collision exists — argument types are distinct.
 """
 function discretize(
         bnd::PointBoundary{𝔼{3}},

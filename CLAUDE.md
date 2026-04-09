@@ -39,6 +39,7 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 
 - **Composition over inheritance:** Types build on each other (surfaces → boundary → cloud)
 - **Immutability:** PointSurface is immutable; PointCloud is mutable for iterative construction
+- **Mutation convention:** Geometry creation/transformation is functional (returns new objects). Metadata reorganization and derived-quantity recomputation (`split_surface!`, `orient_normals!`, `rebuild_topology!`) mutates in-place, indicated by `!`.
 - **StructArrays:** Surface elements stored as StructArray for cache-friendly memory layout
 - **Heavy parallelization:** Uses OhMyThreads (tmap, tmapreduce) throughout
 - **Full unit support:** Unitful.jl integrated across all operations
@@ -71,7 +72,7 @@ Four algorithms available with **important 2D vs 3D considerations:**
 - **SlakKosec** (3D only, default) - `algorithms/slak_kosec.jl`
 - **VanDerSandeFornberg** (3D only) - `algorithms/vandersande_fornberg.jl`
 - **FornbergFlyer** (2D only) - `algorithms/fornberg_flyer.jl`
-- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill
+- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill (this is a discretization *algorithm*; not to be confused with `TriangleOctree`, a spatial *data structure*)
 
 Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing
 

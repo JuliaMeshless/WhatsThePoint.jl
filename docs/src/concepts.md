@@ -48,7 +48,12 @@ cloud3 = repel(cloud2, spacing)
 
 This design ensures compatibility with automatic differentiation frameworks and prevents stale state — if points move, the old topology object simply isn't used.
 
-**Exceptions:** `split_surface!` and `combine_surfaces!` mutate a `PointBoundary`'s internal surface dictionary. These are in-place operations by convention (indicated by the `!` suffix) because they only reorganize existing surfaces without changing any point data.
+**Exceptions — mutating operations (indicated by `!` suffix):**
+- `split_surface!` and `combine_surfaces!` mutate a `PointBoundary`'s internal surface dictionary. These reorganize existing surfaces without changing any point data.
+- `rebuild_topology!` recomputes connectivity data in place for mutable topology types (`KNNTopology`, `RadiusTopology`), avoiding reallocation when only the spatial index needs refreshing.
+- `orient_normals!` and `update_normals!` mutate normal vectors in place for efficiency, since normal arrays can be large and reorientation is a pure numerical update.
+
+The pattern is: **geometry creation and transformation** (new point data) uses functional style; **metadata reorganization and derived-quantity recomputation** (normals, topology, surface labels) mutates in-place.
 
 ## Topology
 
