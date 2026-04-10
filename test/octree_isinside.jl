@@ -62,3 +62,41 @@ end
     results = isinside(points, octree)
     @test results == [true, false, true]
 end
+
+@testitem "isinside bbox check uses mesh bounds not octree bounds" setup = [CommonImports] begin
+    using Meshes: SimpleMesh, connect, Triangle, Point
+
+    # Regression test for bug where points far outside mesh bbox
+    # were incorrectly classified as inside because the octree's
+    # cubic bounding box was used instead of the actual mesh bbox.
+    #
+    # This 20×7×3 cuboid has a mesh bbox of ~[0,0,0]×[20,7,3],
+    # but the octree (which must be cubic) extends to ~[20.4,20.4,20.4].
+    # Points at z=10 and z=20 should be exterior (z >> 3).
+
+    vertices = Point.([
+        (0.0, 0.0, 0.0), (20.0, 0.0, 0.0), (20.0, 7.0, 0.0), (0.0, 7.0, 0.0),
+        (0.0, 0.0, 3.0), (20.0, 0.0, 3.0), (20.0, 7.0, 3.0), (0.0, 7.0, 3.0),
+    ])
+    triangles = [
+        connect((1, 3, 2), Triangle), connect((1, 4, 3), Triangle),
+        connect((5, 6, 7), Triangle), connect((5, 7, 8), Triangle),
+        connect((1, 2, 6), Triangle), connect((1, 6, 5), Triangle),
+        connect((3, 4, 8), Triangle), connect((3, 8, 7), Triangle),
+        connect((1, 5, 8), Triangle), connect((1, 8, 4), Triangle),
+        connect((2, 3, 7), Triangle), connect((2, 7, 6), Triangle),
+    ]
+    mesh = SimpleMesh(vertices, triangles)
+    octree = TriangleOctree(mesh; classify_leaves = true)
+
+    # Interior point
+    @test isinside(SVector(5.0, 3.5, 1.5), octree) == true
+
+    # Points far outside mesh bbox (z dimension)
+    @test isinside(SVector(5.0, 3.5, 10.0), octree) == false
+    @test isinside(SVector(5.0, 3.5, 20.0), octree) == false
+
+    # Points outside in other dimensions
+    @test isinside(SVector(25.0, 3.5, 1.5), octree) == false  # x > 20
+    @test isinside(SVector(5.0, 10.0, 1.5), octree) == false  # y > 7
+end

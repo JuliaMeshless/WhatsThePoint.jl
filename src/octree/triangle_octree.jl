@@ -5,6 +5,8 @@ struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
     tree::SpatialOctree{Int, T}
     mesh::SimpleMesh{M, C}
     leaf_classification::Union{Nothing, Vector{Int8}}
+    mesh_bbox_min::SVector{3, T}  # Actual mesh bounding box (not expanded octree bounds)
+    mesh_bbox_max::SVector{3, T}
 end
 
 const _BBOX_EXPANSION = 1.02
@@ -240,7 +242,10 @@ function TriangleOctree(
     balance_octree!(tree, criterion)
     classification = classify_leaves ? _classify_leaves(tree, mesh) : nothing
 
-    return TriangleOctree(tree, mesh, classification)
+    # Store actual mesh bounding box (not the expanded cubic octree bounds)
+    mesh_bbox_min, mesh_bbox_max = _compute_bbox(T, mesh)
+
+    return TriangleOctree(tree, mesh, classification, mesh_bbox_min, mesh_bbox_max)
 end
 
 function TriangleOctree(filepath::String; kwargs...)
@@ -444,8 +449,8 @@ num_triangles(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
 Fast interior/exterior test using octree spatial index.
 """
 function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
-    bbox_min, bbox_max = box_bounds(octree.tree, 1)
-    if any(point .< bbox_min) || any(point .> bbox_max)
+    # Use actual mesh bounding box, not expanded octree bounds
+    if any(point .< octree.mesh_bbox_min) || any(point .> octree.mesh_bbox_max)
         return false
     end
 
