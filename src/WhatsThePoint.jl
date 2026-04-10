@@ -23,7 +23,7 @@ using Unitful
 import Meshes: Manifold, Domain
 import Meshes: centroid, boundingbox, discretize, to, crs
 import Meshes: elements, nelements, lentype, normal, area
-# re-export from Meshes.jl
+# Point, coords, centroid, boundingbox from Meshes.jl; isinside and points defined locally
 export Point, coords, isinside, centroid, boundingbox, points
 export KNearestSearch, BallSearch, MetricBall, search, searchdists
 
@@ -44,7 +44,6 @@ include("octree/spacing_criterion.jl")
 export TriangleOctree, num_leaves, num_triangles, has_consistent_normals
 
 include("points.jl")
-export emptyspace
 
 include("shadow.jl")
 export ShadowPoints
@@ -56,7 +55,7 @@ export neighbors, hastopology, set_topology, rebuild_topology!
 
 include("surface.jl")
 export AbstractSurface, PointSurface, SurfaceElement
-export point, normal, area
+export normal, area
 
 include("volume.jl")
 export PointVolume
@@ -91,7 +90,7 @@ export repel
 include("metrics.jl")
 
 include("io.jl")
-export import_surface, export_cloud, visualize, save
+export import_surface, visualize, save
 
 # visualize function is defined in WhatsThePointMakieExt when Makie is loaded
 function visualize end

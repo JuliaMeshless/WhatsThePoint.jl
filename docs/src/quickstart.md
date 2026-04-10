@@ -27,7 +27,7 @@ spacing = ConstantSpacing(1mm)
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg())
 
 # 4. Optimize point distribution
-cloud, convergence = repel(cloud, spacing)
+cloud = repel(cloud, spacing)
 
 # 5. Build neighbor connectivity
 cloud = set_topology(cloud, KNNTopology, 21)
@@ -50,7 +50,7 @@ spacing = ConstantSpacing(0.05m)
 cloud = discretize(boundary, spacing; alg=FornbergFlyer())
 
 # 3. Optimize and connect
-cloud, convergence = repel(cloud, spacing)
+cloud = repel(cloud, spacing)
 cloud = set_topology(cloud, KNNTopology, 9)
 ```
 

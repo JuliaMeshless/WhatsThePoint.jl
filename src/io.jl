@@ -20,13 +20,88 @@ function import_surface(filepath::String)
 end
 
 """
-    export_cloud(filename::String, cloud::PointCloud)
+    save(filename::String, cloud::PointCloud; format=:jld2)
 
-Export a point cloud to VTK format. The output file contains boundary point coordinates and
-normal vectors.
+Save a point cloud to a file.
+
+- `format=:jld2` (default): Serialize via FileIO.jl.
+- `format=:vtk`: Export to VTK format with boundary and volume points, normals, and a
+  point type indicator (`1` = boundary, `2` = volume).
 """
-function export_cloud(filename::String, cloud::PointCloud)
-    exportvtk(filename, to(boundary(cloud)), [normal(cloud)], ["normals"])
+function FileIO.save(filename::String, cloud::PointCloud; format::Symbol = :jld2)
+    if format === :jld2
+        return FileIO.save(filename, LittleDict("cloud" => cloud))
+    elseif format === :vtk
+        _save_vtk_cloud(filename, cloud)
+    else
+        throw(ArgumentError("unsupported format: $format. Use :jld2 or :vtk."))
+    end
+    return nothing
+end
+
+function _save_vtk_cloud(filename::String, cloud::PointCloud)
+    bnd_pts = to(boundary(cloud))
+    vol_pts = length(volume(cloud)) > 0 ? to(volume(cloud)) : eltype(bnd_pts)[]
+    all_pts = vcat(bnd_pts, vol_pts)
+
+    nbnd = length(bnd_pts)
+    nvol = length(vol_pts)
+
+    # type indicator: 1 = boundary, 2 = volume
+    point_type = vcat(ones(Int, nbnd), fill(2, nvol))
+
+    # normals: boundary has normals, volume gets zeros
+    bnd_normals = normal(boundary(cloud))
+    zero_normal = zero(first(bnd_normals))
+    vol_normals = fill(zero_normal, nvol)
+    all_normals = vcat(bnd_normals, vol_normals)
+
+    exportvtk(
+        filename, all_pts,
+        [all_normals, point_type],
+        ["normals", "point_type"],
+    )
+    return nothing
+end
+
+"""
+    save(filename::String, boundary::PointBoundary; format=:jld2)
+
+Save a boundary to a file.
+
+- `format=:jld2` (default): Serialize via FileIO.jl.
+- `format=:vtk`: Export to VTK format with boundary points and normals.
+"""
+function FileIO.save(filename::String, bnd::PointBoundary; format::Symbol = :jld2)
+    if format === :jld2
+        return FileIO.save(filename, LittleDict("boundary" => bnd))
+    elseif format === :vtk
+        exportvtk(filename, to(bnd), [normal(bnd)], ["normals"])
+    else
+        throw(ArgumentError("unsupported format: $format. Use :jld2 or :vtk."))
+    end
+    return nothing
+end
+
+"""
+    save(filename::String, surf::PointSurface; format=:jld2)
+
+Save a surface to a file.
+
+- `format=:jld2` (default): Serialize via FileIO.jl.
+- `format=:vtk`: Export to VTK format with surface points, normals, and areas.
+"""
+function FileIO.save(filename::String, surf::PointSurface; format::Symbol = :jld2)
+    if format === :jld2
+        return FileIO.save(filename, LittleDict("surface" => surf))
+    elseif format === :vtk
+        a = area(surf)
+        data = isnothing(a) ? [normal(surf)] : [normal(surf), ustrip.(a)]
+        names = isnothing(a) ? ["normals"] : ["normals", "areas"]
+        exportvtk(filename, to(surf), data, names)
+    else
+        throw(ArgumentError("unsupported format: $format. Use :jld2 or :vtk."))
+    end
     return nothing
 end
 
@@ -68,13 +143,4 @@ _hcat_data(data::AbstractVector) = reduce(hcat, data)
 
 function savevtk!(vtkfile)
     return vtk_save(vtkfile)
-end
-
-"""
-    save(filename::String, cloud::PointCloud)
-
-Save a point cloud to a file using FileIO.jl serialization.
-"""
-function FileIO.save(filename::String, cloud::PointCloud)
-    return save(filename, LittleDict("cloud" => cloud))
 end

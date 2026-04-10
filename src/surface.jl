@@ -101,13 +101,13 @@ end
 """
     points(surf::PointSurface)
 
-Return vector of points from surface. Alias for `point(surf)`.
+Return vector of point coordinates for all surface elements.
 """
-points(surf::PointSurface) = point(surf)
+points(surf::PointSurface) = parent(surf).point
 Meshes.elements(surf::PointSurface) = (elem for elem in parent(surf))
 Meshes.nelements(surf::PointSurface) = length(parent(surf))
-Meshes.centroid(surf::PointSurface) = centroid(point(surf))
-Meshes.boundingbox(surf::PointSurface) = boundingbox(point(surf))
+Meshes.centroid(surf::PointSurface) = centroid(points(surf))
+Meshes.boundingbox(surf::PointSurface) = boundingbox(points(surf))
 
 ChunkSplitters.is_chunkable(::PointSurface) = true
 
@@ -115,13 +115,6 @@ Base.view(surf::PointSurface, range::UnitRange) = view(parent(surf), range)
 Base.view(surf::PointSurface, range::StepRange) = view(parent(surf), range)
 
 to(surf::PointSurface) = to.(parent(surf).point)
-
-"""
-    point(surf::PointSurface)
-
-Return the vector of point coordinates for all surface elements.
-"""
-point(surf::PointSurface) = parent(surf).point
 
 """
     normal(surf::PointSurface)
@@ -176,7 +169,7 @@ function set_topology(surf::PointSurface, ::Type{KNNTopology}, k::Int)
     adj = _build_knn_neighbors(pts, k)
     topo = KNNTopology(adj, k)
     return PointSurface(
-        point(surf),
+        points(surf),
         normal(surf),
         area(surf);
         topology = topo,
@@ -193,7 +186,7 @@ function set_topology(surf::PointSurface, ::Type{RadiusTopology}, radius)
     adj = _build_radius_neighbors(pts, radius)
     topo = RadiusTopology(adj, radius)
     return PointSurface(
-        point(surf),
+        points(surf),
         normal(surf),
         area(surf);
         topology = topo,

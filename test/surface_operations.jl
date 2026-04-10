@@ -7,11 +7,11 @@
     surf2 = PointSurface(points2)
     @test_nowarn b[:newsurface] = surf2
     @test hassurface(b, :newsurface)
-    @test point(b[:newsurface]) == points2
+    @test points(b[:newsurface]) == points2
 
     @test_throws ArgumentError b[:newsurface] = surf2
 
-    @test point(b[:surface1]) == points1
+    @test points(b[:surface1]) == points1
 end
 
 @testitem "combine_surfaces!" setup = [TestData, CommonImports] begin

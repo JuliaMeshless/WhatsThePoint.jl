@@ -114,7 +114,30 @@ function _box_may_contain_interior(node_tree, box_idx, triangle_octree)
     for pt in (center, corners...)
         _mesh_geometry_query(pt, tol, triangle_octree) != LEAF_EXTERIOR && return true
     end
+
+    # Point sampling can miss thin/elongated domains inside large cubic boxes.
+    # Fall back to checking whether any non-exterior triangle-octree leaf overlaps this box.
+    tri_tree = triangle_octree.tree
+    tri_cls = triangle_octree.leaf_classification
+    if !isnothing(tri_cls)
+        for leaf_idx in all_leaves(tri_tree)
+            tri_cls[leaf_idx] == LEAF_EXTERIOR && continue
+            leaf_min, leaf_max = box_bounds(tri_tree, leaf_idx)
+            if _boxes_overlap(bbox_min, bbox_max, leaf_min, leaf_max)
+                return true
+            end
+        end
+    end
+
     return false
+end
+
+@inline function _boxes_overlap(a_min, a_max, b_min, b_max)
+    @inbounds for d in 1:3
+        a_min[d] > b_max[d] && return false
+        a_max[d] < b_min[d] && return false
+    end
+    return true
 end
 
 function _subdivide_node_octree!(node_tree, box_idx, criterion, triangle_octree)

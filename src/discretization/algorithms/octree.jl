@@ -6,6 +6,11 @@ Spacing-driven volume discretization algorithm.
 **Note:** This is not solution-adaptive (AMR). Refinement is determined a priori
 by a prescribed spacing function, not by computed solution features.
 
+!!! note
+    `Octree` is a **discretization algorithm** that generates volume fill points.
+    [`TriangleOctree`](@ref) is a separate **spatial data structure** used internally
+    for mesh geometry queries. They serve different purposes.
+
 # Algorithm
 Uses dual octrees internally:
 - **Triangle octree**: Captures geometry (surfaces, curvature)

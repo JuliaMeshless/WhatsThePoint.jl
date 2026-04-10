@@ -1,20 +1,20 @@
 @testitem "PointSurface Constructors" setup = [TestData, CommonImports] begin
-    points = rand(Point, 10)
+    pts = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
-    geoms = StructArray{SurfaceElement}((points, normals, areas))
+    geoms = StructArray{SurfaceElement}((pts, normals, areas))
     surf = PointSurface(geoms, NoTopology())
 
-    surf = PointSurface(points, normals, areas)
+    surf = PointSurface(pts, normals, areas)
     @test length(surf) == 10
     @test surf.geoms isa StructVector
 
-    surf = PointSurface(points, normals)
+    surf = PointSurface(pts, normals)
     @test length(surf) == 10
     @test surf.geoms isa StructVector
 
-    surf = PointSurface(points)
+    surf = PointSurface(pts)
     @test length(surf) == 10
     @test surf.geoms isa StructVector
 
@@ -23,16 +23,16 @@
     @test surf.geoms isa StructVector
 
     # Test constructor from SubDomain (view of a Domain)
-    domain = PointSet(points)
+    domain = PointSet(pts)
     subdomain = view(domain, 1:5)
     surf_from_subdomain = PointSurface(subdomain, normals[1:5], areas[1:5])
     @test length(surf_from_subdomain) == 5
-    @test point(surf_from_subdomain) == points[1:5]
+    @test points(surf_from_subdomain) == pts[1:5]
 
     # Test _get_underlying_vector with AbstractVector passthrough
-    surf_from_vec = PointSurface(points, normals, areas)
+    surf_from_vec = PointSurface(pts, normals, areas)
     @test length(surf_from_vec) == 10
-    @test point(surf_from_vec) == points
+    @test points(surf_from_vec) == pts
 end
 
 @testitem "SurfaceElement Constructors" setup = [TestData, CommonImports] begin
@@ -56,24 +56,24 @@ end
 end
 
 @testitem "PointSurface Properties" setup = [TestData, CommonImports] begin
-    points = rand(Point, 10)
+    pts = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
-    surf = PointSurface(points, normals, areas)
+    surf = PointSurface(pts, normals, areas)
     @test to(surf) == to.(surf.geoms.point)
-    @test point(surf) == surf.geoms.point
+    @test points(surf) == surf.geoms.point
     @test normal(surf) == surf.geoms.normal
     @test area(surf) == surf.geoms.area
     @test parent(surf) == surf.geoms
 end
 
 @testitem "PointSurface Base Methods" setup = [TestData, CommonImports] begin
-    points = rand(Point, 10)
+    pts = rand(Point, 10)
     normals = [Vec(rand(3)...) for _ in 1:10]
     areas = rand(10) * m^2
 
-    surf = PointSurface(points, normals, areas)
+    surf = PointSurface(pts, normals, areas)
     @test length(surf) == 10
     @test firstindex(surf) == 1
     @test lastindex(surf) == 10
@@ -91,7 +91,7 @@ end
     surf = PointSurface(pts_data, normals, areas)
 
     pts = points(surf)
-    @test pts == point(surf)
+    @test pts == parent(surf).point
     @test length(pts) == 10
 
     @test collect(Meshes.elements(surf)) == collect(surf.geoms)

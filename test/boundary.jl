@@ -3,7 +3,7 @@
     pts = rand(Point, N)
     b = PointBoundary(pts)
     @test all(points(b) .== pts)
-    @test point(b[:surface1]) == pts
+    @test points(b[:surface1]) == pts
 end
 
 @testitem "PointBoundary from file" setup = [TestData, CommonImports] begin
@@ -12,9 +12,20 @@ end
     @test hassurface(b, :surface1)
 end
 
-@testitem "PointBoundary source_mesh" setup = [TestData, CommonImports] begin
-    # TODO: has_source_mesh/source_mesh/NoMesh not yet implemented
-    @test_skip "has_source_mesh not yet implemented"
+@testitem "PointBoundary from SimpleMesh uses mesh normals" setup = [OctreeTestData, CommonImports] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+    b = PointBoundary(mesh)
+    @test length(b) == 12
+
+    norms = normal(b)
+    for n in norms
+        # Each normal should be axis-aligned (one component ≈ ±1, others ≈ 0)
+        sorted = sort(abs.(n))
+        @test sorted[1] < 0.01
+        @test sorted[2] < 0.01
+        @test isapprox(sorted[3], 1.0; atol = 0.01)
+    end
+    @test all(n -> isapprox(norm(n), 1.0; atol = 1.0e-10), norms)
 end
 
 @testitem "PointBoundary Base Methods" setup = [TestData, CommonImports] begin
@@ -27,22 +38,22 @@ end
     @test_throws BoundsError b[N + 1]
     @test_throws BoundsError b[N + 100]
 
-    points = rand(Point, N)
-    surf = PointSurface(points)
+    pts2 = rand(Point, N)
+    surf = PointSurface(pts2)
     @test_throws ArgumentError b[:surface1] = surf
     b[:surface2] = surf
     @test b[:surface2] == surf
 
     # Test indexing across multiple surfaces (exercises offset += length(surf))
     @test b[N + 1] isa Point  # Access first element of surface2
-    @test b[N + 1] == point(surf)[1]  # Verify correct value via offset
+    @test b[N + 1] == points(surf)[1]  # Verify correct value via offset
     @test b[N + 5] isa Point  # Access later element in surface2
 
     @testset "iterate" begin
-        points = rand(Point, N)
-        b = PointBoundary(points)
+        iter_pts = rand(Point, N)
+        b = PointBoundary(iter_pts)
         for (i, p) in enumerate(b)
-            @test p == points[i]
+            @test p == iter_pts[i]
         end
     end
 end
@@ -56,7 +67,7 @@ end
     surf2 = PointSurface(points2)
     @test_nowarn b[:newsurface] = surf2
     @test hassurface(b, :newsurface)
-    @test point(b[:newsurface]) == points2
+    @test points(b[:newsurface]) == points2
 
     @test_throws ArgumentError b[:newsurface] = surf2
 end

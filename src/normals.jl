@@ -8,8 +8,8 @@ Requires Euclidean manifold (`𝔼{2}` or `𝔼{3}`). This function assumes flat
 """
 function compute_normals(surf::PointSurface{𝔼{N}, C}; k::Int = 5) where {N, C <: CRS}
     k = k > length(surf) ? length(surf) : k
-    points = point(surf)
-    return compute_normals(points; k = k)
+    pts = points(surf)
+    return compute_normals(pts; k = k)
 end
 
 function compute_normals(points::AbstractVector{<:Point{𝔼{N}}}; k::Int = 5) where {N}
@@ -31,7 +31,7 @@ function compute_normals(
         search_method::KNearestSearch,
         surf::PointSurface{𝔼{N}, C},
     ) where {N, C <: CRS}
-    return compute_normals(search_method, point(surf))
+    return compute_normals(search_method, points(surf))
 end
 
 function compute_normals(
@@ -55,8 +55,8 @@ function update_normals!(surf::PointSurface{𝔼{N}, C}; k::Int = 5) where {N, C
     k = k > length(surf) ? length(surf) : k
     neighbors = search(surf, KNearestSearch(surf, k))
     normals = normal(surf)
-    points = point(surf)
-    return tmap!(n -> _compute_normal(points[n]), normals, neighbors)
+    pts = points(surf)
+    return tmap!(n -> _compute_normal(pts[n]), normals, neighbors)
 end
 
 function _compute_normal(points::AbstractVector{<:Point{𝔼{N}}}) where {N}
@@ -137,7 +137,7 @@ end
 
 function orient_normals!(surf::PointSurface{𝔼{N}, C}; k::Int = 5) where {N, C <: CRS}
     k = k > length(surf) ? length(surf) : k
-    return orient_normals!(normal(surf), point(surf); k = k)
+    return orient_normals!(normal(surf), points(surf); k = k)
 end
 
 function orient_normals!(cloud::PointCloud{𝔼{N}, C}; k::Int = 5) where {N, C <: CRS}

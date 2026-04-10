@@ -11,10 +11,14 @@ Meshless PDE methods (RBF-FD, generalized finite differences) are sensitive to p
 ## Usage
 
 ```julia
-cloud, convergence = repel(cloud, spacing; β=0.2, max_iters=1000)
+cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
+
+# Collect convergence history via keyword
+conv = Float64[]
+cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 ```
 
-[`repel`](@ref) returns a tuple of `(new_cloud, convergence_vector)`. The new cloud has [`NoTopology`](@ref) since points have moved — call [`set_topology`](@ref) again after repulsion.
+[`repel`](@ref) returns a new cloud with [`NoTopology`](@ref) since points have moved — call [`set_topology`](@ref) again after repulsion. Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
 
 !!! note "Boundary points are fixed"
     Only volume (interior) points are moved during repulsion. Boundary points remain in place to preserve the original surface geometry.
@@ -61,7 +65,8 @@ where `r` is the distance to a neighbor. The `β` parameter prevents singularity
 The convergence vector records the maximum relative point displacement at each iteration:
 
 ```julia
-cloud, conv = repel(cloud, spacing; β=0.2, max_iters=500)
+conv = Float64[]
+cloud = repel(cloud, spacing; β=0.2, max_iters=500, convergence=conv)
 
 # Check if converged
 println("Final displacement: ", conv[end])
@@ -81,7 +86,7 @@ Use `metrics` to quantify the point distribution before and after repulsion:
 metrics(cloud)
 
 # After repulsion
-cloud_repelled, conv = repel(cloud, spacing)
+cloud_repelled = repel(cloud, spacing)
 metrics(cloud_repelled)
 ```
 

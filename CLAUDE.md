@@ -39,6 +39,7 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 
 - **Composition over inheritance:** Types build on each other (surfaces → boundary → cloud)
 - **Immutability:** PointSurface is immutable; PointCloud is mutable for iterative construction
+- **Mutation convention:** Geometry creation/transformation is functional (returns new objects). Metadata reorganization and derived-quantity recomputation (`split_surface!`, `orient_normals!`, `rebuild_topology!`) mutates in-place, indicated by `!`.
 - **StructArrays:** Surface elements stored as StructArray for cache-friendly memory layout
 - **Heavy parallelization:** Uses OhMyThreads (tmap, tmapreduce) throughout
 - **Full unit support:** Unitful.jl integrated across all operations
@@ -71,7 +72,7 @@ Four algorithms available with **important 2D vs 3D considerations:**
 - **SlakKosec** (3D only, default) - `algorithms/slak_kosec.jl`
 - **VanDerSandeFornberg** (3D only) - `algorithms/vandersande_fornberg.jl`
 - **FornbergFlyer** (2D only) - `algorithms/fornberg_flyer.jl`
-- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill
+- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill (this is a discretization *algorithm*; not to be confused with `TriangleOctree`, a spatial *data structure*)
 
 Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing
 
@@ -192,11 +193,14 @@ split_surface!(boundary, 75°)
 ### Node Repulsion Optimization
 
 ```julia
-# Optimize point distribution (returns tuple)
-cloud, convergence = repel(cloud, spacing; β=0.2, max_iters=1000)
+# Optimize point distribution
+cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
+
+# Collect convergence history via keyword
+conv = Float64[]
+cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 
 # β controls repulsion strength
-# Returns (new_cloud, convergence_vector) tuple
 # New cloud has NoTopology since points moved
 ```
 
@@ -218,10 +222,10 @@ visualize(boundary; markersize=0.15)
 - `split_surface!` - Split boundary surfaces by normal angle threshold
 - `combine_surfaces!` - Merge multiple surfaces into one
 - `compute_normals` / `orient_normals!` - Normal vector handling
-- `repel` - Optimize point distribution via node repulsion (returns new cloud, convergence)
+- `repel` - Optimize point distribution via node repulsion (returns new cloud)
 - `isinside` - Test if point is inside domain
 - `import_surface` - Load from STL/mesh files (via GeoIO.jl)
-- `export_cloud` - Save to VTK format
+- `save` - Save to file (`:jld2` default, or `:vtk` format)
 - `visualize` - Makie-based visualization
 - `set_topology` - Build point connectivity and return new object
 - `rebuild_topology!` - Rebuild topology in place with same parameters

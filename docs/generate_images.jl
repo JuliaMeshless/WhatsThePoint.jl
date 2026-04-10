@@ -106,7 +106,7 @@ function generate_repel_comparison()
     spacing = WTP.ConstantSpacing((dx / 60) * m)
     cloud_before = WTP.discretize(boundary, spacing; alg = WTP.FornbergFlyer())
 
-    cloud_after, convergence = WTP.repel(cloud_before, spacing; max_iters = 500)
+    cloud_after = WTP.repel(cloud_before, spacing; max_iters = 500)
 
     fig = Figure(; size = (1400, 600))
 

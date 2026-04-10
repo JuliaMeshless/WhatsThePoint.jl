@@ -15,13 +15,36 @@
     @test all(a -> Unitful.ustrip(a) > 0, areas)
 end
 
-@testitem "export_cloud" setup = [TestData, CommonImports] begin
+@testitem "save VTK cloud" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     cloud = PointCloud(boundary)
 
     mktempdir() do tmpdir
         filename = joinpath(tmpdir, "test_export")
-        export_cloud(filename, cloud)
+        save(filename, cloud; format = :vtk)
+
+        @test isfile(filename * ".vtu")
+    end
+end
+
+@testitem "save VTK boundary" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+
+    mktempdir() do tmpdir
+        filename = joinpath(tmpdir, "test_boundary")
+        save(filename, boundary; format = :vtk)
+
+        @test isfile(filename * ".vtu")
+    end
+end
+
+@testitem "save VTK surface" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    surf = boundary[:surface1]
+
+    mktempdir() do tmpdir
+        filename = joinpath(tmpdir, "test_surface")
+        save(filename, surf; format = :vtk)
 
         @test isfile(filename * ".vtu")
     end
@@ -53,11 +76,11 @@ end
         original_length = length(cloud)
 
         vtk_filename = joinpath(tmpdir, "roundtrip_test")
-        export_cloud(vtk_filename, cloud)
+        save(vtk_filename, cloud; format = :vtk)
         @test isfile(vtk_filename * ".vtu")
 
         jld2_filename = joinpath(tmpdir, "roundtrip_test.jld2")
-        FileIO.save(jld2_filename, cloud)
+        save(jld2_filename, cloud)
         @test isfile(jld2_filename)
 
         loaded = FileIO.load(jld2_filename)
