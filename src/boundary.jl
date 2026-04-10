@@ -61,8 +61,7 @@ function PointBoundary(mesh::SimpleMesh)
     points = map(centroid, elements(mesh))
     normals = map(elements(mesh)) do elem
         n = Meshes.normal(elem)
-        n_sv = SVector(ustrip(n[1]), ustrip(n[2]), ustrip(n[3]))
-        n_sv / norm(n_sv)
+        SVector(ustrip(n[1]), ustrip(n[2]), ustrip(n[3]))
     end
     areas = map(Meshes.area, elements(mesh))
     return PointBoundary(points, normals, areas)
