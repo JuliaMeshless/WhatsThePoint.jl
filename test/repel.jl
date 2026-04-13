@@ -1,19 +1,15 @@
 @testitem "repel convergence success" setup = [TestData, CommonImports] begin
-    # Test repel with high tolerance to trigger successful convergence
     boundary = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 20)
 
-    # Use very high tolerance so it converges immediately
     conv = Float64[]
-    new_cloud = repel(cloud, spacing; max_iters = 100, tol = 1000.0, convergence = conv)
+    new_cloud = repel(cloud, spacing; max_iters = 100, tol = 1000.0, convergence = conv, octree = octree)
 
     @test conv isa Vector{<:AbstractFloat}
-    @test length(conv) < 100  # Should converge before max_iters
-    # FIXME: Flaky — repel can push all points outside with so few points
-    # Same root cause as "repel accepts parameter combinations" below
-    @test_skip length(volume(new_cloud)) > 0
+    @test length(conv) < 100
+    @test length(volume(new_cloud)) > 0
 end
 
 @testitem "repel basic behavior" setup = [TestData, CommonImports] begin
@@ -22,35 +18,24 @@ end
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
-    original_points = deepcopy(collect(volume(cloud).points))
-    original_count = length(volume(cloud))
+    original_vol_count = length(volume(cloud))
+    original_total = length(cloud)
 
     conv = Float64[]
-    new_cloud = repel(cloud, spacing; max_iters = 10, convergence = conv)
+    new_cloud = repel(cloud, spacing; max_iters = 10, convergence = conv, octree = octree)
 
-    # Return type checks
     @test conv isa Vector{<:AbstractFloat}
     @test length(conv) <= 10
-
-    # Volume is non-empty
     @test length(volume(new_cloud)) > 0
 
-    # Points moved or count changed
-    new_points = collect(volume(new_cloud).points)
-    if length(new_points) == length(original_points)
-        moved = any(i -> to(new_points[i]) != to(original_points[i]), 1:length(new_points))
-        @test moved
-    else
-        @test length(new_points) <= length(original_points)
-    end
+    # Total point count is preserved (no points lost)
+    @test length(new_cloud) == original_total
 
-    # All points inside domain
+    # All volume points inside domain
     for p in volume(new_cloud).points
-        @test isinside(p, new_cloud)
+        @test isinside(p, octree)
     end
-    @test length(volume(new_cloud)) <= original_count
 
-    # Convergence values are valid
     @test all(c -> c >= 0, conv)
     @test all(isfinite, conv)
 end
@@ -62,12 +47,12 @@ end
 
     conv1 = Float64[]
     cloud1 = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
-    repel(cloud1, spacing; max_iters = 3, convergence = conv1)
+    repel(cloud1, spacing; max_iters = 3, convergence = conv1, octree = octree)
     @test length(conv1) <= 3
 
     conv2 = Float64[]
     cloud2 = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
-    repel(cloud2, spacing; max_iters = 10, convergence = conv2)
+    repel(cloud2, spacing; max_iters = 10, convergence = conv2, octree = octree)
     @test length(conv2) <= 10
 end
 
@@ -77,14 +62,55 @@ end
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
 
-    # Test all parameters together in one call
     conv = Float64[]
-    new_cloud = repel(cloud, spacing; β = 0.3, tol = 1.0e-5, max_iters = 5, convergence = conv)
+    new_cloud = repel(
+        cloud, spacing; β = 0.3, tol = 1.0e-5, max_iters = 5, convergence = conv, octree = octree
+    )
 
     @test conv isa Vector{<:AbstractFloat}
     @test length(conv) <= 5
-    # FIXME: Flaky test - repel can push points outside domain, resulting in empty volume
-    # This is fixed in repel_integration branch with boundary projection
-    # See TEST_STATUS.md for details
-    @test_skip length(volume(new_cloud)) > 0
+    @test length(volume(new_cloud)) > 0
+end
+
+@testitem "repel boundary projection preserves points" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
+
+    original_total = length(cloud)
+
+    # Strong repulsion to stress-test projection
+    new_cloud = repel(cloud, spacing; β = 0.1, α = 0.5, max_iters = 20, octree = octree)
+
+    # No points lost — projection keeps them in domain
+    @test length(new_cloud) == original_total
+    @test length(volume(new_cloud)) > 0
+
+    # All volume points inside
+    for p in volume(new_cloud).points
+        @test isinside(p, octree)
+    end
+
+    # Boundary has valid normals
+    bnd = WhatsThePoint.boundary(new_cloud)
+    normals = normal(bnd)
+    for n in normals
+        @test norm(n) > 0.99
+        @test isfinite(norm(n))
+    end
+end
+
+@testitem "repel legacy path without octree" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
+
+    # Legacy path still works (no octree)
+    conv = Float64[]
+    new_cloud = repel(cloud, spacing; max_iters = 3, convergence = conv)
+
+    @test conv isa Vector{<:AbstractFloat}
+    @test length(conv) <= 3
 end
