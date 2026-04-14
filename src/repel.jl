@@ -169,13 +169,9 @@ function _repel_projected(
             )
             tri_indices[id] = tri_idx
 
-            if tri_idx > 0
-                return Point(
-                    sv_result[1] * len_unit, sv_result[2] * len_unit, sv_result[3] * len_unit
-                )
-            else
-                return x_proposed
-            end
+            return Point(
+                sv_result[1] * len_unit, sv_result[2] * len_unit, sv_result[3] * len_unit
+            )
         end
 
         push!(conv, convergence_fn(p, p_old))
@@ -214,21 +210,14 @@ function _reconstruct_cloud(
     new_vol_pts = Point{𝔼{3}, C}[]
 
     for id in 1:npoints_total
-        was_boundary = id <= n_boundary
-        was_projected = tri_indices[id] > 0
-
-        if was_boundary || was_projected
+        if id <= n_boundary
             push!(new_bnd_pts, p[id])
             if tri_indices[id] > 0
                 push!(new_bnd_normals, _get_triangle_normal(Float64, octree.mesh, tri_indices[id]))
             else
                 push!(new_bnd_normals, orig_normals[id])
             end
-            if was_boundary
-                push!(new_bnd_areas, orig_areas[id])
-            else
-                push!(new_bnd_areas, mean_area)
-            end
+            push!(new_bnd_areas, orig_areas[id])
         else
             push!(new_vol_pts, p[id])
         end
@@ -266,14 +255,10 @@ function _constrain_to_domain(
         if tri_idx > 0
             return (sv_result, tri_idx)
         end
-        # Projection failed — try projecting from original position
         return _project_to_boundary(sv_original, octree, offset_dist)
     end
     if isinside(sv_proposed, octree)
         return (sv_proposed, 0)
     end
-    # Escaped — project back, fall back to original if projection fails
-    sv_result, tri_idx = _project_to_boundary(sv_proposed, octree, offset_dist)
-    tri_idx > 0 && return (sv_result, tri_idx)
     return (sv_original, 0)
 end
