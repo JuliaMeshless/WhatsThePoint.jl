@@ -74,10 +74,12 @@ end
     # but the octree (which must be cubic) extends to ~[20.4,20.4,20.4].
     # Points at z=10 and z=20 should be exterior (z >> 3).
 
-    vertices = Point.([
-        (0.0, 0.0, 0.0), (20.0, 0.0, 0.0), (20.0, 7.0, 0.0), (0.0, 7.0, 0.0),
-        (0.0, 0.0, 3.0), (20.0, 0.0, 3.0), (20.0, 7.0, 3.0), (0.0, 7.0, 3.0),
-    ])
+    vertices = Point.(
+        [
+            (0.0, 0.0, 0.0), (20.0, 0.0, 0.0), (20.0, 7.0, 0.0), (0.0, 7.0, 0.0),
+            (0.0, 0.0, 3.0), (20.0, 0.0, 3.0), (20.0, 7.0, 3.0), (0.0, 7.0, 3.0),
+        ]
+    )
     triangles = [
         connect((1, 3, 2), Triangle), connect((1, 4, 3), Triangle),
         connect((5, 6, 7), Triangle), connect((5, 7, 8), Triangle),
