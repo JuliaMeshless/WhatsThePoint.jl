@@ -5,7 +5,7 @@
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 20)
 
     conv = Float64[]
-    new_cloud = repel(cloud, spacing; max_iters = 100, tol = 1000.0, convergence = conv, octree = octree)
+    new_cloud = repel(cloud, spacing, octree; max_iters = 100, tol = 1000.0, convergence = conv)
 
     @test conv isa Vector{<:AbstractFloat}
     @test length(conv) < 100
@@ -22,7 +22,7 @@ end
     original_total = length(cloud)
 
     conv = Float64[]
-    new_cloud = repel(cloud, spacing; max_iters = 10, convergence = conv, octree = octree)
+    new_cloud = repel(cloud, spacing, octree; max_iters = 10, convergence = conv)
 
     @test conv isa Vector{<:AbstractFloat}
     @test length(conv) <= 10
@@ -47,12 +47,12 @@ end
 
     conv1 = Float64[]
     cloud1 = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
-    repel(cloud1, spacing; max_iters = 3, convergence = conv1, octree = octree)
+    repel(cloud1, spacing, octree; max_iters = 3, convergence = conv1)
     @test length(conv1) <= 3
 
     conv2 = Float64[]
     cloud2 = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
-    repel(cloud2, spacing; max_iters = 10, convergence = conv2, octree = octree)
+    repel(cloud2, spacing, octree; max_iters = 10, convergence = conv2)
     @test length(conv2) <= 10
 end
 
@@ -64,7 +64,7 @@ end
 
     conv = Float64[]
     new_cloud = repel(
-        cloud, spacing; β = 0.3, tol = 1.0e-5, max_iters = 5, convergence = conv, octree = octree
+        cloud, spacing, octree; β = 0.3, tol = 1.0e-5, max_iters = 5, convergence = conv
     )
 
     @test conv isa Vector{<:AbstractFloat}
@@ -81,7 +81,7 @@ end
     original_total = length(cloud)
 
     # Strong repulsion to stress-test projection
-    new_cloud = repel(cloud, spacing; β = 0.1, α = 0.5, max_iters = 20, octree = octree)
+    new_cloud = repel(cloud, spacing, octree; β = 0.1, α = 0.5, max_iters = 20)
 
     # No points lost — projection keeps them in domain
     @test length(new_cloud) == original_total
@@ -101,13 +101,12 @@ end
     end
 end
 
-@testitem "repel legacy path without octree" setup = [TestData, CommonImports] begin
+@testitem "repel without octree" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
-    # Legacy path still works (no octree)
     conv = Float64[]
     new_cloud = repel(cloud, spacing; max_iters = 3, convergence = conv)
 

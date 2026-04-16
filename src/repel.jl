@@ -1,24 +1,12 @@
 """
-    repel(cloud::PointCloud, spacing; β=0.2, α=auto, k=21, max_iters=1000, tol=1e-6, convergence=nothing, octree=nothing)
+    repel(cloud::PointCloud, spacing; β=0.2, α=auto, k=21, max_iters=1000, tol=1e-6, convergence=nothing)
 
 Optimize point distribution via node repulsion (Miotti 2023).
+Only volume points move; escaped points are discarded via `isinside` filtering.
 
 The returned cloud has `NoTopology` since points have moved.
 
 Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
-
-# Boundary Projection (requires `octree`)
-
-When `octree` is provided, all points (boundary and volume) participate in repulsion.
-Points that escape the domain are projected back to the nearest mesh triangle.
-Boundary points are always projected back to the surface after each iteration.
-
-Without `octree`, the legacy behavior is used: only volume points move, and escaped
-points are discarded via `isinside` filtering. This can cause volume depletion.
-
-After repel with `octree`, the boundary is returned as a single unified surface named
-`:boundary`. Use `split_surface!(cloud.boundary, angle)` to re-establish surface
-distinctions if needed.
 """
 function repel(
         cloud::PointCloud{𝔼{N}, C},
@@ -29,31 +17,7 @@ function repel(
         max_iters = 1000,
         tol = 1.0e-6,
         convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
-        octree::Union{Nothing, TriangleOctree} = nothing,
     ) where {N, C <: CRS}
-    if !isnothing(octree) && N != 3
-        throw(ArgumentError("Boundary projection via octree requires 3D geometry (got $(N)D)"))
-    end
-
-    if isnothing(octree)
-        @warn "repel() without `octree` uses legacy behavior — points may escape domain. Pass `octree` for boundary projection." maxlog = 1
-        return _repel_legacy(cloud, spacing; β, α, k, max_iters, tol, convergence)
-    end
-
-    return _repel_projected(cloud, spacing, octree; β, α, k, max_iters, tol, convergence)
-end
-
-function _repel_legacy(
-        cloud::PointCloud{𝔼{N}, C},
-        spacing;
-        β = 0.2,
-        α = minimum(spacing.(to(cloud))) * 0.05,
-        k = 21,
-        max_iters = 1000,
-        tol = 1.0e-6,
-        convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
-    ) where {N, C <: CRS}
-    # Miotti 2023
     α = ustrip(α)
     p = copy(volume(cloud).points)
     p_old = deepcopy(p)
@@ -105,7 +69,22 @@ function _repel_legacy(
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
-function _repel_projected(
+"""
+    repel(cloud::PointCloud, spacing, octree::TriangleOctree; β=0.2, α=auto, k=21, max_iters=1000, tol=1e-6, convergence=nothing)
+
+Optimize point distribution via node repulsion (Miotti 2023) with boundary projection.
+
+All points (boundary and volume) participate in repulsion. Points that escape the domain
+are projected back to the nearest mesh triangle. Boundary points are always projected
+back to the surface after each iteration.
+
+The returned cloud has `NoTopology` since points have moved. The boundary is returned as a
+single unified surface named `:boundary`. Use `split_surface!(cloud.boundary, angle)` to
+re-establish surface distinctions if needed.
+
+Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
+"""
+function repel(
         cloud::PointCloud{𝔼{3}, C},
         spacing,
         octree::TriangleOctree;
@@ -202,7 +181,6 @@ function _reconstruct_cloud(
 
     orig_normals = normal(boundary(cloud))
     orig_areas = area(boundary(cloud))
-    mean_area = sum(orig_areas) / length(orig_areas)
 
     new_bnd_pts = Point{𝔼{3}, C}[]
     new_bnd_normals = SVector{3, Float64}[]
