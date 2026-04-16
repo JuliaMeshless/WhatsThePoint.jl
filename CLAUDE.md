@@ -193,15 +193,16 @@ split_surface!(boundary, 75°)
 ### Node Repulsion Optimization
 
 ```julia
-# Optimize point distribution
+# Volume-only repulsion (2D or 3D) — only interior points move
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
+
+# Boundary-aware repulsion (3D only) — all points move, escaped points projected back
+octree = TriangleOctree("model.stl"; classify_leaves=true)
+cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000)
 
 # Collect convergence history via keyword
 conv = Float64[]
-cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
-
-# β controls repulsion strength
-# New cloud has NoTopology since points moved
+cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000, convergence=conv)
 ```
 
 ### Visualization
@@ -222,7 +223,7 @@ visualize(boundary; markersize=0.15)
 - `split_surface!` - Split boundary surfaces by normal angle threshold
 - `combine_surfaces!` - Merge multiple surfaces into one
 - `compute_normals` / `orient_normals!` - Normal vector handling
-- `repel` - Optimize point distribution via node repulsion (returns new cloud)
+- `repel` - Optimize point distribution via node repulsion; two methods: `repel(cloud, spacing)` volume-only, `repel(cloud, spacing, octree)` boundary-projected (returns new cloud)
 - `isinside` - Test if point is inside domain
 - `import_surface` - Load from STL/mesh files (via GeoIO.jl)
 - `save` - Save to file (`:jld2` default, or `:vtk` format)

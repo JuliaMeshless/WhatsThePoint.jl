@@ -106,7 +106,8 @@ function generate_repel_comparison()
     spacing = WTP.ConstantSpacing((dx / 60) * m)
     cloud_before = WTP.discretize(boundary, spacing; alg = WTP.FornbergFlyer())
 
-    cloud_after = WTP.repel(cloud_before, spacing; max_iters = 500)
+    conv = Float64[]
+    cloud_after = WTP.repel(cloud_before, spacing; max_iters = 500, convergence = conv)
 
     fig = Figure(; size = (1400, 600))
 
@@ -147,7 +148,7 @@ function generate_repel_comparison()
     CairoMakie.save(joinpath(ASSETS_DIR, "repel-comparison.png"), fig; px_per_unit = 2)
     println("  Saved repel-comparison.png")
     println("  Before: $(length(cloud_before)) points, After: $(length(cloud_after)) points")
-    return println("  Convergence: $(convergence[end]) after $(length(convergence)) iterations")
+    return println("  Convergence: $(conv[end]) after $(length(conv)) iterations")
 end
 
 # ============================================================================
