@@ -360,10 +360,26 @@ function _discretize_volume(
     raw_points = SVector{3, T}[]
     sizehint!(raw_points, max_points)
 
-    print("  Generating interior points...")
-    t4 = @elapsed interior_points = _generate_from_leaves(interior, node_tree, n_interior, alg.placement)
-    println(" done ($(length(interior_points)) points, $(round(t4, digits = 2))s)")
-    append!(raw_points, interior_points)
+    # Interior candidates need the same isinside filter as near-surface:
+    # for high-aspect-ratio domains, cubic octree leaves classified as interior
+    # can extend beyond the actual geometry, so unchecked samples land outside.
+    n_interior_candidates = round(Int, n_interior * alg.boundary_oversampling)
+    print("  Generating interior candidates...")
+    t4 = @elapsed interior_candidates = _generate_from_leaves(interior, node_tree, n_interior_candidates, alg.placement)
+    println(" done ($(length(interior_candidates)) candidates, $(round(t4, digits = 2))s)")
+
+    print("  Filtering interior candidates (isinside check)...")
+    n_interior_accepted = 0
+    t4f = @elapsed begin
+        for p in interior_candidates
+            length(raw_points) >= n_interior && break
+            if isinside(p, alg.triangle_octree)
+                push!(raw_points, p)
+                n_interior_accepted += 1
+            end
+        end
+    end
+    println(" done ($n_interior_accepted accepted, $(round(t4f, digits = 2))s)")
 
     n_candidates = round(Int, n_near_surface * alg.boundary_oversampling)
     print("  Generating near-surface candidates...")
@@ -384,18 +400,32 @@ function _discretize_volume(
     end
     println(" done ($n_accepted accepted, $(round(t6, digits = 2))s)")
 
-    # Fill deficit if near-surface rejection left us short
+    # Fill deficit. Must apply isinside here too — deficit samples are drawn from
+    # interior leaf bounding boxes, which (for the same aspect-ratio reason) can
+    # extend past the geometry. Retry-capped to avoid infinite loops when the
+    # selected leaf has very little interior overlap.
     if length(raw_points) < max_points
         deficit = max_points - length(raw_points)
         println("  Filling deficit of $deficit points...")
         cumulative_weights = isempty(interior.weights) ? T[] : cumsum(interior.weights)
         total_weight = isempty(cumulative_weights) ? zero(T) : cumulative_weights[end]
 
-        for _ in 1:deficit
-            if total_weight > zero(T)
+        if total_weight > zero(T)
+            target = length(raw_points) + deficit
+            max_attempts = 10 * deficit
+            attempts = 0
+            while length(raw_points) < target && attempts < max_attempts
+                attempts += 1
                 idx = clamp(searchsortedfirst(cumulative_weights, rand(T) * total_weight), 1, length(interior.indices))
                 bbox_min, bbox_max = box_bounds(node_tree, interior.indices[idx])
-                push!(raw_points, _rand_point_in_box(bbox_min, bbox_max))
+                p = _rand_point_in_box(bbox_min, bbox_max)
+                if isinside(p, alg.triangle_octree)
+                    push!(raw_points, p)
+                end
+            end
+            remaining = target - length(raw_points)
+            if remaining > 0
+                @warn "Octree deficit fill gave up before reaching target" requested = deficit filled = (deficit - remaining) attempts = attempts
             end
         end
     end
