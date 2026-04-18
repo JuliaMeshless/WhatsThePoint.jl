@@ -123,17 +123,19 @@ For a complete runnable example, see
 Discretization gives approximate uniformity; repulsion refines it to minimize interpolation error in the meshless solver.
 
 ```julia
+# Volume-only — boundary points stay fixed, escaped volume points are removed
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
+
+# Boundary-aware (3D) — all points move, escaped points projected back to surface
+octree = TriangleOctree("model.stl"; classify_leaves=true)
+cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000)
 
 # Collect convergence history via keyword
 conv = Float64[]
-cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
+cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000, convergence=conv)
 ```
 
 The returned cloud has `NoTopology` since points have moved.
-
-!!! note "Only volume points are repelled"
-    Boundary points remain fixed — only volume (interior) points are moved during repulsion. This preserves the original boundary geometry.
 
 !!! tip "Tuning repulsion"
     The default parameters (`β=0.2`, `k=21`, `max_iters=1000`) work well for most problems. Check `conv[end]` to verify the distribution has stabilized. See the [Node Repulsion](repel.md) page for detailed parameter guidance.

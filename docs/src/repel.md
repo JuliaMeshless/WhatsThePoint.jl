@@ -10,21 +10,33 @@ Meshless PDE methods (RBF-FD, generalized finite differences) are sensitive to p
 
 ## Usage
 
+There are two methods, selected by dispatch:
+
+### Volume-only (no octree)
+
 ```julia
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
+```
 
-# Collect convergence history via keyword
+Only volume (interior) points move. Boundary points remain fixed. Any volume point pushed outside the domain is filtered out via `isinside`, so the total point count may decrease.
+
+### Boundary-aware (with `TriangleOctree`, 3D only)
+
+```julia
+octree = TriangleOctree("model.stl"; classify_leaves=true)
+cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000)
+```
+
+All points (boundary and volume) participate in repulsion. Escaped points are projected back to the nearest mesh triangle, so no points are lost. The boundary is returned as a single unified surface named `:boundary` — use `split_surface!` to re-establish surface distinctions.
+
+### Convergence history
+
+```julia
 conv = Float64[]
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 ```
 
 [`repel`](@ref) returns a new cloud with [`NoTopology`](@ref) since points have moved — call [`set_topology`](@ref) again after repulsion. Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
-
-!!! note "Boundary points are fixed"
-    Only volume (interior) points are moved during repulsion. Boundary points remain in place to preserve the original surface geometry.
-
-!!! note "Points pushed outside are removed"
-    At each iteration, any volume point that has been pushed outside the domain boundary is automatically filtered out via `isinside`. This means the total point count may decrease slightly after repulsion.
 
 ## Parameters
 
@@ -57,7 +69,9 @@ F(r) = \frac{1}{(r^2 + \beta)^2}
 where `r` is the distance to a neighbor. The `β` parameter prevents singularity at `r = 0` and controls the force shape.
 
 3. Move each point by `α` in the direction of the net repulsive force
-4. Filter out any points that have moved outside the domain using `isinside`
+4. Constrain points to the domain:
+   - **Without octree:** filter out points outside via `isinside`
+   - **With octree:** project escaped/boundary points back to the nearest mesh triangle
 5. Record the maximum relative displacement as the convergence metric
 
 ## Convergence Monitoring
