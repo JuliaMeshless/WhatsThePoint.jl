@@ -119,34 +119,54 @@ function _box_may_contain_interior(node_tree, box_idx, triangle_octree)
 
     center = box_center(node_tree, box_idx)
     corners = _box_corners(bbox_min, bbox_max)
+    faces = _box_face_centers(bbox_min, bbox_max)
+    edges = _box_edge_midpoints(bbox_min, bbox_max)
 
-    for pt in (center, corners...)
+    for pt in (center, corners..., faces..., edges...)
         _mesh_geometry_query(pt, tol, triangle_octree) != LEAF_EXTERIOR && return true
     end
 
-    # Point sampling can miss thin/elongated domains inside large cubic boxes.
-    # Fall back to checking whether any non-exterior triangle-octree leaf overlaps this box.
-    tri_tree = triangle_octree.tree
+    # 27-point sampling still misses thin/elongated domains inside large cubic
+    # boxes when every sample falls outside the geometry. Fall back to a spatial
+    # descent of the triangle octree for O(log L) overlap detection.
     tri_cls = triangle_octree.leaf_classification
-    if !isnothing(tri_cls)
-        for leaf_idx in all_leaves(tri_tree)
-            tri_cls[leaf_idx] == LEAF_EXTERIOR && continue
-            leaf_min, leaf_max = box_bounds(tri_tree, leaf_idx)
-            if _boxes_overlap(bbox_min, bbox_max, leaf_min, leaf_max)
-                return true
-            end
-        end
+    predicate = if isnothing(tri_cls)
+        _ -> true
+    else
+        leaf_idx -> tri_cls[leaf_idx] != LEAF_EXTERIOR
     end
-
-    return false
+    return any_leaf_overlapping(triangle_octree.tree, bbox_min, bbox_max, predicate)
 end
 
-@inline function _boxes_overlap(a_min, a_max, b_min, b_max)
-    @inbounds for d in 1:3
-        a_min[d] > b_max[d] && return false
-        a_max[d] < b_min[d] && return false
-    end
-    return true
+@inline function _box_face_centers(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
+    cx = (bbox_min[1] + bbox_max[1]) / 2
+    cy = (bbox_min[2] + bbox_max[2]) / 2
+    cz = (bbox_min[3] + bbox_max[3]) / 2
+    return (
+        SVector{3, T}(bbox_min[1], cy, cz),
+        SVector{3, T}(bbox_max[1], cy, cz),
+        SVector{3, T}(cx, bbox_min[2], cz),
+        SVector{3, T}(cx, bbox_max[2], cz),
+        SVector{3, T}(cx, cy, bbox_min[3]),
+        SVector{3, T}(cx, cy, bbox_max[3]),
+    )
+end
+
+@inline function _box_edge_midpoints(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
+    x0, x1 = bbox_min[1], bbox_max[1]
+    y0, y1 = bbox_min[2], bbox_max[2]
+    z0, z1 = bbox_min[3], bbox_max[3]
+    cx = (x0 + x1) / 2
+    cy = (y0 + y1) / 2
+    cz = (z0 + z1) / 2
+    return (
+        SVector{3, T}(cx, y0, z0), SVector{3, T}(cx, y1, z0),
+        SVector{3, T}(cx, y0, z1), SVector{3, T}(cx, y1, z1),
+        SVector{3, T}(x0, cy, z0), SVector{3, T}(x1, cy, z0),
+        SVector{3, T}(x0, cy, z1), SVector{3, T}(x1, cy, z1),
+        SVector{3, T}(x0, y0, cz), SVector{3, T}(x1, y0, cz),
+        SVector{3, T}(x0, y1, cz), SVector{3, T}(x1, y1, cz),
+    )
 end
 
 function _subdivide_node_octree!(node_tree, box_idx, criterion, triangle_octree)

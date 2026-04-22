@@ -523,6 +523,38 @@ function all_boxes(octree::SpatialOctree)
     return collect(1:octree.num_boxes[])
 end
 
+@inline function _boxes_overlap(a_min, a_max, b_min, b_max)
+    @inbounds for d in 1:3
+        a_min[d] > b_max[d] && return false
+        a_max[d] < b_min[d] && return false
+    end
+    return true
+end
+
+"""
+    any_leaf_overlapping(tree::SpatialOctree, bbox_min, bbox_max, predicate) -> Bool
+
+Return `true` if any leaf whose bounding box overlaps `[bbox_min, bbox_max]`
+satisfies `predicate(leaf_idx)`. Descends from root and prunes subtrees that
+cannot overlap, giving O(log L) expected cost instead of O(L) scan.
+"""
+function any_leaf_overlapping(tree::SpatialOctree, bbox_min, bbox_max, predicate)
+    return _any_leaf_overlapping(tree, 1, bbox_min, bbox_max, predicate)
+end
+
+function _any_leaf_overlapping(tree::SpatialOctree, box_idx::Int, bmin, bmax, predicate)
+    node_min, node_max = box_bounds(tree, box_idx)
+    _boxes_overlap(bmin, bmax, node_min, node_max) || return false
+    if is_leaf(tree, box_idx)
+        return predicate(box_idx)
+    end
+    for child_idx in tree.children[box_idx]
+        child_idx == 0 && continue
+        _any_leaf_overlapping(tree, child_idx, bmin, bmax, predicate) && return true
+    end
+    return false
+end
+
 #=============================================================================
 Balancing (2:1 Constraint)
 =============================================================================#

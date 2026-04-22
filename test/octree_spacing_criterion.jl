@@ -70,3 +70,40 @@ end
     far_tree = SpatialOctree{Int, Float64}(SVector(10.0, 10.0, 10.0), 1.0)
     @test _box_may_contain_interior(far_tree, 1, tri_octree) == false
 end
+
+@testitem "_box_may_contain_interior high-aspect-ratio domain (#75)" setup = [CommonImports] begin
+    using WhatsThePoint: _box_may_contain_interior, SpatialOctree, bounding_box
+    using Meshes: SimpleMesh, connect, Triangle, Point
+
+    # 20x7x3 cuboid — the cubic root node box centers all 9 original sample
+    # points outside the thin domain, so subdivision relies on enriched
+    # sampling (face centers / edge midpoints) or the spatial descent fallback.
+    vertices = Point.(
+        [
+            (0.0, 0.0, 0.0), (20.0, 0.0, 0.0), (20.0, 7.0, 0.0), (0.0, 7.0, 0.0),
+            (0.0, 0.0, 3.0), (20.0, 0.0, 3.0), (20.0, 7.0, 3.0), (0.0, 7.0, 3.0),
+        ]
+    )
+    triangles = [
+        connect((1, 3, 2), Triangle), connect((1, 4, 3), Triangle),
+        connect((5, 6, 7), Triangle), connect((5, 7, 8), Triangle),
+        connect((1, 2, 6), Triangle), connect((1, 6, 5), Triangle),
+        connect((3, 4, 8), Triangle), connect((3, 8, 7), Triangle),
+        connect((1, 5, 8), Triangle), connect((1, 8, 4), Triangle),
+        connect((2, 3, 7), Triangle), connect((2, 7, 6), Triangle),
+    ]
+    mesh = SimpleMesh(vertices, triangles)
+    tri_octree = TriangleOctree(mesh; classify_leaves = true)
+
+    bbox_min, _ = bounding_box(tri_octree.tree)
+    node_tree = SpatialOctree{Int, Float64}(bbox_min, tri_octree.tree.root_size)
+    @test _box_may_contain_interior(node_tree, 1, tri_octree) == true
+
+    # Fallback must still work when the triangle octree has no classification
+    tri_octree_unclassified = TriangleOctree(mesh; classify_leaves = false)
+    bbox_min_u, _ = bounding_box(tri_octree_unclassified.tree)
+    node_tree_u = SpatialOctree{Int, Float64}(
+        bbox_min_u, tri_octree_unclassified.tree.root_size
+    )
+    @test _box_may_contain_interior(node_tree_u, 1, tri_octree_unclassified) == true
+end

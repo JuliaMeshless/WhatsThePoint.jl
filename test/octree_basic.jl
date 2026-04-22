@@ -327,6 +327,39 @@ end
     @test needs_balancing(octree, 1) == false
 end
 
+@testitem "SpatialOctree any_leaf_overlapping" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialOctree, subdivide!, any_leaf_overlapping
+
+    origin = SVector(0.0, 0.0, 0.0)
+    tree = SpatialOctree{Int, Float64}(origin, 10.0)
+    subdivide!(tree, 1)
+
+    # Query box overlaps the first octant → at least one leaf passes `true`
+    @test any_leaf_overlapping(
+        tree, SVector(0.5, 0.5, 0.5), SVector(1.0, 1.0, 1.0), _ -> true
+    ) == true
+
+    # Query box entirely outside the root → pruned at root
+    @test any_leaf_overlapping(
+        tree, SVector(100.0, 100.0, 100.0), SVector(101.0, 101.0, 101.0), _ -> true
+    ) == false
+
+    # Overlap exists but predicate rejects every leaf
+    @test any_leaf_overlapping(
+        tree, SVector(0.0, 0.0, 0.0), SVector(10.0, 10.0, 10.0), _ -> false
+    ) == false
+
+    # Predicate selects a single leaf by coords — true only when query overlaps it
+    target = only(findall(c -> c == SVector(1, 1, 1, 2), tree.coords[1:tree.num_boxes[]]))
+    predicate = idx -> idx == target
+    @test any_leaf_overlapping(
+        tree, SVector(6.0, 6.0, 6.0), SVector(9.0, 9.0, 9.0), predicate
+    ) == true
+    @test any_leaf_overlapping(
+        tree, SVector(0.0, 0.0, 0.0), SVector(4.0, 4.0, 4.0), predicate
+    ) == false
+end
+
 @testitem "SpatialOctree find_boxes_at_coords edge cases" setup = [CommonImports] begin
     using WhatsThePoint: SpatialOctree, subdivide!, find_neighbor, find_boxes_at_coords
 
