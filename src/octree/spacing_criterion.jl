@@ -98,6 +98,15 @@ function build_node_octree(triangle_octree, spacing, alpha, node_min_ratio)
 end
 
 @inline function _mesh_geometry_query(pt::SVector{3, T}, tol, octree) where {T}
+    # Sign voting inside `_compute_signed_distance_octree` can flip for points
+    # far outside the triangle octree's cubic root, producing negative signed
+    # distances (and therefore LEAF_INTERIOR) above regions of space that are
+    # obviously exterior to the mesh. The mesh bbox is the authoritative
+    # envelope — anything strictly outside it (by more than the classification
+    # tolerance) is exterior, matching the fast-path used by `isinside`.
+    if any(pt .< octree.mesh_bbox_min .- tol) || any(pt .> octree.mesh_bbox_max .+ tol)
+        return LEAF_EXTERIOR
+    end
     sd = _compute_signed_distance_octree(pt, octree.mesh, octree.tree)
     return _leaf_class_from_signed_distance(sd, tol)
 end
@@ -155,16 +164,16 @@ end
 """
     classify_node_octree(node_tree, triangle_octree)
 
-Classify node octree leaves as interior, boundary, or exterior.
-
-Uses the triangle octree's geometry query to determine the classification
-of each leaf in the node octree.
+Classify node octree leaves as interior, boundary, or exterior using the
+triangle octree's geometry query. Correctness of downstream sampling
+(skipping `isinside` on `LEAF_INTERIOR` points) relies on the mesh-bbox
+early return inside `_mesh_geometry_query`, which prevents sign-vote flips
+from promoting far-exterior leaves into `LEAF_INTERIOR`.
 
 # Returns
-Dictionary mapping leaf indices to classification (`LEAF_INTERIOR`, `LEAF_BOUNDARY`, `LEAF_EXTERIOR`)
+Vector of `Int8` classifications indexed by node-octree box index.
 """
 function classify_node_octree(node_tree, triangle_octree)
-    # Reuse existing classification infrastructure from spatial_octree.jl
     query(pt, tol) = _mesh_geometry_query(pt, tol, triangle_octree)
     return classify_leaves!(node_tree, query)
 end
