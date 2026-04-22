@@ -48,6 +48,50 @@ end
     end
 end
 
+@testitem "Octree points are inside (high-aspect-ratio domain, #76)" setup = [CommonImports] begin
+    using Random
+    using Meshes: SimpleMesh, connect, Triangle, Point
+    Random.seed!(76)
+
+    # Regression test for #76: interior and deficit points were placed in
+    # node-octree leaf bounding boxes with no isinside filter, so for
+    # high-aspect-ratio domains the cubic leaves at the thin boundary
+    # produced points far outside the actual geometry.
+    vertices = Point.(
+        [
+            (0.0, 0.0, 0.0), (20.0, 0.0, 0.0), (20.0, 7.0, 0.0), (0.0, 7.0, 0.0),
+            (0.0, 0.0, 3.0), (20.0, 0.0, 3.0), (20.0, 7.0, 3.0), (0.0, 7.0, 3.0),
+        ]
+    )
+    triangles = [
+        connect((1, 3, 2), Triangle), connect((1, 4, 3), Triangle),
+        connect((5, 6, 7), Triangle), connect((5, 7, 8), Triangle),
+        connect((1, 2, 6), Triangle), connect((1, 6, 5), Triangle),
+        connect((3, 4, 8), Triangle), connect((3, 8, 7), Triangle),
+        connect((1, 5, 8), Triangle), connect((1, 8, 4), Triangle),
+        connect((2, 3, 7), Triangle), connect((2, 7, 6), Triangle),
+    ]
+    mesh = SimpleMesh(vertices, triangles)
+    bnd = PointBoundary(mesh)
+    spacing = ConstantSpacing(0.5m)
+
+    alg = Octree(mesh; spacing)
+    cloud = discretize(bnd, spacing; alg, max_points = 500)
+
+    # Every volume point must pass the geometry check, not just the
+    # near-surface candidates that happened to be filtered.
+    octree = alg.triangle_octree
+    for pt in WhatsThePoint.volume(cloud)
+        c = to(pt)
+        sv = SVector{3, Float64}(c[1] / m, c[2] / m, c[3] / m)
+        @test isinside(sv, octree) == true
+    end
+
+    # Deficit filling must actually close the deficit when the interior is
+    # reachable (a 20×7×3 box is well inside the octree resolution here).
+    @test length(WhatsThePoint.volume(cloud)) >= 450
+end
+
 @testitem "Octree with placement strategies" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(456)

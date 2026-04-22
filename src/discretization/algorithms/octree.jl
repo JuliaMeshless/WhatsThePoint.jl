@@ -356,7 +356,10 @@ function _discretize_volume(
     n_near_surface = max_points - n_interior
     println("  Allocating $n_interior interior + $n_near_surface near-surface points")
 
-    # Generate points
+    # Generate points. Interior leaves are trusted after classify_node_octree
+    # demotes any leaf overlapping a triangle-octree boundary leaf, so samples
+    # drawn from LEAF_INTERIOR (and the deficit fill, which pulls from the same
+    # pool) do not need a per-point isinside check.
     raw_points = SVector{3, T}[]
     sizehint!(raw_points, max_points)
 
@@ -370,29 +373,28 @@ function _discretize_volume(
     t5 = @elapsed candidates = _generate_from_leaves(near_surface, node_tree, n_candidates, alg.placement)
     println(" done ($(length(candidates)) candidates, $(round(t5, digits = 2))s)")
 
-    # Filter candidates
     print("  Filtering candidates (isinside check)...")
-    n_accepted = 0
     t6 = @elapsed begin
-        for p in candidates
-            if isinside(p, alg.triangle_octree)
-                push!(raw_points, p)
-                n_accepted += 1
-            end
-            length(raw_points) >= n_interior + n_near_surface && break
+        inside_mask = isinside(candidates, alg.triangle_octree)
+        target = n_interior + n_near_surface
+        for i in eachindex(candidates)
+            length(raw_points) >= target && break
+            inside_mask[i] && push!(raw_points, candidates[i])
         end
     end
+    n_accepted = length(raw_points) - length(interior_points)
     println(" done ($n_accepted accepted, $(round(t6, digits = 2))s)")
 
-    # Fill deficit if near-surface rejection left us short
+    # Fill deficit from interior leaves. No isinside needed — interior leaves
+    # are guaranteed not to overlap any boundary triangle-octree leaf.
     if length(raw_points) < max_points
         deficit = max_points - length(raw_points)
         println("  Filling deficit of $deficit points...")
         cumulative_weights = isempty(interior.weights) ? T[] : cumsum(interior.weights)
         total_weight = isempty(cumulative_weights) ? zero(T) : cumulative_weights[end]
 
-        for _ in 1:deficit
-            if total_weight > zero(T)
+        if total_weight > zero(T)
+            for _ in 1:deficit
                 idx = clamp(searchsortedfirst(cumulative_weights, rand(T) * total_weight), 1, length(interior.indices))
                 bbox_min, bbox_max = box_bounds(node_tree, interior.indices[idx])
                 push!(raw_points, _rand_point_in_box(bbox_min, bbox_max))
