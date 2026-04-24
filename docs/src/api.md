@@ -99,6 +99,10 @@ Point distribution optimization.
 
 ```@docs
 repel
+RepelForceModel
+InverseDistanceForce
+SpacingEquilibriumForce
+compute_force
 ```
 
 ## Diagnostics

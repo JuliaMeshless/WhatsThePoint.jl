@@ -42,11 +42,47 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `β` | `0.2` | Repulsion strength — controls force magnitude |
+| `force_model` | `InverseDistanceForce(β)` | Force law, any [`RepelForceModel`](@ref) subtype |
+| `β` | `0.2` | Repulsion softening — feeds the default `force_model` |
 | `α` | `0.05 × min(spacing)` | Step size — distance points move per iteration |
 | `k` | `21` | Number of nearest neighbors used in repulsion stencil |
 | `max_iters` | `1000` | Maximum number of repulsion iterations |
 | `tol` | `1e-6` | Convergence tolerance on relative point movement |
+
+## Force Models
+
+The force law is abstracted through [`RepelForceModel`](@ref) so users can choose
+how points interact. All models take a single softening parameter `β` and
+implement `compute_force(model, u)` where `u = r / s` is the ratio of neighbor
+distance to local target spacing.
+
+### [`InverseDistanceForce`](@ref) — default
+
+```math
+F(u) = \frac{1}{(u^2 + \beta)^2}
+```
+
+Purely repulsive and monotonically decreasing. This is the original Miotti
+(2023) formulation. The force has no root, so equilibrium is reached only
+through damping via `α` — the point configuration never stops moving on its
+own, which is why a `tol` threshold is needed.
+
+### [`SpacingEquilibriumForce`](@ref)
+
+```math
+F(u) = \frac{1 - u^2}{(u^2 + \beta)^2}
+```
+
+Zero at `u = 1` (neighbor exactly at the target spacing), positive for `u < 1`
+(push apart), negative for `u > 1` (pull together). Useful when the
+discretization is locally too sparse and you want repulsion to fill gaps as
+well as push crowded points apart.
+
+```julia
+cloud = repel(cloud, spacing, octree;
+              force_model = SpacingEquilibriumForce(0.2),
+              max_iters = 500)
+```
 
 ## Tuning Guide
 
@@ -60,13 +96,9 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 Each iteration:
 
 1. Build a k-nearest neighbor tree of all points
-2. For each point, compute a repulsive force from its k neighbors using
-
-```math
-F(r) = \frac{1}{(r^2 + \beta)^2}
-```
-
-where `r` is the distance to a neighbor. The `β` parameter prevents singularity at `r = 0` and controls the force shape.
+2. For each point, compute a force from its `k` neighbors using the chosen
+   [`RepelForceModel`](@ref). See [Force Models](#Force-Models) above for the
+   available laws.
 
 3. Move each point by `α` in the direction of the net repulsive force
 4. Constrain points to the domain:

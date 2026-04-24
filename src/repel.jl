@@ -1,5 +1,7 @@
 """
-    repel(cloud::PointCloud, spacing; β=0.2, α=auto, k=21, max_iters=1000, tol=1e-6, convergence=nothing)
+    repel(cloud::PointCloud, spacing;
+          force_model=InverseDistanceForce(β), β=0.2,
+          α=auto, k=21, max_iters=1000, tol=1e-6, convergence=nothing)
 
 Optimize point distribution via node repulsion (Miotti 2023).
 Only volume points move; escaped points are discarded via `isinside` filtering.
@@ -7,11 +9,19 @@ Only volume points move; escaped points are discarded via `isinside` filtering.
 The returned cloud has `NoTopology` since points have moved.
 
 Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
+
+The force law is controlled by `force_model`, any subtype of [`RepelForceModel`](@ref).
+The default [`InverseDistanceForce`](@ref) reproduces the original Miotti (2023) behavior.
+Use [`SpacingEquilibriumForce`](@ref) for a force that vanishes at `r = s` (target
+spacing) rather than relying on damping alone to stop movement. `β` is kept as a
+convenience kwarg that feeds the default `InverseDistanceForce`; it is ignored when
+`force_model` is passed explicitly.
 """
 function repel(
         cloud::PointCloud{𝔼{N}, C},
         spacing;
         β = 0.2,
+        force_model::RepelForceModel = InverseDistanceForce(β),
         α = minimum(spacing.(to(cloud))) * 0.05,
         k = 21,
         max_iters = 1000,
@@ -32,9 +42,6 @@ function repel(
 
     conv = Float64[]
     i = 1
-    F = let β = β
-        r -> 1 / (r^2 + β)^2
-    end
     while i <= max_iters
         p_old .= p
         tmap!(p, 1:npoints) do id
@@ -47,7 +54,7 @@ function repel(
 
             repel_force = sum(zip(neighborhood, rij)) do z
                 xj, r = z
-                @inbounds F(r / s) * (xi - xj) / r
+                @inbounds compute_force(force_model, r / s) * (xi - xj) / r
             end
 
             return xi + Vec(s * α * repel_force)
@@ -70,7 +77,9 @@ function repel(
 end
 
 """
-    repel(cloud::PointCloud, spacing, octree::TriangleOctree; β=0.2, α=auto, k=21, max_iters=1000, tol=1e-6, convergence=nothing)
+    repel(cloud::PointCloud, spacing, octree::TriangleOctree;
+          force_model=InverseDistanceForce(β), β=0.2,
+          α=auto, k=21, max_iters=1000, tol=1e-6, convergence=nothing)
 
 Optimize point distribution via node repulsion (Miotti 2023) with boundary projection.
 
@@ -83,12 +92,16 @@ single unified surface named `:boundary`. Use `split_surface!(cloud.boundary, an
 re-establish surface distinctions if needed.
 
 Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
+
+`force_model` accepts any subtype of [`RepelForceModel`](@ref); see the method without
+`octree` for details on the available force laws.
 """
 function repel(
         cloud::PointCloud{𝔼{3}, C},
         spacing,
         octree::TriangleOctree;
         β = 0.2,
+        force_model::RepelForceModel = InverseDistanceForce(β),
         α = minimum(spacing.(to(cloud))) * 0.05,
         k = 21,
         max_iters = 1000,
@@ -118,9 +131,6 @@ function repel(
     tri_indices = zeros(Int, npoints_total)
 
     conv = Float64[]
-    F = let β = β
-        r -> 1 / (r^2 + β)^2
-    end
     i = 1
     while i <= max_iters
         p_old .= p
@@ -134,7 +144,7 @@ function repel(
 
             repel_force = sum(zip(neighborhood, rij)) do z
                 xj, r = z
-                @inbounds F(r / s) * (xi - xj) / r
+                @inbounds compute_force(force_model, r / s) * (xi - xj) / r
             end
 
             x_proposed = xi + Vec(s * α * repel_force)
