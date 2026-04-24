@@ -4,15 +4,22 @@
 Abstract type for node-repulsion force laws used by [`repel`](@ref).
 
 A concrete subtype `M <: RepelForceModel` must implement
-
-    compute_force(m::M, u::Real) -> Real
-
-where `u = r / s` is the ratio of inter-point distance to local target spacing.
-The returned scalar multiplies the unit vector `(xᵢ − xⱼ) / r` in the repulsion
-step, so positive values push `xᵢ` away from `xⱼ` and negative values pull it
-toward `xⱼ`.
+[`compute_force(m::M, u::Real)`](@ref compute_force).
 """
 abstract type RepelForceModel end
+
+"""
+    compute_force(model::RepelForceModel, u::Real) -> Real
+
+Evaluate the force magnitude at normalized separation `u = r / s`, where `r` is
+the distance between two points and `s` is the local target spacing.
+
+The returned scalar multiplies the unit vector `(xᵢ − xⱼ) / r` in the repulsion
+step, so positive values push `xᵢ` away from `xⱼ` and negative values pull it
+toward `xⱼ`. Concrete subtypes of [`RepelForceModel`](@ref) must implement a
+method for this function.
+"""
+function compute_force end
 
 """
     InverseDistanceForce(β=0.2)
