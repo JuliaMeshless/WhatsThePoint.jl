@@ -105,6 +105,7 @@ repel
 
 ```@docs
 metrics
+spacing_metrics
 ```
 
 ## I/O

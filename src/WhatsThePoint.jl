@@ -31,7 +31,7 @@ const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 const Angle{T} = Union{Quantity{T, NoDims, typeof(u"rad")}, Quantity{T, NoDims, typeof(u"°")}}
 
 include("utils.jl")
-export metrics
+export metrics, spacing_metrics
 
 include("geometry.jl")
 

@@ -141,3 +141,74 @@ end
     @test result2 isa NamedTuple
     @test result2.k == 20
 end
+
+@testitem "spacing_metrics return shape" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
+
+    result = spacing_metrics(cloud, spacing)
+
+    @test result isa NamedTuple
+    @test haskey(result, :max_error)
+    @test haskey(result, :mean_error)
+    @test haskey(result, :std_error)
+    @test haskey(result, :k)
+    @test result.k == 20
+    @test isfinite(result.max_error)
+    @test isfinite(result.mean_error)
+    @test isfinite(result.std_error)
+    @test result.max_error >= result.mean_error
+    @test result.mean_error >= 0
+end
+
+@testitem "spacing_metrics custom k" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
+
+    for k in (5, 10, 20)
+        result = spacing_metrics(cloud, spacing; k = k)
+        @test result.k == k
+        @test isfinite(result.mean_error)
+    end
+end
+
+@testitem "spacing_metrics penalizes mismatched target" setup = [TestData, CommonImports] begin
+    using Unitful: m
+
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing_correct = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing_correct; alg = SlakKosec(octree), max_points = 50)
+
+    spacing_too_large = ConstantSpacing(100 * spacing_correct.Δx)
+    spacing_too_small = ConstantSpacing(spacing_correct.Δx / 100)
+
+    err_good = spacing_metrics(cloud, spacing_correct)
+    err_large = spacing_metrics(cloud, spacing_too_large)
+    err_small = spacing_metrics(cloud, spacing_too_small)
+
+    @test err_large.mean_error > err_good.mean_error
+    @test err_small.mean_error > err_good.mean_error
+end
+
+@testitem "spacing_metrics tracks repel" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
+
+    pre = spacing_metrics(cloud, spacing)
+
+    new_cloud = repel(cloud, spacing, octree; max_iters = 20)
+    post = spacing_metrics(new_cloud, spacing)
+
+    @test isfinite(pre.mean_error)
+    @test isfinite(post.mean_error)
+    # Sanity only — exact preservation is future work. Confirms repel doesn't
+    # catastrophically destroy the spacing relationship.
+    @test post.mean_error < 10 * pre.mean_error + 1
+end
