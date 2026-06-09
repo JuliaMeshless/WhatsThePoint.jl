@@ -209,3 +209,38 @@ end
     @test after_inv.mean_error <= before.mean_error * 1.1
     @test after_eq.mean_error <= before.mean_error * 1.1
 end
+
+@testitem "near-duplicate cull mask" setup = [CommonImports] begin
+    # Five collinear points; the 2.0 / 2.01 pair is a near-duplicate (gap 0.01 ≪ 0.5·s).
+    pts = [
+        Meshes.Point(0.0, 0.0, 0.0), Meshes.Point(1.0, 0.0, 0.0),
+        Meshes.Point(2.0, 0.0, 0.0), Meshes.Point(2.01, 0.0, 0.0),
+        Meshes.Point(3.0, 0.0, 0.0),
+    ]
+    spacings = fill(1.0, 5)
+
+    keep = WhatsThePoint._near_duplicate_keep_mask(pts, spacings, 0.5)
+    @test count(keep) == 4        # exactly one of the near-duplicate pair removed
+    @test keep[3] && !keep[4]     # lower index of the pair is kept
+
+    # ratio = 0 is a no-op (culling disabled).
+    @test all(WhatsThePoint._near_duplicate_keep_mask(pts, spacings, 0.0))
+end
+
+@testitem "repel cull_ratio removes near-duplicates" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 60)
+
+    nocull = repel(cloud, spacing, octree; max_iters = 20)
+    culled = repel(cloud, spacing, octree; max_iters = 20, cull_ratio = 0.5)
+
+    # Culling never grows the cloud.
+    @test length(culled) <= length(nocull)
+
+    # No kept pair is closer than the cull threshold (0.5·spacing).
+    m = metrics(culled; k = 2)
+    smin = minimum(ustrip.(spacing.(points(culled))))
+    @test ustrip(m.separation) >= 0.5 * smin * (1 - 1e-6)
+end
