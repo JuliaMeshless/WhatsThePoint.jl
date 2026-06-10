@@ -1,196 +1,39 @@
-"""
-    _safe_direction(xi, xj, r) -> Vec
-
-Unit direction from xj to xi. When r == 0 (coincident points), returns a random
-unit vector instead of NaN — the 0/0 singularity that traps coincident points.
-"""
-function _safe_direction(xi, xj, r)
-    if r > zero(r)
-        return (xi - xj) / r
-    end
-    # Random unit vector — breaks the NaN trap for coincident points
-    d = randn(SVector{3, Float64})
-    return d / norm(d)
-end
+# ======================================================================
+# Public API
+# ======================================================================
 
 """
-    _near_duplicate_keep_mask(pts, spacings, ratio) -> BitVector
+    repel(cloud::PointCloud, spacing; kwargs...) -> PointCloud
 
-Flag points to keep, dropping near-duplicates closer than `ratio * spacing` to a
-kept point. Greedy and order-preserving: the lower-indexed point of each too-close
-pair is kept (so fixed boundary points, which come first, survive over volume
-points). Targets the stuck boundary pair that the deterministic
-`closest_point_on_triangle` projection parks at a shared edge/vertex — a single
-mesh-ratio-dominating defect that no number of repel iterations separates.
-"""
-function _near_duplicate_keep_mask(pts, spacings, ratio)
-    n = length(pts)
-    keep = trues(n)
-    (ratio <= 0 || n < 2) && return keep
-    k = min(n, 8)
-    method = KNearestSearch(pts, k)
-    @inbounds for i in 1:n
-        keep[i] || continue
-        thr = ratio * spacings[i]
-        ids, dists = searchdists(pts[i], method)
-        for (j, d) in zip(ids, dists)
-            (j == i || !keep[j]) && continue
-            ustrip(d) < thr && (keep[j] = false)
-        end
-    end
-    return keep
-end
+Optimize the point distribution via node repulsion (Miotti 2023). Only volume
+points move; boundary points form a fixed wall. Points pushed outside the
+domain are discarded (`isinside` filter). Returns a new cloud with `NoTopology`.
 
-"""
-    _trace_closest_pair!(trace, points, spacings, iteration)
+Each iteration rebuilds the k-NN graph from the *current* positions, computes
+the repel force on every point, and moves it by the adaptive step
+`α_i = clamp(1/|F_i|, α_min, α_max)` scaled by the local spacing and capped at
+one spacing unit. Convergence is the force norm `max_i(|F_i|·s_i)`, which
+vanishes at equilibrium.
 
-Push a diagnostic snapshot of the closest pair in `points` to `trace`.
-
-Each entry records the iteration number, the pair's separation `r`, the
-per-point spacing `s`, the normalized separation `r/s`, and the indices of
-the pair. Comparing entries across iterations distinguishes:
-
-- **Standoff**: `r/s` is constant (non-zero), forces balance exactly.
-- **Overshoot limit-cycle**: `r/s` oscillates (displacement alternates sign).
-"""
-function _trace_closest_pair!(
-        trace::AbstractVector{<:NamedTuple},
-        points::AbstractVector,
-        spacings::AbstractVector{<:AbstractFloat},
-        iteration::Int,
-    )
-    n = length(points)
-    n < 2 && return
-    best_r = Inf
-    best_i, best_j = 1, 2
-    for a in 1:(n - 1)
-        for b in (a + 1):n
-            d = ustrip(norm(points[a] - points[b]))
-            if d < best_r
-                best_r = d
-                best_i, best_j = a, b
-            end
-        end
-    end
-    s_avg = (spacings[best_i] + spacings[best_j]) / 2
-    push!(trace, (;
-        iteration,
-        r = best_r,
-        s = s_avg,
-        r_over_s = best_r / s_avg,
-        idx_a = best_i,
-        idx_b = best_j,
-    ))
-end
-
-"""
-    _kick_frozen_pair!(p, spacings, n_boundary, state, kick_after) -> (kicked, state)
-
-Detect if the closest pair is frozen (same indices, same r/s for several
-iterations). If frozen for `kick_after` consecutive iterations, apply a random
-displacement to the volume point in the pair and return `(true, new_state)`.
-Otherwise return `(false, updated_state)`.
-
-`state` is a `NamedTuple` tracking `(pair, rs, count)` across calls — the caller
-owns it and passes it in each iteration.
-"""
-function _kick_frozen_pair!(
-        p::AbstractVector, spacings::AbstractVector{<:AbstractFloat},
-        n_boundary::Int, state::NamedTuple, kick_after::Int,
-    )
-    n = length(p)
-    n < 2 && return false, state
-
-    # Find closest pair
-    best_r = Inf; best_i, best_j = 1, 2
-    for a in 1:(n - 1)
-        for b in (a + 1):n
-            d = ustrip(norm(p[a] - p[b]))
-            if d < best_r
-                best_r = d; best_i, best_j = a, b
-            end
-        end
-    end
-    s_avg = (spacings[best_i] + spacings[best_j]) / 2
-    rs = best_r / s_avg
-
-    # Check if frozen (same pair, same r/s within tolerance)
-    frozen = (best_i == state.pair[1] && best_j == state.pair[2] &&
-              abs(rs - state.rs) < 1e-8)
-    count = frozen ? state.count + 1 : 1
-
-    if count >= kick_after
-        # Pick the volume point to kick (prefer the one past n_boundary)
-        target = best_i > n_boundary ? best_i : (best_j > n_boundary ? best_j : best_i)
-        s = spacings[target]
-        d = randn(SVector{3, Float64})
-        kick_dir = d / (norm(d) + 1e-30)
-        p[target] = p[target] + Vec(0.1 * s * kick_dir * Unitful.m)
-        return true, (; pair = (best_i, best_j), rs, count = 0)
-    end
-
-    return false, (; pair = (best_i, best_j), rs, count)
-end
-
-"""
-    repel(cloud::PointCloud, spacing;
-          force_model=SpacingEquilibriumForce(β), β=0.2,
-          α=auto, α_min=auto, k=21, max_iters=1000, tol=1e-6, rebuild_every=1,
-          cull_ratio=0.0, kick_after=0, convergence=nothing, trace=nothing)
-
-Optimize point distribution via node repulsion (Miotti 2023).
-Only volume points move; escaped points are discarded via `isinside` filtering.
-
-Uses an **adaptive per-point step size** to eliminate oscillation and accelerate
-convergence. Each point gets `α_i = clamp(s_i / (|F_i| + ε), α_min, α_max)` where
-`s_i` is the local spacing and `|F_i|` is the repel-force norm. Points with strong
-forces (near-duplicates, voids) take the maximum safe step; points near equilibrium
-take tiny steps. `α` sets `α_max`; `α_min` defaults to `α_max / 100`.
-
-Displacement is capped at one spacing unit per iteration (`|Δp| ≤ s_i`). This
-prevents runaway when strong short-range forces (near-duplicates, standoff pairs)
-produce large force magnitudes — the point moves at most one local spacing per
-step, keeping the relaxation stable.
-
-Convergence is measured by the **force-norm** criterion `max_i(|F_i| * s_i)` rather
-than displacement. At equilibrium forces vanish, so this detects true convergence
-earlier and avoids false stops from oscillating points whose displacement is small
-but restoring forces are still large.
-
-When `cull_ratio > 0`, near-duplicate points closer than `cull_ratio * spacing` to a
-kept point are removed after relaxation (the lower-indexed point of each pair is kept).
-This is `0.0` (off) by default; a value like `0.5` removes pathological close pairs
-that the force law alone settles into a standoff with. Note this changes the point
-count.
-
-When `kick_after > 0`, the closest pair is tracked across iterations. If the same
-pair stays at the same `r/s` for `kick_after` consecutive iterations (a balanced
-standoff), a small random displacement (0.1·s) is applied to the volume point in
-the pair to break the symmetry. This is `0` (off) by default; `10`–`20` is a
-reasonable value. The kick is safe — the displacement cap still applies.
-
-This is a true N-body relaxation: the k-nearest-neighbor graph is rebuilt from
-the *current* positions every `rebuild_every` iterations (default `1`), so each
-point responds to where its neighbors have actually moved rather than to the
-initial configuration. Boundary points stay fixed and act as a static wall the
-volume points pack against. Larger `rebuild_every` amortizes the kd-tree rebuild
-at the cost of a slightly staler neighbor graph between rebuilds.
-
-The returned cloud has `NoTopology` since points have moved.
-
-Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
-
-The force law is controlled by `force_model`, any subtype of [`RepelForceModel`](@ref).
-The default [`SpacingEquilibriumForce`](@ref) vanishes at `r = s` (the target
-spacing), so the cloud settles at the prescribed density instead of drifting
-outward under purely repulsive forcing. Use [`InverseDistanceForce`](@ref) for the
-original purely-repulsive Miotti (2023) law (equilibrium then relies on `α`
-damping alone). `β` is kept as a convenience kwarg that feeds the default force
-model; it is ignored when `force_model` is passed explicitly.
-
-Pass a `Vector{NamedTuple}` via `trace` to record per-iteration diagnostics of
-the closest pair (iteration, r, s, r/s, indices). Comparing entries distinguishes
-a balanced standoff (`r/s` frozen) from an overshoot limit-cycle (`r/s` oscillating).
+# Keywords
+- `force_model = SpacingEquilibriumForce(β)`: force law, any
+  [`RepelForceModel`](@ref); the default vanishes at `r = s`, so the cloud
+  settles at the prescribed density. `β = 0.2` feeds the default and is ignored
+  when `force_model` is passed explicitly.
+- `α`, `α_min`: step-size bounds. Defaults: `α = 0.05·min(spacing)`, `α_min = α/100`.
+- `k = 21`: neighborhood size.
+- `max_iters = 1000`, `tol = 1e-6`: iteration and convergence limits.
+- `rebuild_every = 1`: iterations between k-NN graph rebuilds (larger = cheaper,
+  staler).
+- `kick_after = 0`: if the closest pair freezes at the same `r/s` for this many
+  iterations (a balanced standoff), kick one point by `0.1·s` in a random
+  direction to break the symmetry. Off when `0`; `10`–`20` is reasonable.
+- `cull_ratio = 0.0`: after relaxation, drop near-duplicates closer than
+  `cull_ratio·spacing` to a kept point. A safety net — a healthy relaxation
+  leaves nothing to cull, so a `@warn` is emitted whenever it fires.
+- `convergence`: pass a `Float64[]` to collect the per-iteration force norm.
+- `trace`: pass a `NamedTuple[]` to record the closest pair each iteration
+  (global boundary-then-volume indices, measured on that iteration's snapshot).
 """
 function repel(
         cloud::PointCloud{𝔼{N}, C},
@@ -209,143 +52,52 @@ function repel(
         trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
     ) where {N, C <: CRS}
     rebuild_every >= 1 || throw(ArgumentError("rebuild_every must be ≥ 1"))
-    α_max = ustrip(α)
-    α_lo = ustrip(α_min)
     bnd_p = points(boundary(cloud))
     n_bnd = length(bnd_p)
     p = copy(volume(cloud).points)
-    p_old = deepcopy(p)
-    npoints = length(p)
+    p_old = copy(p)
+    # Search snapshot: fixed boundary head (the wall) + movable volume tail.
+    snap = vcat(bnd_p, p)
 
-    # Combined boundary+volume buffer the kd-tree is built from. The volume tail
-    # is refreshed in place on each rebuild so repulsion sees current neighbor
-    # positions; the boundary head is fixed.
-    all_cur = vcat(bnd_p, p)
-    # Held in a Ref so the per-iteration rebuild does not rebind a captured
-    # variable (OhMyThreads' tmap! rejects boxed closure captures).
-    method_ref = Ref(KNearestSearch(all_cur, k))
+    conv = _relax!(
+        p, p_old, snap, spacing, force_model, (id, xi, x_proposed) -> x_proposed;
+        n_fixed = n_bnd, n_protected = n_bnd,
+        α_lo = ustrip(α_min), α_max = ustrip(α),
+        k, max_iters, tol, rebuild_every, kick_after, trace,
+    )
+    isnothing(convergence) || append!(convergence, conv)
 
-    vol_spacings = ustrip.(spacing.(p))
-    # Force-norm convergence: max_i(|F_i| * s_i). At equilibrium forces vanish,
-    # so this detects true convergence earlier than displacement-based metrics
-    # which can be small while forces are still large (oscillation).
-    forces = zeros(npoints)
-
-    # Frozen-pair kick state
-    kick_state = (; pair = (0, 0), rs = Inf, count = 0)
-
-    conv = Float64[]
-    i = 1
-    while i <= max_iters
-        p_old .= p
-        if (i - 1) % rebuild_every == 0
-            @views all_cur[(n_bnd + 1):end] .= p
-            method_ref[] = KNearestSearch(all_cur, k)
-        end
-        tmap!(p, 1:npoints) do id
-            xi = p_old[id]
-            ids, dists = searchdists(xi, method_ref[])
-            ids = @view ids[2:end]
-            neighborhood = @view all_cur[ids]
-            rij = norm.(@view dists[2:end])
-            s = spacing(xi)
-
-            repel_force = sum(zip(neighborhood, rij)) do z
-                xj, r = z
-                @inbounds compute_force(force_model, r / s) * _safe_direction(xi, xj, r)
-            end
-
-            F_norm = norm(repel_force)
-            forces[id] = F_norm * ustrip(s)
-            α_i = clamp(inv(F_norm + 1.0e-30), α_lo, α_max)
-            disp = Vec(s * α_i * repel_force)
-            d_norm = norm(disp)
-            if d_norm > s
-                disp = disp * (s / d_norm)
-            end
-            return xi + disp
-        end
-        push!(conv, maximum(forces))
-        if !isnothing(trace)
-            _trace_closest_pair!(trace, p, vol_spacings, i)
-        end
-        # Stochastic kick: break frozen-pair standoffs
-        if kick_after > 0
-            kicked, kick_state = _kick_frozen_pair!(
-                p, vol_spacings, n_bnd, kick_state, kick_after
-            )
-            if kicked
-                @debug "Kicked frozen pair at iteration $i"
-            end
-        end
-        if conv[end] < tol
-            @info "Node repel finished in $i iterations" convergence = conv[end]
-            break
-        end
-        i = i + 1
-    end
-    if i > max_iters
-        @warn "Node repel reached maximum iterations" max_iters convergence = conv[end]
-    end
-    if !isnothing(convergence)
-        append!(convergence, conv)
-    end
     survivors = filter(x -> isinside(x, cloud), p)
     if cull_ratio > 0 && !isempty(survivors)
-        keep = _near_duplicate_keep_mask(survivors, ustrip.(spacing.(survivors)), cull_ratio)
-        survivors = survivors[keep]
+        survivors = survivors[_cull(survivors, spacing, cull_ratio)]
     end
-    new_volume = PointVolume(survivors)
-    return PointCloud(boundary(cloud), new_volume, NoTopology())
+    return PointCloud(boundary(cloud), PointVolume(survivors), NoTopology())
 end
 
 """
-    repel(cloud::PointCloud, spacing, octree::TriangleOctree;
-          force_model=SpacingEquilibriumForce(β), β=0.2,
-          α=auto, α_min=auto, k=21, max_iters=1000, tol=1e-6, rebuild_every=1,
-          cull_ratio=0.0, kick_after=0, convergence=nothing, trace=nothing)
+    repel(cloud::PointCloud, spacing, octree::TriangleOctree; kwargs...) -> PointCloud
 
-Optimize point distribution via node repulsion (Miotti 2023) with boundary projection.
+Node repulsion with boundary projection: *all* points move, boundary points are
+re-projected onto the mesh surface every iteration, and volume points that
+escape the domain bounce back — or stick to the surface (see `deposit_ratio`).
+Step size, convergence, and the shared keywords are as in the method without
+`octree`.
 
-All points (boundary and volume) participate in repulsion. Points that escape the domain
-are projected back to the nearest mesh triangle. Boundary points are always projected
-back to the surface after each iteration.
+The returned boundary is a single surface named `:boundary` (use
+`split_surface!` to re-establish surface distinctions); topology is `NoTopology`.
 
-Uses an **adaptive per-point step size** to eliminate oscillation and accelerate
-convergence. Each point gets `α_i = clamp(s_i / (|F_i| + ε), α_min, α_max)` where
-`s_i` is the local spacing and `|F_i|` is the repel-force norm. `α` sets `α_max`;
-`α_min` defaults to `α_max / 100`. Displacement is capped at one spacing unit per
-iteration (`|Δp| ≤ s_i`) to prevent runaway from strong short-range forces.
-
-Convergence is measured by the **force-norm** criterion `max_i(|F_i| * s_i)` — at
-equilibrium forces vanish, so this detects true convergence earlier than
-displacement-based metrics.
-
-When `cull_ratio > 0`, near-duplicate points closer than `cull_ratio * spacing` to a
-kept point are removed after relaxation (boundary points, indexed first, are kept over
-volume points). This targets the stuck boundary pair the deterministic
-`closest_point_on_triangle` projection parks at a shared edge/vertex — a single defect
-that dominates `mesh_ratio` and that no number of iterations separates. Off (`0.0`) by
-default; `0.5` is a reasonable value. Note this changes the point count.
-
-When `kick_after > 0`, the closest pair is tracked across iterations. If the same
-pair stays at the same `r/s` for `kick_after` consecutive iterations (a balanced
-standoff), a small random displacement (0.1·s) is applied to the volume point in
-the pair to break the symmetry. Off (`0`) by default; `10`–`20` is reasonable.
-
-Like the volume-only method, this is a true N-body relaxation: the
-k-nearest-neighbor graph is rebuilt from the *current* positions every
-`rebuild_every` iterations (default `1`) so points respond to their neighbors'
-actual motion rather than the initial layout.
-
-The returned cloud has `NoTopology` since points have moved. The boundary is returned as a
-single unified surface named `:boundary`. Use `split_surface!(cloud.boundary, angle)` to
-re-establish surface distinctions if needed.
-
-Pass a `Vector{Float64}` via the `convergence` keyword to collect the convergence history.
-
-`force_model` accepts any subtype of [`RepelForceModel`](@ref); see the method without
-`octree` for details on the available force laws.
+# Additional keywords
+- `deposit_ratio = 0.0`: when `> 0`, an escaped volume point is *deposited* —
+  projected onto the nearest triangle and converted into a boundary point,
+  accepted only if no boundary point already lies within
+  `deposit_ratio·spacing` of the landing site. Surface sampling then emerges
+  from volume containment instead of the mesh tessellation; the acceptance test
+  keeps the deposited density self-limiting (conversion is one-way). Deposited
+  points carry the landing triangle's normal and `spacing²` as area.
+  `0.5`–`0.7` is reasonable.
+- `cull_ratio = 0.0`: as in the volume-only method; here it also targets
+  boundary pairs that the deterministic projection parks on a shared
+  edge/vertex.
 """
 function repel(
         cloud::PointCloud{𝔼{3}, C},
@@ -361,55 +113,103 @@ function repel(
         rebuild_every::Int = 1,
         cull_ratio::Real = 0.0,
         kick_after::Int = 0,
+        deposit_ratio::Real = 0.0,
         convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
         trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
     ) where {C <: CRS}
     rebuild_every >= 1 || throw(ArgumentError("rebuild_every must be ≥ 1"))
-    α_max = ustrip(α)
-    α_lo = ustrip(α_min)
-
+    deposit_ratio >= 0 || throw(ArgumentError("deposit_ratio must be ≥ 0"))
     all_p = points(cloud)
-    npoints_total = length(all_p)
+    npoints = length(all_p)
     n_boundary = length(boundary(cloud))
+    p, p_old, snap = copy(all_p), copy(all_p), copy(all_p)
 
-    p = copy(all_p)
-    p_old = copy(all_p)
-    # Snapshot the kd-tree is built from; refreshed in place on each rebuild so
-    # repulsion uses current neighbor positions (a Jacobi-style update — every
-    # force in a sweep is evaluated against the same frozen snapshot).
-    snap = copy(all_p)
+    len_unit = Unitful.unit(Meshes.to(first(all_p))[1])
+    offset_dist = 1.0e-6 * norm(octree.mesh_bbox_max - octree.mesh_bbox_min)
+    tri_indices = zeros(Int, npoints)
+    # Mutable membership: deposition converts volume points into boundary
+    # points. Vector{Bool} (not BitVector) — per-slot writes from tmap! tasks
+    # are safe.
+    is_bnd = [id <= n_boundary for id in 1:npoints]
+    escaped = fill(false, npoints)
+
+    constrain = (id, xi, x_proposed) -> _constrain_octree(
+        id, xi, x_proposed, is_bnd, escaped, tri_indices, octree, offset_dist, len_unit
+    )
+    deposit! = deposit_ratio <= 0 ? nothing : (p_cur, method, iter) -> begin
+        n = _deposit_escaped!(
+            p_cur, method, escaped, is_bnd, tri_indices, octree,
+            spacing, deposit_ratio, offset_dist, len_unit,
+        )
+        n > 0 && @debug "Deposited $n escaped point(s) onto the boundary at iteration $iter"
+        return nothing
+    end
+
+    conv = _relax!(
+        p, p_old, snap, spacing, force_model, constrain;
+        n_fixed = 0, n_protected = n_boundary,
+        α_lo = ustrip(α_min), α_max = ustrip(α),
+        k, max_iters, tol, rebuild_every, kick_after, trace, deposit!,
+    )
+    isnothing(convergence) || append!(convergence, conv)
+
+    keep = cull_ratio > 0 ? _cull(p, spacing, cull_ratio) : trues(npoints)
+    return _reconstruct_cloud(cloud, p, tri_indices, is_bnd, n_boundary, octree, spacing, keep)
+end
+
+# ======================================================================
+# Core relaxation loop
+# ======================================================================
+
+"""
+    _relax!(p, p_old, snap, spacing, force_model, constrain; kwargs...) -> Vector{Float64}
+
+Shared relaxation loop behind both `repel` methods. `p` holds the movable
+points (updated in place); `snap` is the search snapshot whose first `n_fixed`
+entries are static and whose tail mirrors `p`, refreshed every `rebuild_every`
+iterations. `constrain(id, xi, x_proposed)` maps a proposed position to the
+final one (identity, or the octree wall rule). `deposit!(p, method, i)`, when
+given, runs serially after each sweep. Kick targets prefer indices past
+`n_protected`. Returns the force-norm convergence history `max_i(|F_i|·s_i)`.
+"""
+function _relax!(
+        p, p_old, snap, spacing, force_model, constrain;
+        n_fixed, n_protected, α_lo, α_max, k, max_iters, tol, rebuild_every,
+        kick_after, trace, deposit! = nothing,
+    )
+    n_move = length(p)
+    spacings = ustrip.(spacing.(snap))
+    len_unit = Unitful.unit(Meshes.to(first(snap))[1])
+    # Force-norm convergence data: at equilibrium forces vanish, so this detects
+    # convergence earlier than displacement (which can be small mid-oscillation).
+    forces = zeros(n_move)
+    # Per-point nearest neighbor, recorded during the sweep — gives the closest
+    # pair for trace/kick without an extra search.
+    nn_dist = fill(Inf, n_move)
+    nn_id = zeros(Int, n_move)
     # Ref so the per-iteration rebuild does not rebind a captured variable
     # (OhMyThreads' tmap! rejects boxed closure captures).
     method_ref = Ref(KNearestSearch(snap, k))
-
-    all_spacings = ustrip.(spacing.(p))
-    # Force-norm convergence: max_i(|F_i| * s_i)
-    forces = zeros(npoints_total)
-
-    # Frozen-pair kick state
     kick_state = (; pair = (0, 0), rs = Inf, count = 0)
-
-    sample_coords = Meshes.to(first(all_p))
-    len_unit = Unitful.unit(sample_coords[1])
-
-    offset_dist = 1.0e-6 * norm(octree.mesh_bbox_max - octree.mesh_bbox_min)
-
-    tri_indices = zeros(Int, npoints_total)
 
     conv = Float64[]
     i = 1
     while i <= max_iters
         p_old .= p
         if (i - 1) % rebuild_every == 0
-            snap .= p
+            @views snap[(n_fixed + 1):end] .= p
             method_ref[] = KNearestSearch(snap, k)
         end
-        tmap!(p, 1:npoints_total) do id
+        # Jacobi-style sweep: every force is evaluated against the same frozen
+        # snapshot.
+        tmap!(p, 1:n_move) do id
             xi = p_old[id]
             ids, dists = searchdists(xi, method_ref[])
             ids = @view ids[2:end]
             neighborhood = @view snap[ids]
             rij = norm.(@view dists[2:end])
+            nn_id[id] = ids[1]
+            nn_dist[id] = ustrip(rij[1])
             s = spacing(xi)
 
             repel_force = sum(zip(neighborhood, rij)) do z
@@ -419,41 +219,28 @@ function repel(
 
             F_norm = norm(repel_force)
             forces[id] = F_norm * ustrip(s)
+            # Adaptive per-point step, capped at one local spacing.
             α_i = clamp(inv(F_norm + 1.0e-30), α_lo, α_max)
             disp = Vec(s * α_i * repel_force)
             d_norm = norm(disp)
             if d_norm > s
                 disp = disp * (s / d_norm)
             end
-            x_proposed = xi + disp
-
-            sv_proposed = _extract_vertex(Float64, x_proposed)
-            sv_original = _extract_vertex(Float64, xi)
-            is_bnd = id <= n_boundary
-
-            sv_result, tri_idx = _constrain_to_domain(
-                sv_proposed, sv_original, octree, is_bnd, offset_dist
-            )
-            tri_indices[id] = tri_idx
-
-            return Point(
-                sv_result[1] * len_unit, sv_result[2] * len_unit, sv_result[3] * len_unit
-            )
+            return constrain(id, xi, xi + disp)
         end
-
-        push!(conv, maximum(forces))
-        if !isnothing(trace)
-            _trace_closest_pair!(trace, p, all_spacings, i)
-        end
-        # Stochastic kick: break frozen-pair standoffs
-        if kick_after > 0
-            kicked, kick_state = _kick_frozen_pair!(
-                p, all_spacings, n_boundary, kick_state, kick_after
-            )
-            if kicked
-                @debug "Kicked frozen pair at iteration $i"
+        push!(conv, maximum(forces; init = 0.0))
+        if n_move > 0 && (!isnothing(trace) || kick_after > 0)
+            pair = _closest_pair(nn_dist, nn_id, spacings, n_fixed)
+            isnothing(trace) || push!(trace, (; iteration = i, pair...))
+            if kick_after > 0
+                kick_state, kicked = _maybe_kick!(
+                    p, pair, kick_state, kick_after, spacings, n_fixed,
+                    n_protected, len_unit,
+                )
+                kicked && @debug "Kicked frozen pair at iteration $i"
             end
         end
+        isnothing(deposit!) || deposit!(p, method_ref[], i)
         if conv[end] < tol
             @info "Node repel finished in $i iterations" convergence = conv[end]
             break
@@ -463,56 +250,153 @@ function repel(
     if i > max_iters
         @warn "Node repel reached maximum iterations" max_iters convergence = conv[end]
     end
-    if !isnothing(convergence)
-        append!(convergence, conv)
-    end
-
-    keep = cull_ratio > 0 ?
-        _near_duplicate_keep_mask(p, ustrip.(spacing.(p)), cull_ratio) :
-        trues(npoints_total)
-    return _reconstruct_cloud(cloud, p, tri_indices, n_boundary, octree, keep)
+    return conv
 end
 
-function _reconstruct_cloud(
-        cloud::PointCloud{𝔼{3}, C},
-        p::AbstractVector{<:Point{𝔼{3}, C}},
-        tri_indices::Vector{Int},
-        n_boundary::Int,
-        octree::TriangleOctree,
-        keep::AbstractVector{Bool} = trues(length(p)),
-    ) where {C <: CRS}
-    npoints_total = length(p)
+# ======================================================================
+# Per-iteration helpers
+# ======================================================================
 
-    orig_normals = normal(boundary(cloud))
-    orig_areas = area(boundary(cloud))
+"""
+    _safe_direction(xi, xj, r) -> Vec
 
-    new_bnd_pts = Point{𝔼{3}, C}[]
-    new_bnd_normals = SVector{3, Float64}[]
-    new_bnd_areas = eltype(orig_areas)[]
-    new_vol_pts = Point{𝔼{3}, C}[]
+Unit direction from xj to xi; a random unit vector when `r == 0`, avoiding the
+0/0 NaN that traps coincident points.
+"""
+function _safe_direction(xi, xj, r)
+    if r > zero(r)
+        return (xi - xj) / r
+    end
+    d = randn(SVector{3, Float64})
+    return d / norm(d)
+end
 
-    for id in 1:npoints_total
-        keep[id] || continue
-        if id <= n_boundary
-            push!(new_bnd_pts, p[id])
-            if tri_indices[id] > 0
-                push!(new_bnd_normals, _get_triangle_normal(Float64, octree.mesh, tri_indices[id]))
-            else
-                push!(new_bnd_normals, orig_normals[id])
-            end
-            push!(new_bnd_areas, orig_areas[id])
-        else
-            push!(new_vol_pts, p[id])
+"""
+    _closest_pair(nn_dist, nn_id, spacings, n_fixed) -> NamedTuple
+
+Closest pair read off the sweep's per-point nearest-neighbor data (no extra
+search). Returns `(; r, s, r_over_s, idx_a, idx_b)` in snapshot-global indices.
+A frozen `r_over_s` across iterations indicates a balanced standoff; an
+oscillating one, an overshoot limit-cycle.
+"""
+function _closest_pair(nn_dist, nn_id, spacings, n_fixed)
+    i = argmin(nn_dist)
+    j = nn_id[i]
+    ig = i + n_fixed
+    r = nn_dist[i]
+    s = (spacings[ig] + spacings[j]) / 2
+    return (; r, s, r_over_s = r / s, idx_a = min(ig, j), idx_b = max(ig, j))
+end
+
+"""
+    _maybe_kick!(p, pair, state, kick_after, spacings, n_fixed, n_protected, len_unit)
+        -> (state, kicked)
+
+Kick one point of the closest pair by `0.1·s` in a random direction once the
+pair has stayed frozen (same indices and `r/s`) for `kick_after` consecutive
+iterations. Prefers an index past `n_protected` (a volume point) and always
+picks a movable one (past `n_fixed`). `state` is the `(pair, rs, count)` tuple
+the caller threads through.
+"""
+function _maybe_kick!(
+        p::AbstractVector, pair::NamedTuple, state::NamedTuple, kick_after::Int,
+        spacings::AbstractVector{<:AbstractFloat}, n_fixed::Int, n_protected::Int,
+        len_unit,
+    )
+    frozen = (pair.idx_a, pair.idx_b) == state.pair &&
+        abs(pair.r_over_s - state.rs) < 1.0e-8
+    count = frozen ? state.count + 1 : 1
+    if count < kick_after
+        return (; pair = (pair.idx_a, pair.idx_b), rs = pair.r_over_s, count), false
+    end
+
+    a, b = pair.idx_a, pair.idx_b
+    target = a > n_protected ? a : (b > n_protected ? b : (a > n_fixed ? a : b))
+    s = spacings[target]
+    d = randn(SVector{3, Float64})
+    p[target - n_fixed] += Vec(0.1 * s * (d / norm(d)) * len_unit)
+    return (; pair = (a, b), rs = pair.r_over_s, count = 0), true
+end
+
+# ======================================================================
+# Octree wall handling
+# ======================================================================
+
+"""
+    _constrain_octree(id, xi, x_proposed, is_bnd, escaped, tri_indices,
+                      octree, offset_dist, len_unit) -> Point
+
+Wall rule for one point: boundary points are re-projected onto the mesh
+(falling back to projecting their previous position), volume points keep the
+proposed position while it stays inside, and escapees revert — flagged in
+`escaped` as deposition candidates.
+"""
+function _constrain_octree(
+        id, xi, x_proposed, is_bnd, escaped, tri_indices,
+        octree, offset_dist, len_unit,
+    )
+    sv_proposed = _extract_vertex(Float64, x_proposed)
+    if is_bnd[id]
+        sv, tri_idx = _project_to_boundary(sv_proposed, octree, offset_dist)
+        if tri_idx == 0
+            sv, tri_idx = _project_to_boundary(
+                _extract_vertex(Float64, xi), octree, offset_dist
+            )
         end
+        tri_indices[id] = tri_idx
+        return Point(sv[1] * len_unit, sv[2] * len_unit, sv[3] * len_unit)
     end
-
-    new_surf = PointSurface(new_bnd_pts, new_bnd_normals, new_bnd_areas)
-    new_bnd = PointBoundary(LittleDict{Symbol, typeof(new_surf)}(:boundary => new_surf))
-    new_vol = isempty(new_vol_pts) ? PointVolume{𝔼{3}, C}() : PointVolume(new_vol_pts)
-
-    return PointCloud(new_bnd, new_vol, NoTopology())
+    isinside(sv_proposed, octree) && return x_proposed
+    escaped[id] = true
+    return xi
 end
 
+"""
+    _deposit_escaped!(p, method, escaped, is_bnd, tri_indices, octree, spacing,
+                      deposit_ratio, offset_dist, len_unit) -> n_deposited
+
+One deposition pass: each escaped volume point is projected onto its nearest
+triangle and converted to a boundary point, unless another boundary point
+already sits within `deposit_ratio·spacing` of the landing site. Serial on
+purpose — earlier deposits must be visible to later candidates, because
+conversion is one-way and a parallel pass would over-deposit when a whole
+layer escapes in one iteration.
+"""
+function _deposit_escaped!(
+        p, method, escaped, is_bnd, tri_indices, octree,
+        spacing, deposit_ratio, offset_dist, len_unit,
+    )
+    n_dep = 0
+    for id in eachindex(p)
+        escaped[id] || continue
+        escaped[id] = false
+        is_bnd[id] && continue
+        site, tri_idx = _project_to_boundary(
+            _extract_vertex(Float64, p[id]), octree, offset_dist
+        )
+        tri_idx == 0 && continue
+        site_pt = Point(site[1] * len_unit, site[2] * len_unit, site[3] * len_unit)
+        thr = deposit_ratio * ustrip(spacing(site_pt))
+        ids_near, _ = searchdists(site_pt, method)
+        occupied = any(
+            j -> j != id && is_bnd[j] && ustrip(norm(p[j] - site_pt)) < thr,
+            ids_near,
+        )
+        occupied && continue
+        p[id] = site_pt
+        is_bnd[id] = true
+        tri_indices[id] = tri_idx
+        n_dep += 1
+    end
+    return n_dep
+end
+
+"""
+    _project_to_boundary(sv, octree, offset_dist) -> (SVector, tri_idx)
+
+Nearest point on the mesh surface, nudged `offset_dist` inward along the
+triangle normal. `tri_idx == 0` means no triangle was found.
+"""
 function _project_to_boundary(
         sv::SVector{3, T}, octree::TriangleOctree, offset_dist::T,
     ) where {T <: Real}
@@ -524,24 +408,96 @@ function _project_to_boundary(
     projected = closest_point_on_triangle(sv, v1, v2, v3)
 
     n = _get_triangle_normal(T, octree.mesh, state.closest_idx)
-    projected = projected - offset_dist * n
-
-    return (projected, state.closest_idx)
+    return (projected - offset_dist * n, state.closest_idx)
 end
 
-function _constrain_to_domain(
-        sv_proposed::SVector{3, T}, sv_original::SVector{3, T},
-        octree::TriangleOctree, is_boundary::Bool, offset_dist::T,
-    ) where {T <: Real}
-    if is_boundary
-        sv_result, tri_idx = _project_to_boundary(sv_proposed, octree, offset_dist)
-        if tri_idx > 0
-            return (sv_result, tri_idx)
+# ======================================================================
+# Post-processing
+# ======================================================================
+
+"""
+    _cull(pts, spacing, ratio) -> BitVector
+
+Near-duplicate keep-mask plus the defect warning: the cull is a safety net, so
+any non-zero removal is surfaced.
+"""
+function _cull(pts, spacing, ratio)
+    keep = _near_duplicate_keep_mask(pts, ustrip.(spacing.(pts)), ratio)
+    n_culled = count(!, keep)
+    n_culled > 0 &&
+        @warn "Cull removed $n_culled near-duplicate point(s) — repel left defects behind" cull_ratio = ratio
+    return keep
+end
+
+"""
+    _near_duplicate_keep_mask(pts, spacings, ratio) -> BitVector
+
+Greedy, order-preserving keep-mask: drop any point closer than `ratio·spacing`
+to a kept, lower-indexed point (so boundary points, indexed first, survive over
+volume points). The ball search at the largest cull radius sees *every* point
+inside the threshold, so the guarantee holds for clusters of any size.
+"""
+function _near_duplicate_keep_mask(pts, spacings, ratio)
+    n = length(pts)
+    keep = trues(n)
+    (ratio <= 0 || n < 2) && return keep
+    len_unit = Unitful.unit(Meshes.to(first(pts))[1])
+    method = BallSearch(pts, MetricBall(ratio * maximum(spacings) * len_unit))
+    @inbounds for i in 1:n
+        keep[i] || continue
+        thr = ratio * spacings[i]
+        for j in search(pts[i], method)
+            (j == i || !keep[j]) && continue
+            ustrip(norm(pts[j] - pts[i])) < thr && (keep[j] = false)
         end
-        return _project_to_boundary(sv_original, octree, offset_dist)
     end
-    if isinside(sv_proposed, octree)
-        return (sv_proposed, 0)
+    return keep
+end
+
+"""
+    _reconstruct_cloud(cloud, p, tri_indices, is_bnd, n_boundary, octree, spacing, keep)
+
+Rebuild a `PointCloud` after octree repel: kept points are partitioned by
+`is_bnd` into a single `:boundary` surface and the volume. Projected boundary
+points take the landing triangle's normal; imported ones (`id ≤ n_boundary`)
+keep their original area, deposited ones get `spacing²`.
+"""
+function _reconstruct_cloud(
+        cloud::PointCloud{𝔼{3}, C},
+        p::AbstractVector{<:Point{𝔼{3}, C}},
+        tri_indices::Vector{Int},
+        is_bnd::AbstractVector{Bool},
+        n_boundary::Int,
+        octree::TriangleOctree,
+        spacing,
+        keep::AbstractVector{Bool} = trues(length(p)),
+    ) where {C <: CRS}
+    orig_normals = normal(boundary(cloud))
+    orig_areas = area(boundary(cloud))
+
+    new_bnd_pts = Point{𝔼{3}, C}[]
+    new_bnd_normals = SVector{3, Float64}[]
+    new_bnd_areas = eltype(orig_areas)[]
+    new_vol_pts = Point{𝔼{3}, C}[]
+
+    for id in eachindex(p)
+        keep[id] || continue
+        if is_bnd[id]
+            push!(new_bnd_pts, p[id])
+            if tri_indices[id] > 0
+                push!(new_bnd_normals, _get_triangle_normal(Float64, octree.mesh, tri_indices[id]))
+            else
+                push!(new_bnd_normals, orig_normals[id])
+            end
+            push!(new_bnd_areas, id <= n_boundary ? orig_areas[id] : spacing(p[id])^2)
+        else
+            push!(new_vol_pts, p[id])
+        end
     end
-    return (sv_original, 0)
+
+    new_surf = PointSurface(new_bnd_pts, new_bnd_normals, new_bnd_areas)
+    new_bnd = PointBoundary(LittleDict{Symbol, typeof(new_surf)}(:boundary => new_surf))
+    new_vol = isempty(new_vol_pts) ? PointVolume{𝔼{3}, C}() : PointVolume(new_vol_pts)
+
+    return PointCloud(new_bnd, new_vol, NoTopology())
 end

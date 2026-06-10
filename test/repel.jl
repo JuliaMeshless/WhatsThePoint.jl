@@ -225,12 +225,59 @@ end
 
     # ratio = 0 is a no-op (culling disabled).
     @test all(WhatsThePoint._near_duplicate_keep_mask(pts, spacings, 0.0))
+
+    # A cluster larger than any fixed-k neighborhood: the mask must still
+    # guarantee no kept pair is closer than ratio·spacing, so the whole
+    # cluster collapses to its lowest-indexed point.
+    cluster = [Meshes.Point(10.0 + 1.0e-3 * i, 0.0, 0.0) for i in 1:12]
+    cpts = vcat(pts, cluster)
+    ckeep = WhatsThePoint._near_duplicate_keep_mask(cpts, fill(1.0, length(cpts)), 0.5)
+    @test count(ckeep[6:end]) == 1
+    @test ckeep[6]
 end
 
-@testitem "repel cull_ratio removes near-duplicates" setup = [TestData, CommonImports] begin
+@testitem "repel deposit_ratio grows the boundary from escaped points" setup = [TestData, CommonImports] begin
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    full = PointBoundary(TestData.BOX_PATH)
+    # Deliberately sparse boundary: deposition must grow the surface population
+    # until it can contain the interior at the prescribed density.
+    ids = 1:200:length(full)
+    surf = PointSurface(
+        points(full)[ids], collect(normal(full)[ids]), collect(area(full)[ids])
+    )
+    sparse_bnd = PointBoundary(LittleDict{Symbol, typeof(surf)}(:boundary => surf))
+    n_sparse = length(sparse_bnd)
+
+    # Spacing sized so the volume fills the box at the point budget — deposition
+    # needs interior pressure against the wall, not an under-filled cloud
+    # expanding inward. The sparse boundary sits at ~3.1 m, comparable to h.
+    spacing = ConstantSpacing(3.0f0 * m)
+    cloud = discretize(sparse_bnd, spacing; alg = SlakKosec(octree), max_points = 600)
+
+    new_cloud = repel(cloud, spacing, octree; max_iters = 30, deposit_ratio = 0.5)
+
+    # Deposition converts points (total conserved) and grows the boundary.
+    @test length(new_cloud) == length(cloud)
+    @test length(WhatsThePoint.boundary(new_cloud)) > n_sparse
+
+    # Deposited points carry valid triangle normals.
+    for n in normal(WhatsThePoint.boundary(new_cloud))
+        @test isfinite(norm(n)) && norm(n) > 0.99
+    end
+
+    # Off by default: boundary count unchanged.
+    no_dep = repel(cloud, spacing, octree; max_iters = 5)
+    @test length(WhatsThePoint.boundary(no_dep)) == n_sparse
+end
+
+@testitem "repel cull_ratio enforces the separation guarantee" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
-    spacing = _relative_spacing(boundary)
+    # Spacing must be consistent with the boundary tessellation: box.stl's face
+    # centers sit ~0.22 m apart, while bbox/8 ≈ 5.4 m would put the 0.5·h cull
+    # radius across ~12 boundary spacings — asking the cull to decimate the
+    # boundary instead of removing stray near-duplicate pairs.
+    spacing = ConstantSpacing(0.25f0 * m)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 60)
 
     nocull = repel(cloud, spacing, octree; max_iters = 20)
@@ -240,7 +287,9 @@ end
     @test length(culled) <= length(nocull)
 
     # No kept pair is closer than the cull threshold (0.5·spacing).
-    m = metrics(culled; k = 2)
+    # NB: don't name this `m` — CommonImports brings in `Unitful.m`, and
+    # assigning to an imported name is an error.
+    culled_metrics = metrics(culled; k = 2)
     smin = minimum(ustrip.(spacing.(points(culled))))
-    @test ustrip(m.separation) >= 0.5 * smin * (1 - 1e-6)
+    @test ustrip(culled_metrics.separation) >= 0.5 * smin * (1 - 1e-6)
 end

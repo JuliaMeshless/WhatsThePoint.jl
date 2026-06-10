@@ -93,6 +93,15 @@ fix that moved separation from 0.14·Δ to 0.50·Δ.
 `|Δp| ≤ s_i`. Prevents runaway from strong forces. Safety harness for stronger
 force laws (e.g. `StrongSpacingForce`).
 
+### 2h. Deposition (volume→boundary conversion) — DONE (2026-06-10)
+`deposit_ratio` parameter (octree method). Escaped volume points are projected
+onto the nearest triangle and converted to boundary points, accepted only when
+no boundary point sits within `deposit_ratio·s` of the landing site
+(self-limiting). Surface sampling then *emerges* from volume containment —
+decoupled from STL tessellation. First result: sparse-boundary box grew
+234 → 408 boundary points. Next: cavity with decimated boundary, then a
+boundary-free entry point (see NODEGEN_FINDINGS.md path forward).
+
 ## 3. Combined strategy (updated 2026-06-09)
 
 Current pipeline:
@@ -145,13 +154,19 @@ Expected wall-clock improvement: ~5-10×.
 | C5 | Octree-based NN search | Deferred |
 | C6 | CVT pre-relaxation | Deferred |
 
-## 5. Open questions
+## 5. Open questions (updated 2026-06-10)
 
 1. **Coordination 18.6 vs target 12–14.** Is this a convergence issue (need more
    iters), an initial-placement issue (Poisson start is too dense), or is the 1.4h
    threshold too generous?
 2. **Can we reach CV < 0.10?** Currently 0.14. Might need better initial placement
    (Bridson) or more repel iterations.
-3. **Wall-clock for shape-opt loop.** The current 300-iters repel takes ~30s on
-   11k points. Needs to be <5s to live inside the optimization loop. Tier C items
-   (octree NN, momentum, multi-grid) are the path.
+3. **Wall-clock for shape-opt loop.** Measured 2026-06-10: 0.34 s / 10 iters at
+   46.8k pts, **0.73 GB allocated** — `searchdists` per-point allocations + the
+   per-iteration kd rebuild. Tier C (octree NN, momentum, multi-grid) is the path.
+4. **Cull silence.** The cavity culls ~42–59 points/run (boundary projection parks
+   pairs on shared edges/vertices). Per design principle the cull should never
+   fire; fixing the projection (or deposition acceptance applied to projections)
+   is Phase 2 in NODEGEN_FINDINGS.md.
+5. **Deposition at scale.** Validated on one 834-pt box only. Curved geometry,
+   variable h, and the boundary-free start are open.
