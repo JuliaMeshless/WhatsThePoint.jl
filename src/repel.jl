@@ -42,19 +42,132 @@ function _near_duplicate_keep_mask(pts, spacings, ratio)
 end
 
 """
+    _trace_closest_pair!(trace, points, spacings, iteration)
+
+Push a diagnostic snapshot of the closest pair in `points` to `trace`.
+
+Each entry records the iteration number, the pair's separation `r`, the
+per-point spacing `s`, the normalized separation `r/s`, and the indices of
+the pair. Comparing entries across iterations distinguishes:
+
+- **Standoff**: `r/s` is constant (non-zero), forces balance exactly.
+- **Overshoot limit-cycle**: `r/s` oscillates (displacement alternates sign).
+"""
+function _trace_closest_pair!(
+        trace::AbstractVector{<:NamedTuple},
+        points::AbstractVector,
+        spacings::AbstractVector{<:AbstractFloat},
+        iteration::Int,
+    )
+    n = length(points)
+    n < 2 && return
+    best_r = Inf
+    best_i, best_j = 1, 2
+    for a in 1:(n - 1)
+        for b in (a + 1):n
+            d = ustrip(norm(points[a] - points[b]))
+            if d < best_r
+                best_r = d
+                best_i, best_j = a, b
+            end
+        end
+    end
+    s_avg = (spacings[best_i] + spacings[best_j]) / 2
+    push!(trace, (;
+        iteration,
+        r = best_r,
+        s = s_avg,
+        r_over_s = best_r / s_avg,
+        idx_a = best_i,
+        idx_b = best_j,
+    ))
+end
+
+"""
+    _kick_frozen_pair!(p, spacings, n_boundary, state, kick_after) -> (kicked, state)
+
+Detect if the closest pair is frozen (same indices, same r/s for several
+iterations). If frozen for `kick_after` consecutive iterations, apply a random
+displacement to the volume point in the pair and return `(true, new_state)`.
+Otherwise return `(false, updated_state)`.
+
+`state` is a `NamedTuple` tracking `(pair, rs, count)` across calls — the caller
+owns it and passes it in each iteration.
+"""
+function _kick_frozen_pair!(
+        p::AbstractVector, spacings::AbstractVector{<:AbstractFloat},
+        n_boundary::Int, state::NamedTuple, kick_after::Int,
+    )
+    n = length(p)
+    n < 2 && return false, state
+
+    # Find closest pair
+    best_r = Inf; best_i, best_j = 1, 2
+    for a in 1:(n - 1)
+        for b in (a + 1):n
+            d = ustrip(norm(p[a] - p[b]))
+            if d < best_r
+                best_r = d; best_i, best_j = a, b
+            end
+        end
+    end
+    s_avg = (spacings[best_i] + spacings[best_j]) / 2
+    rs = best_r / s_avg
+
+    # Check if frozen (same pair, same r/s within tolerance)
+    frozen = (best_i == state.pair[1] && best_j == state.pair[2] &&
+              abs(rs - state.rs) < 1e-8)
+    count = frozen ? state.count + 1 : 1
+
+    if count >= kick_after
+        # Pick the volume point to kick (prefer the one past n_boundary)
+        target = best_i > n_boundary ? best_i : (best_j > n_boundary ? best_j : best_i)
+        s = spacings[target]
+        d = randn(SVector{3, Float64})
+        kick_dir = d / (norm(d) + 1e-30)
+        p[target] = p[target] + Vec(0.1 * s * kick_dir * Unitful.m)
+        return true, (; pair = (best_i, best_j), rs, count = 0)
+    end
+
+    return false, (; pair = (best_i, best_j), rs, count)
+end
+
+"""
     repel(cloud::PointCloud, spacing;
           force_model=SpacingEquilibriumForce(β), β=0.2,
-          α=auto, k=21, max_iters=1000, tol=1e-6, rebuild_every=1,
-          cull_ratio=0.0, convergence=nothing)
+          α=auto, α_min=auto, k=21, max_iters=1000, tol=1e-6, rebuild_every=1,
+          cull_ratio=0.0, kick_after=0, convergence=nothing, trace=nothing)
 
 Optimize point distribution via node repulsion (Miotti 2023).
 Only volume points move; escaped points are discarded via `isinside` filtering.
+
+Uses an **adaptive per-point step size** to eliminate oscillation and accelerate
+convergence. Each point gets `α_i = clamp(s_i / (|F_i| + ε), α_min, α_max)` where
+`s_i` is the local spacing and `|F_i|` is the repel-force norm. Points with strong
+forces (near-duplicates, voids) take the maximum safe step; points near equilibrium
+take tiny steps. `α` sets `α_max`; `α_min` defaults to `α_max / 100`.
+
+Displacement is capped at one spacing unit per iteration (`|Δp| ≤ s_i`). This
+prevents runaway when strong short-range forces (near-duplicates, standoff pairs)
+produce large force magnitudes — the point moves at most one local spacing per
+step, keeping the relaxation stable.
+
+Convergence is measured by the **force-norm** criterion `max_i(|F_i| * s_i)` rather
+than displacement. At equilibrium forces vanish, so this detects true convergence
+earlier and avoids false stops from oscillating points whose displacement is small
+but restoring forces are still large.
 
 When `cull_ratio > 0`, near-duplicate points closer than `cull_ratio * spacing` to a
 kept point are removed after relaxation (the lower-indexed point of each pair is kept).
 This is `0.0` (off) by default; a value like `0.5` removes pathological close pairs
 that the force law alone settles into a standoff with. Note this changes the point
 count.
+
+When `kick_after > 0`, the closest pair is tracked across iterations. If the same
+pair stays at the same `r/s` for `kick_after` consecutive iterations (a balanced
+standoff), a small random displacement (0.1·s) is applied to the volume point in
+the pair to break the symmetry. This is `0` (off) by default; `10`–`20` is a
+reasonable value. The kick is safe — the displacement cap still applies.
 
 This is a true N-body relaxation: the k-nearest-neighbor graph is rebuilt from
 the *current* positions every `rebuild_every` iterations (default `1`), so each
@@ -74,6 +187,10 @@ outward under purely repulsive forcing. Use [`InverseDistanceForce`](@ref) for t
 original purely-repulsive Miotti (2023) law (equilibrium then relies on `α`
 damping alone). `β` is kept as a convenience kwarg that feeds the default force
 model; it is ignored when `force_model` is passed explicitly.
+
+Pass a `Vector{NamedTuple}` via `trace` to record per-iteration diagnostics of
+the closest pair (iteration, r, s, r/s, indices). Comparing entries distinguishes
+a balanced standoff (`r/s` frozen) from an overshoot limit-cycle (`r/s` oscillating).
 """
 function repel(
         cloud::PointCloud{𝔼{N}, C},
@@ -81,15 +198,19 @@ function repel(
         β = 0.2,
         force_model::RepelForceModel = SpacingEquilibriumForce(β),
         α = minimum(spacing.(to(cloud))) * 0.05,
+        α_min = α / 100,
         k = 21,
         max_iters = 1000,
         tol = 1.0e-6,
         rebuild_every::Int = 1,
         cull_ratio::Real = 0.0,
+        kick_after::Int = 0,
         convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
+        trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
     ) where {N, C <: CRS}
     rebuild_every >= 1 || throw(ArgumentError("rebuild_every must be ≥ 1"))
-    α = ustrip(α)
+    α_max = ustrip(α)
+    α_lo = ustrip(α_min)
     bnd_p = points(boundary(cloud))
     n_bnd = length(bnd_p)
     p = copy(volume(cloud).points)
@@ -105,9 +226,13 @@ function repel(
     method_ref = Ref(KNearestSearch(all_cur, k))
 
     vol_spacings = ustrip.(spacing.(p))
-    convergence_fn = let s = vol_spacings
-        (p, p_old) -> norm(ustrip.(norm.(p .- p_old)) ./ s, Inf)
-    end
+    # Force-norm convergence: max_i(|F_i| * s_i). At equilibrium forces vanish,
+    # so this detects true convergence earlier than displacement-based metrics
+    # which can be small while forces are still large (oscillation).
+    forces = zeros(npoints)
+
+    # Frozen-pair kick state
+    kick_state = (; pair = (0, 0), rs = Inf, count = 0)
 
     conv = Float64[]
     i = 1
@@ -130,9 +255,29 @@ function repel(
                 @inbounds compute_force(force_model, r / s) * _safe_direction(xi, xj, r)
             end
 
-            return xi + Vec(s * α * repel_force)
+            F_norm = norm(repel_force)
+            forces[id] = F_norm * ustrip(s)
+            α_i = clamp(inv(F_norm + 1.0e-30), α_lo, α_max)
+            disp = Vec(s * α_i * repel_force)
+            d_norm = norm(disp)
+            if d_norm > s
+                disp = disp * (s / d_norm)
+            end
+            return xi + disp
         end
-        push!(conv, convergence_fn(p, p_old))
+        push!(conv, maximum(forces))
+        if !isnothing(trace)
+            _trace_closest_pair!(trace, p, vol_spacings, i)
+        end
+        # Stochastic kick: break frozen-pair standoffs
+        if kick_after > 0
+            kicked, kick_state = _kick_frozen_pair!(
+                p, vol_spacings, n_bnd, kick_state, kick_after
+            )
+            if kicked
+                @debug "Kicked frozen pair at iteration $i"
+            end
+        end
         if conv[end] < tol
             @info "Node repel finished in $i iterations" convergence = conv[end]
             break
@@ -157,8 +302,8 @@ end
 """
     repel(cloud::PointCloud, spacing, octree::TriangleOctree;
           force_model=SpacingEquilibriumForce(β), β=0.2,
-          α=auto, k=21, max_iters=1000, tol=1e-6, rebuild_every=1,
-          cull_ratio=0.0, convergence=nothing)
+          α=auto, α_min=auto, k=21, max_iters=1000, tol=1e-6, rebuild_every=1,
+          cull_ratio=0.0, kick_after=0, convergence=nothing, trace=nothing)
 
 Optimize point distribution via node repulsion (Miotti 2023) with boundary projection.
 
@@ -166,12 +311,27 @@ All points (boundary and volume) participate in repulsion. Points that escape th
 are projected back to the nearest mesh triangle. Boundary points are always projected
 back to the surface after each iteration.
 
+Uses an **adaptive per-point step size** to eliminate oscillation and accelerate
+convergence. Each point gets `α_i = clamp(s_i / (|F_i| + ε), α_min, α_max)` where
+`s_i` is the local spacing and `|F_i|` is the repel-force norm. `α` sets `α_max`;
+`α_min` defaults to `α_max / 100`. Displacement is capped at one spacing unit per
+iteration (`|Δp| ≤ s_i`) to prevent runaway from strong short-range forces.
+
+Convergence is measured by the **force-norm** criterion `max_i(|F_i| * s_i)` — at
+equilibrium forces vanish, so this detects true convergence earlier than
+displacement-based metrics.
+
 When `cull_ratio > 0`, near-duplicate points closer than `cull_ratio * spacing` to a
 kept point are removed after relaxation (boundary points, indexed first, are kept over
 volume points). This targets the stuck boundary pair the deterministic
 `closest_point_on_triangle` projection parks at a shared edge/vertex — a single defect
 that dominates `mesh_ratio` and that no number of iterations separates. Off (`0.0`) by
 default; `0.5` is a reasonable value. Note this changes the point count.
+
+When `kick_after > 0`, the closest pair is tracked across iterations. If the same
+pair stays at the same `r/s` for `kick_after` consecutive iterations (a balanced
+standoff), a small random displacement (0.1·s) is applied to the volume point in
+the pair to break the symmetry. Off (`0`) by default; `10`–`20` is reasonable.
 
 Like the volume-only method, this is a true N-body relaxation: the
 k-nearest-neighbor graph is rebuilt from the *current* positions every
@@ -194,15 +354,19 @@ function repel(
         β = 0.2,
         force_model::RepelForceModel = SpacingEquilibriumForce(β),
         α = minimum(spacing.(to(cloud))) * 0.05,
+        α_min = α / 100,
         k = 21,
         max_iters = 1000,
         tol = 1.0e-6,
         rebuild_every::Int = 1,
         cull_ratio::Real = 0.0,
+        kick_after::Int = 0,
         convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
+        trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
     ) where {C <: CRS}
     rebuild_every >= 1 || throw(ArgumentError("rebuild_every must be ≥ 1"))
-    α = ustrip(α)
+    α_max = ustrip(α)
+    α_lo = ustrip(α_min)
 
     all_p = points(cloud)
     npoints_total = length(all_p)
@@ -219,9 +383,11 @@ function repel(
     method_ref = Ref(KNearestSearch(snap, k))
 
     all_spacings = ustrip.(spacing.(p))
-    convergence_fn = let s = all_spacings
-        (p, p_old) -> norm(ustrip.(norm.(p .- p_old)) ./ s, Inf)
-    end
+    # Force-norm convergence: max_i(|F_i| * s_i)
+    forces = zeros(npoints_total)
+
+    # Frozen-pair kick state
+    kick_state = (; pair = (0, 0), rs = Inf, count = 0)
 
     sample_coords = Meshes.to(first(all_p))
     len_unit = Unitful.unit(sample_coords[1])
@@ -251,7 +417,15 @@ function repel(
                 @inbounds compute_force(force_model, r / s) * _safe_direction(xi, xj, r)
             end
 
-            x_proposed = xi + Vec(s * α * repel_force)
+            F_norm = norm(repel_force)
+            forces[id] = F_norm * ustrip(s)
+            α_i = clamp(inv(F_norm + 1.0e-30), α_lo, α_max)
+            disp = Vec(s * α_i * repel_force)
+            d_norm = norm(disp)
+            if d_norm > s
+                disp = disp * (s / d_norm)
+            end
+            x_proposed = xi + disp
 
             sv_proposed = _extract_vertex(Float64, x_proposed)
             sv_original = _extract_vertex(Float64, xi)
@@ -267,7 +441,19 @@ function repel(
             )
         end
 
-        push!(conv, convergence_fn(p, p_old))
+        push!(conv, maximum(forces))
+        if !isnothing(trace)
+            _trace_closest_pair!(trace, p, all_spacings, i)
+        end
+        # Stochastic kick: break frozen-pair standoffs
+        if kick_after > 0
+            kicked, kick_state = _kick_frozen_pair!(
+                p, all_spacings, n_boundary, kick_state, kick_after
+            )
+            if kicked
+                @debug "Kicked frozen pair at iteration $i"
+            end
+        end
         if conv[end] < tol
             @info "Node repel finished in $i iterations" convergence = conv[end]
             break

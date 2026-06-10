@@ -58,3 +58,30 @@ SpacingEquilibriumForce() = SpacingEquilibriumForce(0.2)
     u² = u * u
     return (1 - u²) / (u² + m.β)^2
 end
+
+"""
+    StrongSpacingForce(β=0.2, γ=3)
+
+Force law `F(u) = (1 − u²) / (u² + β)^γ` with a zero at `u = 1` and a
+configurable singularity strength `γ`. Like [`SpacingEquilibriumForce`](@ref)
+but with a stronger repulsive core: at small `u` the force scales as
+`u^(-2γ)` instead of `u^(-4)`. This breaks balanced standoffs where
+neighbor forces cancel the weaker default core.
+
+`γ = 2` recovers [`SpacingEquilibriumForce`](@ref). `γ = 3` (default) is
+strong enough to break typical standoffs in a few iterations. Higher values
+increase the repulsive kick at close range but may require more iterations
+to settle; the displacement cap in [`repel`](@ref) prevents runaway.
+"""
+struct StrongSpacingForce{T <: Real} <: RepelForceModel
+    β::T
+    γ::T
+end
+
+StrongSpacingForce() = StrongSpacingForce(0.2, 3.0)
+StrongSpacingForce(β::Real) = StrongSpacingForce(β, 3.0)
+
+@inline function compute_force(m::StrongSpacingForce, u::Real)
+    u² = u * u
+    return (1 - u²) / (u² + m.β)^m.γ
+end

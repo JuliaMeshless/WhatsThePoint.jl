@@ -31,7 +31,7 @@ const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 const Angle{T} = Union{Quantity{T, NoDims, typeof(u"rad")}, Quantity{T, NoDims, typeof(u"°")}}
 
 include("utils.jl")
-export metrics, spacing_metrics
+export metrics, spacing_metrics, spacing_fidelity_metrics
 
 include("geometry.jl")
 
@@ -85,7 +85,7 @@ export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, Fornberg
 export discretize
 
 include("repel_forces.jl")
-export RepelForceModel, InverseDistanceForce, SpacingEquilibriumForce, compute_force
+export RepelForceModel, InverseDistanceForce, SpacingEquilibriumForce, StrongSpacingForce, compute_force
 
 include("repel.jl")
 export repel

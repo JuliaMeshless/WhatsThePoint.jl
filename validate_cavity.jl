@@ -103,15 +103,20 @@ m0 = metrics(cloud0)
 # ============================================================================
 
 println("\n############ REPEL (live tree, SpacingEquilibriumForce) ############")
-println("-- no cull --")
+println("-- no kick, no cull --")
 cloud_r = repel(cloud0, spacing, octree;
     max_iters = 300, tol = 1.0e-4, rebuild_every = 1)
 mr = metrics(cloud_r)
 
-println("-- cull_ratio=0.5 (removes the stuck boundary pair) --")
-cloud_rc = repel(cloud0, spacing, octree;
-    max_iters = 300, tol = 1.0e-4, rebuild_every = 1, cull_ratio = 0.5)
-mrc = metrics(cloud_rc)
+println("-- kick_after=10 --")
+cloud_rk = repel(cloud0, spacing, octree;
+    max_iters = 300, tol = 1.0e-4, rebuild_every = 1, kick_after = 10)
+mrk = metrics(cloud_rk)
+
+println("-- kick_after=10 + cull_ratio=0.5 --")
+cloud_rkc = repel(cloud0, spacing, octree;
+    max_iters = 300, tol = 1.0e-4, rebuild_every = 1, kick_after = 10, cull_ratio = 0.5)
+mrkc = metrics(cloud_rkc)
 
 # ============================================================================
 # Per-stencil conditioning (degree-3 3D Vandermonde σ_min/σ_max)
@@ -156,96 +161,76 @@ end
 
 # ============================================================================
 # Spacing fidelity — the primary node-placement quality metric.
-# How well does each node's nearest-neighbor distance match its prescribed
-# spacing h(x)?  Reports the distribution of d_NN(i)/h(x_i): a perfect cloud
-# spikes at a single value with low CV. Also a mean coordination number (count
-# of neighbors within 1.4·h) to distinguish a disordered blue-noise / dense-
-# liquid packing (~12-14) from Poisson (broad) or a degenerate collapse.
+# Uses spacing_fidelity_metrics from WhatsThePoint.
 # ============================================================================
 
-function spacing_fidelity(cloud, spacing)
-    pts = points(cloud)
-    n = length(pts)
-    k = min(n, 30)
-    method = KNearestSearch(cloud, k)
-    res = searchdists(cloud, method)
-    dnn_over_h = Vector{Float64}(undef, n)
-    coordination = Vector{Int}(undef, n)
-    for i in 1:n
-        ids, dists = res[i]
-        h = ustrip(spacing(pts[i]))
-        dnn = Inf
-        coord = 0
-        for (j, d) in zip(ids, dists)
-            j == i && continue
-            du = ustrip(d)
-            dnn = min(dnn, du)
-            du <= 1.4 * h && (coord += 1)
-        end
-        dnn_over_h[i] = dnn / h
-        coordination[i] = coord
-    end
-    return dnn_over_h, coordination
-end
-
 function report_fidelity(label, cloud, spacing)
-    r, coord = spacing_fidelity(cloud, spacing)
-    μ = mean(r)
-    cv = std(r) / μ
-    qs = quantile(r, [0.01, 0.5, 0.99])
-    @printf("  %-14s  mean d_NN/h=%.3f  CV=%.3f  [p01=%.3f p50=%.3f p99=%.3f]  coord(≤1.4h)=%.1f\n",
-        label, μ, cv, qs[1], qs[2], qs[3], mean(coord))
-    return (; mean = μ, cv, coord = mean(coord))
+    m = spacing_fidelity_metrics(cloud, spacing)
+    @printf("  %-18s  mean=%.3f  CV=%.3f  p05=%.3f p50=%.3f p95=%.3f  coord=%.1f\n",
+        label, m.mean_dnn_h, m.cv, m.p05, m.p50, m.p95, m.coordination)
+    return m
 end
 
 println("\n############ SPACING FIDELITY (d_NN / h) ############")
 fid0 = report_fidelity("raw octree", cloud0, spacing)
 fidr = report_fidelity("repel", cloud_r, spacing)
-fidrc = report_fidelity("repel+cull", cloud_rc, spacing)
+fidrk = report_fidelity("repel+kick", cloud_rk, spacing)
+fidrkc = report_fidelity("repel+kick+cull", cloud_rkc, spacing)
 
 println("\n############ STENCIL CONDITIONING (k=50, poly_deg=3) ############")
-σ_r, mindist_r = stencil_conditioning(cloud_rc; k = 50)
+σ_rkc, mindist_rkc = stencil_conditioning(cloud_rkc; k = 50)
 
 # ============================================================================
 # Summary
 # ============================================================================
 
-println("\n" * "="^72)
+println("\n" * "="^84)
 println("CAVITY-GEOMETRY VALIDATION SUMMARY")
-println("="^72)
+println("="^84)
 
-@printf("\n%-22s  %12s  %12s  %12s\n", "metric", "raw octree", "repel", "repel+cull")
-@printf("%-22s  %12s  %12s  %12s\n", "-"^22, "-"^12, "-"^12, "-"^12)
-@printf("%-22s  %12.4e  %12.4e  %12.4e\n", "separation", m0.separation, mr.separation, mrc.separation)
-@printf("%-22s  %12.4f  %12.4f  %12.4f\n", "separation / Δ",
-    ustrip(m0.separation) / Δ, ustrip(mr.separation) / Δ, ustrip(mrc.separation) / Δ)
-@printf("%-22s  %12.2f  %12.2f  %12.2f\n", "mesh_ratio", m0.mesh_ratio, mr.mesh_ratio, mrc.mesh_ratio)
-@printf("%-22s  %12.3f  %12.3f  %12.3f\n", "spacing CV (d_NN/h)", fid0.cv, fidr.cv, fidrc.cv)
-@printf("%-22s  %12.1f  %12.1f  %12.1f\n", "coordination (≤1.4h)", fid0.coord, fidr.coord, fidrc.coord)
+@printf("\n%-22s  %10s  %10s  %10s  %14s\n",
+    "metric", "raw octree", "repel", "repel+kick", "repel+kick+cull")
+@printf("%-22s  %10s  %10s  %10s  %14s\n", "-"^22, "-"^10, "-"^10, "-"^10, "-"^14)
+@printf("%-22s  %10.4f  %10.4f  %10.4f  %14.4f\n", "separation / Δ",
+    ustrip(m0.separation) / Δ, ustrip(mr.separation) / Δ,
+    ustrip(mrk.separation) / Δ, ustrip(mrkc.separation) / Δ)
+@printf("%-22s  %10.3f  %10.3f  %10.3f  %14.3f\n", "spacing CV",
+    fid0.cv, fidr.cv, fidrk.cv, fidrkc.cv)
+@printf("%-22s  %10.3f  %10.3f  %10.3f  %14.3f\n", "p05 (d_NN/h)",
+    fid0.p05, fidr.p05, fidrk.p05, fidrkc.p05)
+@printf("%-22s  %10.3f  %10.3f  %10.3f  %14.3f\n", "p95 (d_NN/h)",
+    fid0.p95, fidr.p95, fidrk.p95, fidrkc.p95)
+@printf("%-22s  %10.1f  %10.1f  %10.1f  %14.1f\n", "coordination (≤1.4h)",
+    fid0.coordination, fidr.coordination, fidrk.coordination, fidrkc.coordination)
 
 npts_raw = length(points(cloud0))
 npts_rep = length(points(cloud_r))
-npts_culled = length(points(cloud_rc))
-@printf("\npoints: %d (raw) → %d (repel) → %d (repel+cull, %d removed)\n",
-    npts_raw, npts_rep, npts_culled, npts_rep - npts_culled)
+npts_kick = length(points(cloud_rk))
+npts_culled = length(points(cloud_rkc))
+@printf("\npoints: %d (raw) → %d (repel) → %d (kick) → %d (kick+cull, %d removed)\n",
+    npts_raw, npts_rep, npts_kick, npts_culled, npts_kick - npts_culled)
 
-valid_σ = filter(!isnan, σ_r)
+valid_σ = filter(!isnan, σ_rkc)
 SING_THRESH = 1e-8
 nsing = count(<(SING_THRESH), valid_σ)
-@printf("\nstencil conditioning (k=50, poly_deg=3, on repel+cull cloud):\n")
+@printf("\nstencil conditioning (k=50, poly_deg=3, on repel+kick+cull cloud):\n")
 @printf("  min σ_min/σ_max:   %.3e\n", minimum(valid_σ))
 @printf("  median σ_min/σ_max: %.3e\n", median(valid_σ))
 @printf("  singular (<%.0e):   %d / %d\n", SING_THRESH, nsing, length(valid_σ))
 
-# Gate on the final (repel+cull) cloud, using spacing CV as the primary quality
-# metric (mesh_ratio kept as a secondary, outlier-sensitive diagnostic).
-sep_ratio = ustrip(mrc.separation) / Δ
-mesh_r = mrc.mesh_ratio
+# Gate on the final (repel+kick+cull) cloud
+sep_ratio = ustrip(mrkc.separation) / Δ
+fid_final = spacing_fidelity_metrics(cloud_rkc, spacing)
 @printf("\nVERDICT: ")
-if nsing == 0 && sep_ratio > 0.1 && mesh_r < 3.0
+if nsing == 0 && sep_ratio > 0.1 && fid_final.cv < 0.15
     println("PASS — cloud is well-conditioned for RBF-FD (poly_deg=3).")
+    @printf("  separation/Δ=%.3f (>0.1 ✓)  CV=%.3f (<0.15 ✓)  singular=%d\n",
+        sep_ratio, fid_final.cv, nsing)
 elseif nsing == 0
-    println("MARGINAL — no singular stencils, but separation/mesh_ratio could improve.")
+    println("MARGINAL — no singular stencils, but quality metrics need improvement.")
+    @printf("  separation/Δ=%.3f %s  CV=%.3f %s  singular=%d\n",
+        sep_ratio, sep_ratio > 0.1 ? "(✓)" : "(✗)",
+        fid_final.cv, fid_final.cv < 0.15 ? "(✓)" : "(✗)", nsing)
 else
     println("FAIL — $nsing singular stencils. Repel needs more iterations or different parameters.")
 end

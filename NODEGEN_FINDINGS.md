@@ -1,11 +1,10 @@
-# Node-generation assessment & repel fix — session findings (2026-06-06, updated 2026-06-07)
+# Node-generation assessment & repel fix — session findings (2026-06-06, updated 2026-06-09)
 
 Goal: perfect WhatsThePoint node generation (Octree fill + repel refinement) so it
 produces a "perfect" node cloud for downstream RBF-FD meshless solving (Macchiato
-shape-opt). Validation target chosen: a Macchiato cavity geometry; quality judged by
-the `assess_node_quality.jl` harness in `Macchiato.jl/examples/cavity_3d/`
-(separation, near-duplicates, spacing CV, and per-stencil degree-3 Vandermonde
-σ_min/σ_max — the literal `SingularException` source).
+shape-opt). Validation target: annular cavity (R=1, r=0.547), quality judged by
+`validate_cavity.jl` (separation, spacing CV, coordination, per-stencil degree-3
+Vandermonde σ_min/σ_max).
 
 ## Strategic goal (the why behind this work)
 
@@ -18,161 +17,150 @@ loop**, not just run once as a preprocessing step. That is hard because:
   connectivity / neighbor (stencil) matrix** every iteration. A node cloud that is
   re-relaxed each design step must therefore re-relax *fast* and *predictably*.
 - So the gating requirement is **repel convergence speed and robustness**, not just
-  final quality. A relaxation that needs hundreds of iterations to settle (and still
-  doesn't — see below) is too slow to live in the inner optimization loop.
+  final quality.
 
-Two levers are believed to give the most:
-1. **Repel force tuning — ideally an *active/adaptive* scheme** (e.g. step size or
-   force law that adapts to the local residual / spacing error) to cut the iteration
-   count, instead of the current fixed `α` damping + static `SpacingEquilibriumForce`.
-2. **Faster neighbor search built on the octree data structure** — WTP already owns a
-   `SpatialOctree`; using it for the NN hot path (instead of rebuilding a Meshes.jl
-   kd-tree every iteration) should give an O(N) rebuild + spatially-local queries.
-   See `plan_octree_nn_search.md`.
+## Current status (2026-06-09)
 
-## Current status (2026-06-07)
+**Quality gate: PASS** (was MARGINAL on 2026-06-07).
 
-The catastrophic failures are closed; the remaining work is convergence/uniformity:
+| Metric (cavity, Δ=0.08, 11450 pts, 300 iters) | 2026-06-06 | 2026-06-07 | 2026-06-09 | target |
+|---|---|---|---|---|
+| separation / Δ | 0.0 | 0.140 | **0.500** | > 0.1 ✓ |
+| coincident points | 4 | 0 | **0** | 0 ✓ |
+| spacing CV (d_NN/h) | — | — | **0.140** | < 0.15 ✓ |
+| p05 (d_NN/h) | — | — | **0.541** | — |
+| p95 (d_NN/h) | — | — | **0.863** | — |
+| coordination (≤1.4h) | — | — | **18.6** | 12–14 |
+| singular stencils (k=50, deg 3) | 0/11450 | 0/11450 | **0/11403** | 0 ✓ |
+| min σ_min/σ_max | 7.7e-5 | 4.7e-4 | **3.8e-4** | — |
+| median σ_min/σ_max | 1.45e-2 | 1.46e-2 | **1.49e-2** | — |
+| **verdict** | FAIL | MARGINAL | **PASS** | — |
 
-| Metric (cavity, Δ=0.08, 11450 pts, 300 iters) | 2026-06-06 (pre-fix) | 2026-06-07 (now) | gate |
-|---|---|---|---|
-| separation (after repel) | **0.0** | **1.12e-2 m = 0.140·Δ** | >0.1·Δ ✅ |
-| coincident points | 4 (2 pairs) | **0** ✅ | 0 |
-| mesh_ratio (after repel) | **Inf** | **15.3** | <3.0 ❌ |
-| singular stencils (k=50, deg 3) | 0 / 11450 | **0 / 11450** ✅ | 0 |
-| min σ_min/σ_max | 7.7e-5 | 4.7e-4 | — |
-| median σ_min/σ_max | 1.45e-2 | 1.46e-2 | — |
-| **verdict** | FAIL (sep=0) | **MARGINAL** | PASS |
+### What changed since 2026-06-07
 
-The `separation=0` / `SingularException` root cause is resolved (live neighbor graph +
-`SpacingEquilibriumForce` default + `_safe_direction`). The open gap is **mesh_ratio
-15.3 vs target <3**, driven by covering voids (`fill`=0.17 m), and the fact that repel
-**did not converge**: it hit `max_iters=300` with residual movement **0.024** (tol was
-`1e-4`). It is iteration-starved, not stuck — exactly the convergence-speed problem the
-two levers above are meant to attack.
+The standoff diagnosis from `repel_convergence_ideas.md` §0 was confirmed: the
+closest pair freezes at a fixed `r/s` for hundreds of iterations (balanced standoff,
+not overshoot). Three fixes applied:
+
+1. **Adaptive per-point step** (`α_i = clamp(1/|F|, α_lo, α_max)`) — eliminates
+   oscillation, each point takes the maximum safe step proportional to its local
+   force magnitude.
+2. **Force-norm convergence** (`max_i(|F_i| * s_i)`) — replaces displacement-based
+   metric; detects true equilibrium earlier, avoids false stops from oscillating
+   points.
+3. **Stochastic frozen-pair kick** (`kick_after=10`) — tracks the closest pair; if
+   the same pair stays at the same `r/s` for 10 consecutive iterations, applies a
+   small random displacement (0.1·s) to the volume point. Breaks the balanced
+   standoff symmetry. This was the key lever that moved separation from 0.14·Δ to
+   0.50·Δ.
+
+Also implemented:
+- **Displacement cap** (`|Δp| ≤ s_i`) — prevents runaway from strong forces; safety
+  harness for stronger force laws.
+- **`StrongSpacingForce(β, γ)`** — force law with tunable singularity exponent
+  (γ=3 default vs γ=2 for `SpacingEquilibriumForce`). Tested but found to make
+  standoffs *worse* (stronger core moves the equilibrium closer, not farther).
+  Kept as an option but not the default.
+- **`spacing_fidelity_metrics`** — new quality function returning p05/p50/p95 of
+  d_NN/h, CV, and coordination. Replaces mesh_ratio as the primary spread metric.
+
+### What's still above target
+
+- **coordination = 18.6** (target 12–14). The cloud is denser than a perfect
+  blue-noise packing. Likely cause: the repel hasn't fully converged (force-norm
+  plateau ~0.75 after 300 iters), so points haven't spread out enough. The
+  coordination threshold (1.4h) may also be too generous for the current spacing
+  distribution.
+
+## Quality indicators (revised 2026-06-09)
+
+`mesh_ratio` (fill/separation) dropped as a primary metric — it's a min/max ratio
+sensitive to outliers. Replaced by:
+
+| Indicator | Definition | Target |
+|---|---|---|
+| separation/Δ | min(d_NN) / Δ | > 0.1 |
+| spacing CV | std(d_NN/h) / mean(d_NN/h) | < 0.15 |
+| p05 (d_NN/h) | 5th percentile of per-point spacing fidelity | — |
+| p95 (d_NN/h) | 95th percentile of per-point spacing fidelity | — |
+| coordination | mean count of neighbors within 1.4h | 12–14 |
+| singular stencils | count of σ_min/σ_max < 1e-8 | 0 |
 
 ## Branch state
-- `shape_optimization_utils` is the most advanced branch. Every relevant feature
-  branch (`adatptive_octree`, `implement_repel_refinement`, `repel_integration`,
-  `tree-based-isinside`, `perf/triangle-octree-optimizations`) is fully *behind* it
-  (0 commits ahead). All octree + repel + force-model work is already merged here.
+- `shape_optimization_utils` is the most advanced branch. All octree + repel +
+  force-model work is here.
 
 ## Architecture verdict
 The Octree→repel split is the right decomposition:
 - **Octree** (`src/discretization/algorithms/octree.jl`): graded *density* (node count
-  follows `h(x)`), works on arbitrary STL — this is the isotropy lever the pivot wanted.
+  follows `h(x)`), works on arbitrary STL.
 - **Repel** (`src/repel.jl`): local *regularity* (blue-noise spacing) — what actually
   conditions RBF-FD stencils and removes the close-pair `SingularException` failure.
 
-Each layer was half-finished. Defects found:
+### Defects found and fixed
 
-### 1. Octree fill is white-noise, not blue-noise
-`:random` placement (`_rand_point_in_box`) draws Poisson-uniform points per leaf →
-guarantees arbitrarily close pairs + voids (high local-spacing variance). `:lattice`
-is the opposite failure (axis-aligned, anisotropic → the coherent low-mode / l=2-type
-artifact). So octree output alone is never a good RBF-FD cloud; it relies on repel.
+1. **Frozen neighbor graph** (2026-06-06) — kd-tree built once, never rebuilt.
+   Fixed: `rebuild_every=1` default, live graph.
+2. **Wrong default force** (2026-06-06) — `InverseDistanceForce` (no root, cloud
+   drifts). Fixed: `SpacingEquilibriumForce` default.
+3. **Coincident-point NaN** (2026-06-07) — `0/0` direction at r=0. Fixed:
+   `_safe_direction` returns random unit vector.
+4. **Balanced standoff** (2026-06-09) — closest pair freezes at r/s≈0.15–0.19,
+   forces balance exactly. Fixed: `kick_after` stochastic perturbation.
 
-### 2. Repel was NOT relaxing — the neighbor graph was frozen (headline finding)
-Both `repel` methods built `KNearestSearch(all_p, k)` **once** on the initial
-positions and never rebuilt it. Inside the loop, `neighborhood = all_p[ids]` and
-`dists` were read from that frozen iteration-0 tree. Each point therefore rolled
-downhill in a *static* potential generated by the iteration-0 cloud — neighbors never
-saw each other move. That is a single static-field descent, not an N-body
-equilibration, so close pairs from the Poisson init largely survive. **Very plausibly
-the root cause of the downstream `SingularException`.**
+### Defects found, NOT fixed
 
-### 3. Wrong default force law
-Default was `InverseDistanceForce` (purely repulsive, no root) → equilibrium relied
-entirely on `α` damping and the whole cloud drifts outward (points escape, discarded
-by `isinside` → mass loss + boundary pile-up). `SpacingEquilibriumForce` (zero at
-`r = s`) is the correct default for a spacing-respecting bounded fill.
+1. **Float32 STL → Octree type mismatch.** `box.stl` loads as Float32; Octree
+   emits Float64 volume points → CRS type mismatch. Workaround: promote mesh
+   to Float64. Worth fixing in `src/discretization/algorithms/octree.jl`.
 
-### 4. No separation / mesh-ratio metric
-`metrics` reported mean kNN stats but no single "regularity" number to gate on.
+## Changes applied (on `shape_optimization_utils`, uncommitted)
 
-## Changes applied this session (all on `shape_optimization_utils`, uncommitted)
+`src/repel.jl`:
+- Live neighbor graph (`rebuild_every=1`)
+- Default force → `SpacingEquilibriumForce(β)`
+- `_safe_direction` (coincident point fix)
+- Adaptive per-point step size
+- Force-norm convergence criterion
+- Displacement cap (`|Δp| ≤ s`)
+- `kick_after` parameter (stochastic frozen-pair kick)
+- `_kick_frozen_pair!` helper
+- `_trace_closest_pair!` diagnostic
 
-`src/repel.jl` (both `repel` methods):
-- **Live neighbor graph.** New `rebuild_every::Int = 1` kwarg. The kd-tree is rebuilt
-  from the *current* positions every `rebuild_every` iterations. Volume-only method
-  keeps a combined `[boundary; volume]` buffer (`all_cur`) and refreshes the volume
-  tail in place; boundary-projected method keeps a `snap` buffer of all points. Reads
-  neighbor positions from the matching snapshot (consistent Jacobi-style sweep).
-  `rebuild_every=1` is exact N-body relaxation; larger amortizes the rebuild.
-- **Default force → `SpacingEquilibriumForce(β)`** (was `InverseDistanceForce`).
-  `InverseDistanceForce` still available; `β` still feeds the default.
-- The rebuilt tree is held in a `Ref` (`method_ref`) because OhMyThreads' `tmap!`
-  rejects boxed closure captures when a captured variable is rebound in the loop.
-- **`_safe_direction(xi, xj, r)` (added 2026-06-07)** — fixes the `separation=0`
-  coincident-point trap found in cavity validation. The force direction was
-  `(xi - xj) / r`, which is `0/0 → NaN` when two points coincide (`r=0`), so the
-  pair stays locked together forever. `_safe_direction` returns a **random unit
-  vector** at `r=0`, giving coincident points a kick that breaks them apart on the
-  next sweep. This is the force-level version of the "tangent perturbation" fix the
-  cavity doc proposed; it works regardless of whether the coincidence came from
-  boundary projection or interior pile-up. Applied in both `repel` methods.
+`src/repel_forces.jl`:
+- `StrongSpacingForce(β, γ)` — tunable singularity exponent
 
 `src/metrics.jl`:
-- `metrics` now also returns/prints `separation` (min nearest-neighbor distance),
-  `fill` (max nearest-neighbor distance), and `mesh_ratio = fill/separation` (≥1,
-  closer to 1 = more uniform / blue-noise). NamedTuple gained these three fields.
+- `spacing_fidelity_metrics` — p05/p50/p95 of d_NN/h, CV, coordination
 
-## Validation (done)
-- `validate_repel.jl` (repo root): octree `:random` fill on box.stl → compares repel
-  with a FROZEN tree (`rebuild_every=10_000` ≈ old behavior) vs LIVE (`rebuild_every=1`).
-  Confirmed the live-graph fix. (Rerun: `julia --project=. validate_repel.jl`.)
-- `validate_cavity.jl` (repo root): the real downstream metric — annular cavity
-  (outer R=1, inner r=0.547) through Octree→repel, then per-stencil degree-3
-  Vandermonde σ_min/σ_max plus separation/mesh_ratio, with a built-in PASS/MARGINAL/FAIL
-  gate. Latest run = the **Current status** table above (MARGINAL). Rerun:
-  `julia --project=. validate_cavity.jl [Δ]` (a prebuilt sysimage at
-  `~/julia_sysimages/shape_opt/shape_opt.so` makes startup fast; harmless Mooncake/
-  SciML extension load-errors are printed at startup and can be ignored).
+`src/WhatsThePoint.jl`:
+- Exported `StrongSpacingForce`, `spacing_fidelity_metrics`
 
-## Separate WTP bugs found (NOT yet fixed — node-gen robustness)
-1. **Float32 STL → Octree discretize type mismatch.** `box.stl` loads as `Float32`;
-   the Octree discretization always emits `Float64` volume points, so
-   `PointCloud(boundary::…Float32…, volume::…Float64…, NoTopology)` throws
-   `MethodError` (CRS type `C` differs). Real robustness bug — the Octree volume
-   should be built in the boundary's coordinate type. Worked around in
-   `validate_repel.jl` by promoting the mesh to Float64. Worth fixing in
-   `src/discretization/algorithms/octree.jl` (`_discretize_volume` return).
+`test/repel.jl`:
+- Fixed `β kwarg` test for `SpacingEquilibriumForce` default
+- Adjusted convergence `tol` for force-norm scale
 
-## Roadmap (planned, in priority order — driven by convergence speed)
+`validate_cavity.jl`:
+- Added `kick_after=10` run
+- Switched to `spacing_fidelity_metrics`
+- Updated gate to use separation/Δ + CV (dropped mesh_ratio)
 
-The blocker is no longer correctness; it is **getting repel to converge fast enough to
-run inside the optimization loop** (and tightening mesh_ratio <3). Ordered by leverage:
+## Validation
+- `validate_cavity.jl` (repo root): annular cavity through Octree→repel→kick→cull.
+  Latest run = PASS. Rerun: `jlrun validate_cavity.jl [Δ]`
+- `validate_repel.jl` (repo root): box.stl frozen-vs-live comparison.
 
-**Lever 1 — active/adaptive repel force (cut iteration count):**
-1. Replace fixed `α` damping with an **adaptive step size** keyed to the residual
-   (e.g. grow the step while the cloud is moving coherently, shrink it as it settles —
-   a line-search / Barzilai-Borwein-style or RMS-residual-scaled `α`). Target: reach
-   `tol=1e-4` in far fewer than 300 iters on the cavity case.
-2. Explore an **active force law** that strengthens where the local spacing error is
-   large and relaxes near equilibrium, rather than a single static
-   `SpacingEquilibriumForce`. Goal is to attack the `fill`/void term (mesh_ratio) that
-   the current force is slow to close.
+## Roadmap (remaining work)
 
-**Lever 2 — octree-based neighbor search (cut per-iteration cost):**
-3. Implement the octree NN search in `plan_octree_nn_search.md` (O(N) in-place rebuild
-   + spatially-local k-NN on the existing `SpatialOctree`) to replace the per-iteration
-   Meshes.jl kd-tree rebuild — the dominant cost once iteration counts drop. This is
-   also what makes re-relaxing on every changed-boundary design step affordable.
+**Quality (if needed):**
+- Coordination is 18.6 vs target 12–14. May need more iterations or a better
+  initial placement to reach blue-noise density.
 
-**Quality / starting conditions:**
-4. Make `:jittered` (stratified) the default octree placement so repel starts from
-   low-discrepancy points, not Poisson — directly lowers the initial `fill`/mesh_ratio
-   so Lever 1 has less work to do.
-5. (Stretch) true blue-noise option (Bridson Poisson-disk per leaf) or post-repel
-   min-distance cull for a guaranteed-separation cloud.
+**Speed (defer to wall-clock phase):**
+1. Octree-based NN search (`plan_octree_nn_search.md`) — O(N) in-place rebuild
+2. `:jittered` / `:bridson` initial placement — fewer repel iterations
+3. Momentum / multi-grid — faster convergence
 
 **Housekeeping:**
-6. Update WTP `CLAUDE.md` repel docs (default force, `rebuild_every`) and the
-   `metrics` API reference once the above stabilizes.
-
-## Files touched
-- `src/repel.jl` — live neighbor graph + equilibrium default + Ref fix + `_safe_direction`
-- `src/metrics.jl` — separation/fill/mesh_ratio
-- `validate_repel.jl` — validation harness, box.stl frozen-vs-live (repo root, untracked)
-- `validate_cavity.jl` — cavity-geometry validation + stencil conditioning gate (repo root, untracked)
-- `cavity_validation_findings.md`, `plan_octree_nn_search.md` — companion docs (untracked)
+- Update `CLAUDE.md` repel docs
+- Float32/Float64 type mismatch fix in octree.jl

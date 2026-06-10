@@ -5,7 +5,7 @@
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 20)
 
     conv = Float64[]
-    new_cloud = repel(cloud, spacing, octree; max_iters = 100, tol = 1000.0, convergence = conv)
+    new_cloud = repel(cloud, spacing, octree; max_iters = 100, tol = 1.0e6, convergence = conv)
 
     @test conv isa Vector{<:AbstractFloat}
     @test length(conv) < 100
@@ -134,7 +134,7 @@ end
 end
 
 @testitem "repel β kwarg feeds default force_model" setup = [TestData, CommonImports] begin
-    # The β kwarg must continue to affect the default InverseDistanceForce so that
+    # The β kwarg must continue to affect the default SpacingEquilibriumForce so that
     # existing callers that pass `β=...` keep working without passing force_model.
     boundary = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
@@ -147,7 +147,7 @@ end
     Random.seed!(1)
     c_model = repel(
         cloud, spacing, octree;
-        force_model = InverseDistanceForce(0.5), max_iters = 5,
+        force_model = SpacingEquilibriumForce(0.5), max_iters = 5,
     )
 
     pts_beta = points(c_beta)

@@ -69,3 +69,60 @@ function spacing_metrics(cloud::PointCloud, spacing::AbstractSpacing; k = 20)
         k,
     )
 end
+
+"""
+    spacing_fidelity_metrics(cloud::PointCloud, spacing::AbstractSpacing; k=30, coord_radius=1.4)
+
+Per-point spacing fidelity: how well each point's nearest-neighbor distance matches
+the prescribed spacing `h(x)`.
+
+Computes `d_NN(i) / h(x_i)` for every point and returns:
+
+- `mean_dnn_h` — mean of the distribution (ideal ≈ 0.74 for 3D blue-noise)
+- `cv` — coefficient of variation `std / mean` (lower = more uniform)
+- `p05`, `p50`, `p95` — percentiles of `d_NN/h` (tight spread = good)
+- `coordination` — mean count of neighbors within `coord_radius · h` (ideal ≈ 12–14
+  for 3D blue-noise packing)
+- `k`, `coord_radius`
+"""
+function spacing_fidelity_metrics(
+        cloud::PointCloud, spacing::AbstractSpacing; k = 30, coord_radius = 1.4,
+    )
+    pts = points(cloud)
+    n = length(pts)
+    k = min(n, k)
+    method = KNearestSearch(cloud, k)
+    results = searchdists(cloud, method)
+
+    dnn_h = Vector{Float64}(undef, n)
+    coord = Vector{Int}(undef, n)
+    for i in 1:n
+        ids, dists = results[i]
+        h = ustrip(spacing(pts[i]))
+        d_min = Inf
+        c = 0
+        for (j, d) in zip(ids, dists)
+            j == i && continue
+            du = ustrip(d)
+            d_min = min(d_min, du)
+            du <= coord_radius * h && (c += 1)
+        end
+        dnn_h[i] = d_min / h
+        coord[i] = c
+    end
+
+    μ = mean(dnn_h)
+    cv = std(dnn_h) / μ
+    qs = quantile(dnn_h, [0.05, 0.50, 0.95])
+
+    return (;
+        mean_dnn_h = μ,
+        cv,
+        p05 = qs[1],
+        p50 = qs[2],
+        p95 = qs[3],
+        coordination = mean(coord),
+        k,
+        coord_radius,
+    )
+end
