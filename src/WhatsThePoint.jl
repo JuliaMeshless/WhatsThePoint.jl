@@ -6,8 +6,9 @@ using LinearAlgebra
 using StaticArrays
 using StructArrays
 using NearestNeighbors
+using NearestNeighbors: knn!
 using ChunkSplitters
-using OhMyThreads: tmap, tmap!, tmapreduce
+using OhMyThreads: tmap, tmap!, tmapreduce, TaskLocalValue
 using OrderedCollections: LittleDict
 using Statistics
 using Random

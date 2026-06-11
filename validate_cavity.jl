@@ -4,8 +4,14 @@
 # inner sphere) that mirrors the Macchiato.jl cavity_sphere_recovery geometry.
 # Measures: separation, mesh_ratio, spacing CV, per-stencil conditioning.
 #
+# The geometry is built programmatically, exported once to test/data/cavity.stl,
+# and re-imported from the STL so the gate exercises the production path
+# (GeoIO import, face-center sampling, Float32 STL precision).
+#
 # Usage:  jlrun validate_cavity.jl
-#         jlrun validate_cavity.jl 0.06     (custom spacing)
+#         jlrun validate_cavity.jl 0.06                  (custom spacing)
+#         jlrun validate_cavity.jl --placement=jittered  (octree seeding: random|jittered|lattice)
+#         jlrun validate_cavity.jl --save-vtk            (dump final cloud to cavity_cloud.vtu for ParaView)
 using Pkg
 Pkg.activate(@__DIR__)
 
@@ -69,16 +75,59 @@ end
 const R_OUTER = 1.0
 const R_INNER = 0.547
 const N_ANGULAR = 24
+const STL_PATH = joinpath(@__DIR__, "test", "data", "cavity.stl")
 
-h_input = length(ARGS) >= 1 ? parse(Float64, ARGS[1]) : 0.08
-const Δ = h_input
+function _parse_args(args)
+    Δ = 0.08
+    placement = :random
+    save_vtk = false
+    for a in args
+        if startswith(a, "--placement=")
+            placement = Symbol(last(split(a, "=")))
+        elseif a == "--save-vtk"
+            save_vtk = true
+        else
+            Δ = parse(Float64, a)
+        end
+    end
+    return Δ, placement, save_vtk
+end
 
-@printf("Annular cavity: R_outer=%.3f  r_inner=%.3f  Δ=%.4f\n", R_OUTER, R_INNER, Δ)
-@printf("Building mesh (%d×%d per shell)...\n", N_ANGULAR, 2 * N_ANGULAR)
+const Δ, PLACEMENT, SAVE_VTK = _parse_args(ARGS)
 
-mesh = _make_annular_cavity_mesh(R_OUTER, R_INNER, N_ANGULAR, 2 * N_ANGULAR)
-@printf("Mesh: %d vertices, %d triangles\n",
-    length(Meshes.vertices(mesh)), Meshes.nelements(mesh))
+@printf("Annular cavity: R_outer=%.3f  r_inner=%.3f  Δ=%.4f  placement=%s\n",
+    R_OUTER, R_INNER, Δ, PLACEMENT)
+
+# ----------------------------------------------------------------------------
+# STL roundtrip: export the programmatic mesh once, then always import from
+# the STL so the gate runs the production path. Binary STL stores Float32 by
+# spec; promote to Float64 (same workaround as validate_repel.jl — the proper
+# octree.jl fix is tracked in NODEGEN_FINDINGS.md housekeeping).
+# ----------------------------------------------------------------------------
+
+if !isfile(STL_PATH)
+    @printf("Building mesh (%d×%d per shell) and exporting to %s\n",
+        N_ANGULAR, 2 * N_ANGULAR, STL_PATH)
+    mesh_src = _make_annular_cavity_mesh(R_OUTER, R_INNER, N_ANGULAR, 2 * N_ANGULAR)
+    GeoIO.save(STL_PATH, GeoIO.georef(nothing, mesh_src))
+
+    # one-time verification: face centers must survive the roundtrip (Float32 noise only)
+    back = GeoIO.load(STL_PATH).geometry
+    c_src = [Float64.(ustrip.(Meshes.to(Meshes.centroid(e)))) for e in Meshes.elements(mesh_src)]
+    c_stl = [Float64.(ustrip.(Meshes.to(Meshes.centroid(e)))) for e in Meshes.elements(back)]
+    maxdev = maximum(minimum(norm(a .- b) for b in c_stl) for a in c_src)
+    @printf("STL roundtrip: %d → %d triangles, max face-center deviation %.2e\n",
+        length(c_src), length(c_stl), maxdev)
+    maxdev < 1.0e-5 || error("STL roundtrip deviation too large: $maxdev")
+end
+
+mesh_raw = GeoIO.load(STL_PATH).geometry
+mesh = Meshes.SimpleMesh(
+    [Meshes.Point((1.0 .* Meshes.to(v))...) for v in Meshes.vertices(mesh_raw)],
+    Meshes.topology(mesh_raw),
+)
+@printf("Loaded %s: %d vertices, %d triangles\n",
+    STL_PATH, length(Meshes.vertices(mesh)), Meshes.nelements(mesh))
 
 boundary = PointBoundary(mesh)
 diag = norm(Meshes.boundingbox(mesh).max - Meshes.boundingbox(mesh).min)
@@ -90,7 +139,7 @@ spacing = ConstantSpacing(Δ * m)
 
 println("\n############ OCTREE DISCRETIZATION ############")
 octree = TriangleOctree(mesh; classify_leaves = true)
-alg = Octree(mesh; spacing, alpha = 1.0, placement = :random)
+alg = Octree(mesh; spacing, alpha = 1.0, placement = PLACEMENT)
 
 max_pts = round(Int, (4 / 3) * π * (R_OUTER^3 - R_INNER^3) / Δ^3)
 @printf("Expected volume nodes ≈ %d\n", max_pts)
@@ -104,19 +153,26 @@ m0 = metrics(cloud0)
 
 println("\n############ REPEL (live tree, SpacingEquilibriumForce) ############")
 println("-- no kick, no cull --")
-cloud_r = repel(cloud0, spacing, octree;
-    max_iters = 300, tol = 1.0e-4, rebuild_every = 1)
+conv_r = Float64[]
+t_r = @elapsed cloud_r = repel(cloud0, spacing, octree;
+    max_iters = 300, tol = 1.0e-4, rebuild_every = 1, convergence = conv_r)
 mr = metrics(cloud_r)
+@printf("   %d iterations, %.1f s, final residual %.3e\n", length(conv_r), t_r, last(conv_r))
 
 println("-- kick_after=10 --")
-cloud_rk = repel(cloud0, spacing, octree;
-    max_iters = 300, tol = 1.0e-4, rebuild_every = 1, kick_after = 10)
+conv_rk = Float64[]
+t_rk = @elapsed cloud_rk = repel(cloud0, spacing, octree;
+    max_iters = 300, tol = 1.0e-4, rebuild_every = 1, kick_after = 10, convergence = conv_rk)
 mrk = metrics(cloud_rk)
+@printf("   %d iterations, %.1f s, final residual %.3e\n", length(conv_rk), t_rk, last(conv_rk))
 
 println("-- kick_after=10 + cull_ratio=0.5 --")
-cloud_rkc = repel(cloud0, spacing, octree;
-    max_iters = 300, tol = 1.0e-4, rebuild_every = 1, kick_after = 10, cull_ratio = 0.5)
+conv_rkc = Float64[]
+t_rkc = @elapsed cloud_rkc = repel(cloud0, spacing, octree;
+    max_iters = 300, tol = 1.0e-4, rebuild_every = 1, kick_after = 10, cull_ratio = 0.5,
+    convergence = conv_rkc)
 mrkc = metrics(cloud_rkc)
+@printf("   %d iterations, %.1f s, final residual %.3e\n", length(conv_rkc), t_rkc, last(conv_rkc))
 
 # ============================================================================
 # Per-stencil conditioning (degree-3 3D Vandermonde σ_min/σ_max)
@@ -209,6 +265,8 @@ npts_kick = length(points(cloud_rk))
 npts_culled = length(points(cloud_rkc))
 @printf("\npoints: %d (raw) → %d (repel) → %d (kick) → %d (kick+cull, %d removed)\n",
     npts_raw, npts_rep, npts_kick, npts_culled, npts_kick - npts_culled)
+@printf("repel iterations / wall-clock: %d / %.1fs (plain), %d / %.1fs (kick), %d / %.1fs (kick+cull)\n",
+    length(conv_r), t_r, length(conv_rk), t_rk, length(conv_rkc), t_rkc)
 
 valid_σ = filter(!isnan, σ_rkc)
 SING_THRESH = 1e-8
@@ -233,4 +291,9 @@ elseif nsing == 0
         fid_final.cv, fid_final.cv < 0.15 ? "(✓)" : "(✗)", nsing)
 else
     println("FAIL — $nsing singular stencils. Repel needs more iterations or different parameters.")
+end
+
+if SAVE_VTK
+    save(joinpath(@__DIR__, "cavity_cloud"), cloud_rkc; format = :vtk)
+    println("\nSaved final cloud to cavity_cloud.vtu (open in ParaView alongside test/data/cavity.stl)")
 end

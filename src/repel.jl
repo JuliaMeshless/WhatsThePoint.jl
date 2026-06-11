@@ -136,9 +136,9 @@ function repel(
     constrain = (id, xi, x_proposed) -> _constrain_octree(
         id, xi, x_proposed, is_bnd, escaped, tri_indices, octree, offset_dist, len_unit
     )
-    deposit! = deposit_ratio <= 0 ? nothing : (p_cur, method, iter) -> begin
+    deposit! = deposit_ratio <= 0 ? nothing : (p_cur, tree, iter) -> begin
         n = _deposit_escaped!(
-            p_cur, method, escaped, is_bnd, tri_indices, octree,
+            p_cur, tree, min(k, length(p_cur)), escaped, is_bnd, tri_indices, octree,
             spacing, deposit_ratio, offset_dist, len_unit,
         )
         n > 0 && @debug "Deposited $n escaped point(s) onto the boundary at iteration $iter"
@@ -178,6 +178,7 @@ function _relax!(
     kick_after, trace, (deposit!)=nothing,
 )
     n_move = length(p)
+    kk = min(k, length(snap))
     spacings = ustrip.(spacing.(snap))
     len_unit = Unitful.unit(Meshes.to(first(snap))[1])
     # Force-norm convergence data: at equilibrium forces vanish, so this detects
@@ -187,9 +188,16 @@ function _relax!(
     # pair for trace/kick without an extra search.
     nn_dist = fill(Inf, n_move)
     nn_id = zeros(Int, n_move)
+    # Raw-coordinate kd-tree queried via in-place knn! into task-local buffers:
+    # the per-query allocations of the generic searchdists path were 66% of the
+    # loop's allocations (the tree rebuild itself is only ~3% of its time).
     # Ref so the per-iteration rebuild does not rebind a captured variable
     # (OhMyThreads' tmap! rejects boxed closure captures).
-    method_ref = Ref(KNearestSearch(snap, k))
+    coords = _raw_point.(snap)
+    tree_ref = Ref(KDTree(coords))
+    buffers = TaskLocalValue{Tuple{Vector{Int},Vector{Float64}}}(
+        () -> (Vector{Int}(undef, kk), Vector{Float64}(undef, kk))
+    )
     kick_state = (; pair=(0, 0), rs=Inf, count=0)
 
     conv = Float64[]
@@ -198,23 +206,24 @@ function _relax!(
         p_old .= p
         if (i - 1) % rebuild_every == 0
             @views snap[(n_fixed+1):end] .= p
-            method_ref[] = KNearestSearch(snap, k)
+            @views coords[(n_fixed+1):end] .= _raw_point.(p)
+            tree_ref[] = KDTree(coords)
         end
         # Jacobi-style sweep: every force is evaluated against the same frozen
         # snapshot.
         tmap!(p, 1:n_move) do id
             xi = p_old[id]
-            ids, dists = searchdists(xi, method_ref[])
-            ids = @view ids[2:end]
-            neighborhood = @view snap[ids]
-            rij = norm.(@view dists[2:end])
-            nn_id[id] = ids[1]
-            nn_dist[id] = ustrip(rij[1])
+            ids, dists = buffers[]
+            knn!(ids, dists, tree_ref[], _raw_point(xi), kk, true)
+            # first hit is the query point itself (distance 0 in a live graph)
+            nn_id[id] = ids[2]
+            nn_dist[id] = dists[2]
             s = spacing(xi)
 
-            repel_force = sum(zip(neighborhood, rij)) do z
-                xj, r = z
-                @inbounds compute_force(force_model, r / s) * _safe_direction(xi, xj, r)
+            repel_force = sum(2:kk) do j
+                @inbounds xj = snap[ids[j]]
+                @inbounds r = dists[j] * len_unit
+                compute_force(force_model, r / s) * _safe_direction(xi, xj, r)
             end
 
             F_norm = norm(repel_force)
@@ -240,7 +249,7 @@ function _relax!(
                 kicked && @debug "Kicked frozen pair at iteration $i"
             end
         end
-        isnothing(deposit!) || deposit!(p, method_ref[], i)
+        isnothing(deposit!) || deposit!(p, tree_ref[], i)
         if conv[end] < tol
             @info "Node repel finished in $i iterations" convergence = conv[end]
             break
@@ -256,6 +265,14 @@ end
 # ======================================================================
 # Per-iteration helpers
 # ======================================================================
+
+"""
+    _raw_point(pt) -> SVector
+
+Unitless Float64 coordinates of a point (dimension-generic). Float32 CRS
+coordinates are promoted so the search tree has a uniform eltype.
+"""
+@inline _raw_point(pt) = Float64.(ustrip.(Meshes.to(pt)))
 
 """
     _safe_direction(xi, xj, r) -> Vec
@@ -352,18 +369,19 @@ function _constrain_octree(
 end
 
 """
-    _deposit_escaped!(p, method, escaped, is_bnd, tri_indices, octree, spacing,
+    _deposit_escaped!(p, tree, kq, escaped, is_bnd, tri_indices, octree, spacing,
                       deposit_ratio, offset_dist, len_unit) -> n_deposited
 
 One deposition pass: each escaped volume point is projected onto its nearest
 triangle and converted to a boundary point, unless another boundary point
-already sits within `deposit_ratio·spacing` of the landing site. Serial on
+already sits within `deposit_ratio·spacing` of the landing site. `tree` is the
+sweep's snapshot kd-tree and `kq` the neighbor count to inspect. Serial on
 purpose — earlier deposits must be visible to later candidates, because
 conversion is one-way and a parallel pass would over-deposit when a whole
 layer escapes in one iteration.
 """
 function _deposit_escaped!(
-    p, method, escaped, is_bnd, tri_indices, octree,
+    p, tree, kq, escaped, is_bnd, tri_indices, octree,
     spacing, deposit_ratio, offset_dist, len_unit,
 )
     n_dep = 0
@@ -377,7 +395,7 @@ function _deposit_escaped!(
         tri_idx == 0 && continue
         site_pt = Point(site[1] * len_unit, site[2] * len_unit, site[3] * len_unit)
         thr = deposit_ratio * ustrip(spacing(site_pt))
-        ids_near, _ = searchdists(site_pt, method)
+        ids_near, _ = knn(tree, _raw_point(site_pt), kq, true)
         occupied = any(
             j -> j != id && is_bnd[j] && ustrip(norm(p[j] - site_pt)) < thr,
             ids_near,
