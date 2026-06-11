@@ -1,226 +1,264 @@
-# Node-generation assessment & repel fix — session findings (2026-06-06, updated 2026-06-10)
+# Node generation — findings & roadmap
 
-Goal: perfect WhatsThePoint node generation (Octree fill + repel refinement) so it
-produces a "perfect" node cloud for downstream RBF-FD meshless solving (Macchiato
-shape-opt). Validation target: annular cavity (R=1, r=0.547), quality judged by
-`validate_cavity.jl` (separation, spacing CV, coordination, per-stencil degree-3
-Vandermonde σ_min/σ_max).
+Consolidated 2026-06-11 from `NODEGEN_FINDINGS.md`, `cavity_validation_findings.md`,
+`octree_nn_assessment.md`, `plan_octree_nn_search.md`, and
+`repel_convergence_ideas.md` (all retired; full text in git history).
 
-## Strategic goal (the why behind this work)
+## Goal
 
-The real target is a **significantly better-performing octree-based node generation
-algorithm** so that **repel refinement can be brought *inside* the shape-optimization
-loop**, not just run once as a preprocessing step. That is hard because:
+Perfect WhatsThePoint node generation (Octree fill + repel refinement) for
+downstream RBF-FD meshless solving (Macchiato shape-opt). Strategic target:
+bring repel *inside* the shape-optimization loop — boundary-point count and
+connectivity change every design step, so the cloud must re-relax fast and
+predictably. The gating requirement is **convergence speed and robustness**,
+not just final quality.
 
-- During repel the **number of boundary points changes** (escaped points are
-  re-projected/discarded, deficit fills added), which in turn **changes the
-  connectivity / neighbor (stencil) matrix** every iteration. A node cloud that is
-  re-relaxed each design step must therefore re-relax *fast* and *predictably*.
-- So the gating requirement is **repel convergence speed and robustness**, not just
-  final quality.
+Validation target: annular cavity (R=1, r=0.547), judged by
+`validate_cavity.jl` (separation, spacing CV, coordination, per-stencil
+degree-3 Vandermonde σ_min/σ_max).
 
-## Current status (2026-06-09)
+## Current status (2026-06-09 gate, branch `shape_optimization_utils`)
 
-**Quality gate: PASS** (was MARGINAL on 2026-06-07).
+Quality gate: **PASS** (cavity, Δ=0.08, 11450 pts, 300 iters):
 
-| Metric (cavity, Δ=0.08, 11450 pts, 300 iters) | 2026-06-06 | 2026-06-07 | 2026-06-09 | target |
-|---|---|---|---|---|
-| separation / Δ | 0.0 | 0.140 | **0.500** | > 0.1 ✓ |
-| coincident points | 4 | 0 | **0** | 0 ✓ |
-| spacing CV (d_NN/h) | — | — | **0.140** | < 0.15 ✓ |
-| p05 (d_NN/h) | — | — | **0.541** | — |
-| p95 (d_NN/h) | — | — | **0.863** | — |
-| coordination (≤1.4h) | — | — | **18.6** | 12–14 |
-| singular stencils (k=50, deg 3) | 0/11450 | 0/11450 | **0/11403** | 0 ✓ |
-| min σ_min/σ_max | 7.7e-5 | 4.7e-4 | **3.8e-4** | — |
-| median σ_min/σ_max | 1.45e-2 | 1.46e-2 | **1.49e-2** | — |
-| **verdict** | FAIL | MARGINAL | **PASS** | — |
+| Metric | value | target |
+|---|---|---|
+| separation / Δ | 0.500 | > 0.1 ✓ |
+| spacing CV (d_NN/h) | 0.140 | < 0.15 ✓ |
+| p05 / p95 (d_NN/h) | 0.541 / 0.863 | — |
+| coordination (≤1.4h) | 18.6 | 12–14 ✗ |
+| singular stencils (k=50, deg 3) | 0 / 11403 | 0 ✓ |
+| min / median σ_min/σ_max | 3.8e-4 / 1.49e-2 | — |
 
-### What changed since 2026-06-07
+Speed (re-measured 2026-06-11, after the `knn!` buffer fix): **0.47 s /
+10 iters at 45.7k pts on 8 threads, 0.096 GB allocated** (was 0.53 s /
+0.758 GB; single-threaded 2.66 s). ~300 iterations needed from a `:random`
+start — iteration count is now the dominant cost, and CV relaxation is what
+sets it (see Session 1 findings).
 
-The standoff diagnosis from `repel_convergence_ideas.md` §0 was confirmed: the
-closest pair freezes at a fixed `r/s` for hundreds of iterations (balanced standoff,
-not overshoot). Three fixes applied:
+**Honest SOTA position:**
+- *Quality*: competitive on the internal gate, but no head-to-head vs the
+  reference direct generators (Medusa / Slak–Kosec PNP) has been run.
+- *Speed*: behind direct generation — PNP gets sep ≥ 0.5·h *by construction*
+  in one O(N log N) pass; we need ~300 iterations + kick.
+- *Differentiator*: incremental re-relaxation in the shape-opt loop +
+  deposition (emergent boundary sampling; no published equivalent known).
 
-1. **Adaptive per-point step** (`α_i = clamp(1/|F|, α_lo, α_max)`) — eliminates
-   oscillation, each point takes the maximum safe step proportional to its local
-   force magnitude.
-2. **Force-norm convergence** (`max_i(|F_i| * s_i)`) — replaces displacement-based
-   metric; detects true equilibrium earlier, avoids false stops from oscillating
-   points.
-3. **Stochastic frozen-pair kick** (`kick_after=10`) — tracks the closest pair; if
-   the same pair stays at the same `r/s` for 10 consecutive iterations, applies a
-   small random displacement (0.1·s) to the volume point. Breaks the balanced
-   standoff symmetry. This was the key lever that moved separation from 0.14·Δ to
-   0.50·Δ.
+## Architecture verdict
 
-Also implemented:
-- **Displacement cap** (`|Δp| ≤ s_i`) — prevents runaway from strong forces; safety
-  harness for stronger force laws.
-- **`StrongSpacingForce(β, γ)`** — force law with tunable singularity exponent
-  (γ=3 default vs γ=2 for `SpacingEquilibriumForce`). Tested but found to make
-  standoffs *worse* (stronger core moves the equilibrium closer, not farther).
-  Kept as an option but not the default.
-- **`spacing_fidelity_metrics`** — new quality function returning p05/p50/p95 of
-  d_NN/h, CV, and coordination. Replaces mesh_ratio as the primary spread metric.
+The Octree→repel split is the right decomposition:
+- **Octree** (`src/discretization/algorithms/octree.jl`): graded *density*
+  (node count follows `h(x)`), arbitrary STL. Placement options: `:random`
+  (Poisson per leaf, default), `:jittered` (stratified grid per leaf),
+  `:lattice`.
+- **Repel** (`src/repel.jl`): local *regularity* (blue-noise spacing) — what
+  conditions RBF-FD stencils and removes close-pair `SingularException`s.
 
-### What's still above target
+## Quality indicators
 
-- **coordination = 18.6** (target 12–14). The cloud is denser than a perfect
-  blue-noise packing. Likely cause: the repel hasn't fully converged (force-norm
-  plateau ~0.75 after 300 iters), so points haven't spread out enough. The
-  coordination threshold (1.4h) may also be too generous for the current spacing
-  distribution.
-
-## Session 2026-06-10 — refactor, cull philosophy, deposition
-
-### repel.jl refactor (548 → ~470 lines, no behavior change)
-Single `_relax!` driver shared by both `repel` methods, parameterized by a
-`constrain(id, xi, x_proposed)` callback. Closest-pair trace/kick now read the
-sweep's k-NN data (was a per-iteration O(N²) scan). Fixed a latent unit bug
-(kick hardcoded `Unitful.m`). Benchmarked vs pre-refactor HEAD: identical
-(0.34 s vs 0.36 s / 10 iters at 46.8k pts; 0.73 GB alloc both — the churn is
-pre-existing `searchdists` allocation + per-iteration kd rebuild, Tier C target).
-
-### Cull: fixed, and reframed as a defect signal
-- Test bug: `m = metrics(...)` assigned over imported `Unitful.m` (error).
-- Scenario bug (the real lesson): the test prescribed `h = bbox/8 ≈ 5.4 m` on a
-  boundary tessellated at 0.22 m (box.stl is a mm-authored STL read as meters,
-  46,786 face centers) — 24× mismatch; the cull was being asked to decimate the
-  boundary. **Always check spacing vs geometry resolution before trusting a
-  failing assertion.**
-- Mask now uses `BallSearch` (exact guarantee for clusters of any size; the old
-  fixed k=8 silently violated it; cheaper in healthy clouds too).
-- **Design principle (Davide): the cull should NEVER fire in healthy generation —
-  activation = upstream defect.** Both `repel` methods now `@warn` when the cull
-  removes anything. The cavity currently culls ~42–59 points every run (boundary
-  projection parks pairs on shared edges/vertices) — that is the open defect the
-  warning now surfaces.
-
-### Deposition: emergent boundary sampling (`deposit_ratio`)
-Face-center import hard-couples boundary node count to tessellation
-(`n_boundary ≡ n_triangles`), which is backwards: the volume density is what the
-PDE solve needs; surface sampling should *emerge* from containing it.
-Implemented in the octree `repel`: an escaped volume point is projected onto the
-nearest triangle and **converted to a boundary point** — accepted only if no
-boundary point already sits within `deposit_ratio · spacing` of the landing site
-(self-limiting; conversion is one-way; serial post-sweep pass to avoid
-deposition races). Boundary membership is a per-point `is_bnd::Vector{Bool}`
-(benchmarked: zero cost vs the old index-prefix convention).
-
-First result (sparse-boundary box, h=3 m, 234 seeds + 600 volume): **174 points
-deposited, boundary 234 → 408**, totals conserved, valid triangle normals.
-Confirmed pressure-driven: an under-filled volume deposits nothing (it expands
-inward instead) — the volume must be at target density.
-
-### SOTA assessment (honest)
-- **Quality**: competitive on the internal gate (0 singular, sep 0.5·h, CV 0.14)
-  but coordination 18.6 vs 12–14 ideal, and no head-to-head benchmark vs the
-  reference direct generators (Medusa/Slak-Kosec PNP) has been run.
-- **Speed**: behind direct generation — PNP gets sep ≥ 0.5·h *by construction*
-  in one O(N log N) pass; we need ~300 iterations + kick + cull.
-- **Differentiator**: incremental re-relaxation in the shape-opt loop +
-  deposition (emergent boundary, no published equivalent known). One experiment
-  old — needs curved geometry, variable h, scale.
-
-## Quality indicators (revised 2026-06-09)
-
-`mesh_ratio` (fill/separation) dropped as a primary metric — it's a min/max ratio
-sensitive to outliers. Replaced by:
+`mesh_ratio` (fill/separation) was dropped as a primary metric — a min/max
+ratio dominated by a handful of outliers. Primary metrics
+(`spacing_fidelity_metrics` in `src/metrics.jl`):
 
 | Indicator | Definition | Target |
 |---|---|---|
 | separation/Δ | min(d_NN) / Δ | > 0.1 |
 | spacing CV | std(d_NN/h) / mean(d_NN/h) | < 0.15 |
-| p05 (d_NN/h) | 5th percentile of per-point spacing fidelity | — |
-| p95 (d_NN/h) | 95th percentile of per-point spacing fidelity | — |
-| coordination | mean count of neighbors within 1.4h | 12–14 |
+| p05 / p95 (d_NN/h) | spacing-fidelity percentiles | — |
+| coordination | mean neighbors within 1.4h | 12–14 |
 | singular stencils | count of σ_min/σ_max < 1e-8 | 0 |
 
-## Branch state
-- `shape_optimization_utils` is the most advanced branch. All octree + repel +
-  force-model work is here.
+## Established findings
 
-## Architecture verdict
-The Octree→repel split is the right decomposition:
-- **Octree** (`src/discretization/algorithms/octree.jl`): graded *density* (node count
-  follows `h(x)`), works on arbitrary STL.
-- **Repel** (`src/repel.jl`): local *regularity* (blue-noise spacing) — what actually
-  conditions RBF-FD stencils and removes the close-pair `SingularException` failure.
+Defects found and fixed (all in `src/repel.jl`):
+1. **Frozen neighbor graph** — kd-tree built once. Fixed: `rebuild_every=1`.
+2. **Wrong default force** — `InverseDistanceForce` has no root, cloud drifts.
+   Fixed: `SpacingEquilibriumForce` default.
+3. **Coincident-point NaN** — `0/0` direction at r=0; point sticks forever.
+   Fixed: `_safe_direction` returns a random unit vector.
+4. **Balanced standoff** (the key fix, sep 0.14 → 0.50·Δ) — the closest pair
+   freezes at a fixed `r/s` for hundreds of iterations; neighbor forces cancel
+   exactly. Only a stochastic perturbation breaks it: `kick_after` kicks the
+   volume point 0.1·s after N frozen iterations. Locator evidence: all stuck
+   pairs were interior **volume** points — not boundary, not poles.
 
-### Defects found and fixed
+Negative results and principles (don't re-derive these):
+- **More iterations don't help.** 1500-iter staged diagnostic: separation
+  frozen at exactly 0.0550·Δ from iter 100 to 1500 while bulk fill was already
+  0.88–0.96·Δ. Residual defects are *equilibrium* defects, not iteration
+  starvation — the levers are dynamics (step/kick) and seeding, not budget.
+- **`StrongSpacingForce` (γ=3,4) makes standoffs worse** — a stronger core
+  moves the equilibrium closer, not farther. Kept as an option, not default.
+- **Cull = defect signal** (design principle, Davide): the `cull_ratio` safety
+  net should NEVER fire in healthy generation; both `repel` methods `@warn`
+  when it removes anything. Activation means an upstream generation bug.
+- **Check spacing vs geometry resolution before trusting a failing test** —
+  box.stl is a mm-authored STL read as meters; a prescribed h 24× the boundary
+  tessellation once sent a session chasing the wrong bug.
+- **Deposition works and is pressure-driven** (`deposit_ratio`, octree method):
+  escaped volume points project to the nearest triangle and convert to
+  boundary points, accepted only when no boundary point is within
+  `deposit_ratio·s` (self-limiting). Sparse box: 234 → 408 boundary points;
+  an under-filled volume deposits nothing.
 
-1. **Frozen neighbor graph** (2026-06-06) — kd-tree built once, never rebuilt.
-   Fixed: `rebuild_every=1` default, live graph.
-2. **Wrong default force** (2026-06-06) — `InverseDistanceForce` (no root, cloud
-   drifts). Fixed: `SpacingEquilibriumForce` default.
-3. **Coincident-point NaN** (2026-06-07) — `0/0` direction at r=0. Fixed:
-   `_safe_direction` returns random unit vector.
-4. **Balanced standoff** (2026-06-09) — closest pair freezes at r/s≈0.15–0.19,
-   forces balance exactly. Fixed: `kick_after` stochastic perturbation.
+Open defects:
+1. **Boundary-projection collisions** — the cavity culls ~42–59 points/run
+   (projection parks pairs on shared edges/vertices). The one thing keeping
+   the cull warning loud.
+2. **Coordination 18.6 vs 12–14** — cloud denser than ideal blue-noise;
+   likely a seeding artifact (Poisson start), possibly a too-generous 1.4h
+   threshold.
+3. **Float32 STL → Octree Float64 CRS mismatch** — workaround: promote mesh.
+   Worth fixing in `octree.jl`.
+4. **Deposition validated on one 834-pt box only** — curved geometry,
+   variable h, boundary-free start untested.
 
-### Defects found, NOT fixed
+## Roadmap (assessed 2026-06-11)
 
-1. **Float32 STL → Octree type mismatch.** `box.stl` loads as Float32; Octree
-   emits Float64 volume points → CRS type mismatch. Workaround: promote mesh
-   to Float64. Worth fixing in `src/discretization/algorithms/octree.jl`.
+Framing: total cost = (iterations to converge) × (cost per iteration). The
+factors multiply and have independent levers:
 
-## Changes applied
+| Lever | Attacks | Expected gain | Effort to first result |
+|---|---|---|---|
+| `:jittered` validation | iteration count | **measured 2026-06-11: none** | done |
+| Bridson graded Poisson-disk | iteration count | 300 → ~30–80 iters | ~1 session |
+| k-NN buffer reuse (`knn!`) | cost/iter | **measured: −87% alloc, GC 8.8→0.7%, −11% threaded wall** | done |
+| `rebuild_every` > 1 | cost/iter | **measured: ~5% — not a lever** (rebuild is 3% of loop) | done |
+| Octree NN search | cost/iter | ≤ ~25% of loop (query-locality only; rebuild premise measured void) | 1–2 sessions (design done) |
+| Momentum | iteration count | ~2–3× | hours (cap guards it) |
 
-2026-06-09 work (adaptive step, kick, force-norm convergence, `StrongSpacingForce`,
-`spacing_fidelity_metrics`) is **committed** (`9d685d9` + follow-up). Uncommitted on
-`shape_optimization_utils` as of 2026-06-10 EOD:
+### Session 1 — cheap experiments, high information
 
-`src/repel.jl`:
-- Refactor: shared `_relax!` loop, `_closest_pair`/`_maybe_kick!` from sweep k-NN
-  data, kick unit fix
-- `_near_duplicate_keep_mask` → `BallSearch` (exact cull guarantee)
-- `@warn` when the cull removes points (cull = defect signal)
-- `deposit_ratio` + `is_bnd` mask + serial deposition pass (volume→boundary
-  conversion with acceptance test)
+0. ✅ **Done 2026-06-11.** STL-based gate: cavity exported to
+   `test/data/cavity.stl` (4608 binary facets), `validate_cavity.jl` now
+   imports it via GeoIO with the Float64-promotion workaround and grew
+   `--placement=`/`--save-vtk` flags plus per-run iteration/wall-clock
+   reporting. Gate reproduces the baseline exactly (PASS, sep/Δ=0.500,
+   CV=0.139, coord 18.6, 0 singular, 56 culled) — the STL path changes
+   nothing. Runs were single-threaded (16 cores idle): wall-clock numbers
+   below are 1-thread.
+1. ✅ **Done 2026-06-11.** `:jittered` vs `:random`: **no end-to-end gain** —
+   final clouds statistically identical (sep 0.500 both, CV 0.140 vs 0.139,
+   coord 18.5 vs 18.6, 57 vs 56 culled), both burn all 300 iters. Staged runs
+   (gate metrics at cum. 25/50/100/200/300 iters) showed why:
+   - **CV is the binding gate metric.** Separation clears 0.1·Δ within 25
+     iters from either start; the rest of the budget grinds the CV tail
+     (0.18 → 0.15 takes ~175 iters).
+   - **CV drops 0.42 → 0.18 in the first 25 iterations** (the cliff), then
+     crawls. Per-leaf jitter has no cross-leaf separation constraint, so its
+     raw CV (~0.40) is no better than Poisson — it enters the same tail.
+   - Sharpened Bridson bet: a seeding only pays if its *raw* CV lands below
+     ~0.18, i.e. below the post-cliff level — true blue-noise, not stratified
+     jitter.
+2. ✅ **Done 2026-06-11.** Profile (45.7k pts, 10 iters, boundary-projected):
+   total 2.89 s / 0.757 GB single-threaded. Breakdown: **kd rebuild 2.6% of
+   time / 4% of alloc** — the "per-iteration rebuild cost" assumption was
+   wrong; `searchdists` queries were 48% of time / 66% of alloc. Fix landed
+   in `src/repel.jl`: raw `KDTree` + in-place `knn!` into `TaskLocalValue`
+   buffers (also drops the `norm.()` temporary; `_deposit_escaped!` queries
+   the same tree). Result: **0.757 → 0.095 GB (−87%)**; wall-clock −8%
+   single-threaded, and on 8 threads **0.53 → 0.47 s with GC 8.8% → 0.7%**.
+   Threading scales 5.7× on 8 threads. Remaining loop time is the kd
+   traversal itself (~50%) + force/projection (~50%). Verified: full
+   `Pkg.test()` green (142,791 pass) and the cavity gate reproduces on the
+   new code (PASS, sep/Δ=0.500, CV=0.142, coord 18.6, 0 singular, 56 culled).
+3. ✅ **Done 2026-06-11.** `rebuild_every ∈ {1,2,3,5}`, same start, 300 iters:
+   gate quality completely insensitive (sep 0.500, CV 0.139–0.140, PASS all),
+   but only ~5% faster at 5 — consistent with the rebuild being 3% of loop
+   time. Keep default 1 (free freshness); the knob is not a speed lever.
 
-`test/repel.jl`:
-- Cull testitem: `Unitful.m` shadow fix, consistent spacing (0.25 m ≈ box.stl
-  resolution), renamed to "enforces the separation guarantee"
-- Mask testitem: 12-point cluster case (locks the BallSearch guarantee)
-- New testitem: "deposit_ratio grows the boundary from escaped points"
+Exit criterion met. Consequences for later sessions:
+- **Octree NN search (Session 4) is demoted further**: its O(N)-rebuild
+  premise attacks a measured 3% cost. Its only remaining upside is query
+  locality (26-neighbor direct lookup vs kd traversal), bounded at ~2× of the
+  ~50% query share ≈ 25% of the loop. Build it only if the shape-opt loop's
+  measured budget demands it after Bridson + momentum.
+- Iteration count (Bridson, momentum) is now confirmed as the dominant
+  remaining lever, exactly as the staged-gate data implied.
 
-## Validation
-- `validate_cavity.jl` (repo root): annular cavity through Octree→repel→kick→cull.
-  PASS (re-confirmed 2026-06-10 after refactor + deposition, deposit off:
-  sep/Δ=0.500, CV=0.140, 0 singular). Rerun: `jlrun validate_cavity.jl [Δ]`
+### Session 2 — `:bridson` graded Poisson-disk seeding
+
+Bridson with graded h is essentially the reference PNP algorithm, so it pays
+twice:
+- A start that satisfies the separation gate *by construction*; repel reduces
+  to a short CV/coordination polish. The most plausible path to coordination
+  12–14 and the CV < 0.10 stretch goal (iterations demonstrably don't fix CV).
+- An in-house PNP-equivalent **baseline for the SOTA benchmark** — no need to
+  stand up Medusa (C++) first; keep it as stretch validation.
+
+Implementation notes: O(N); min separation ≥ h by construction; adapt to
+graded spacing with an `h_min/√3` background grid. (CVT one-Lloyd-step
+pre-relaxation removes ~80% of Poisson clustering but has diminishing returns
+once Bridson exists.)
+
+Acceptance criterion from the Session-1 staged data: the seeding only pays if
+its **raw CV lands below ~0.18** (the post-cliff level) — true blue-noise
+does, stratified jitter doesn't. Measure raw `spacing_fidelity_metrics`
+before any repel as the first checkpoint.
+
+### Session 3 — benchmark harness + cull silence
+
+- Harness: Bridson-direct (≈ PNP) vs full pipeline on identical geometries;
+  all gate metrics + wall-clock. Turns "SOTA" from belief into a number.
+  Geometry ladder: `cavity.stl` (calibrated baseline) → `box.stl` (sharp
+  edges/flat faces) → `bifurcation.stl` (thin curved branches, realism — the
+  generality claim).
+- Fix boundary-projection collisions (tangential separation at the landing
+  site, or an acceptance-style check against existing boundary points) →
+  cull permanently silent.
+
+### Session 4 (conditional) — octree NN search + momentum
+
+Trigger (updated after Session 1): the original premise — O(N) rebuild vs
+O(N log N) — is void; the rebuild is a measured 3% of loop time. The only
+remaining upside is query locality (kd traversal is ~50% of the loop), so
+build it only if the shape-opt loop's measured budget still demands ≤25%
+more speed after Bridson + momentum land. Design summary (full plan retired
+to git history, `plan_octree_nn_search.md`):
+
+- **Option A**: `OctreeNN` wrapper around the existing `SpatialOctree`
+  implementing the `searchdists` interface — repel logic unchanged, pure
+  performance change, node positions identical.
+- Steps: (1) extend `find_neighbor` from 6 face directions to all 26
+  (`(di,dj,dk) ∈ {-1,0,1}³`, trivial in the integer coordinate system);
+  (2) `OctreeNN` + `searchdists` + in-place `rebuild!` (clear
+  `element_lists`, re-insert each point — O(N), no allocation);
+  (3) benchmark vs kd-tree on the cavity; (4) `search_method` kwarg in
+  `repel`.
+- Key risk: too few points per leaf if leaf ≈ Δ → use a coarser NN octree
+  (leaf ≈ 2–3Δ gives 8–27 points/leaf, enough for k=21 from the 3×3×3
+  neighborhood).
+
+Momentum as a cheap add-on: `v_i ← γ·v_i + α·F_i`, γ ≈ 0.5–0.8, ~2–3× on
+smooth modes; the displacement cap is the divergence guard. Multi-grid
+(coarse k=8 pass → fine k=21, ≈60% wall-clock of a single fine pass) only if
+still needed after the above.
+
+### After the speed push — deposition (the novelty)
+
+1. Cavity with decimated boundary (~h or sparser) + `deposit_ratio=0.5`;
+   success = gate PASS **and cull silent**.
+2. Boundary-free entry point: discretize from `TriangleOctree` + spacing
+   alone, deposition grows the boundary from nothing. Needs
+   empty-`PointBoundary` plumbing.
+
+### Target end state
+
+Seeded start (jittered/Bridson) → coarse repel (k=8, momentum) → fine repel
+(k=21, `kick_after`) → force-norm stop. Expected ~30–50 total iterations
+(vs current 200–400), ~5–10× wall-clock. Stretch: spacing CV < 0.10
+(currently 0.14).
+
+## Validation assets
+
+- `validate_cavity.jl` (repo root): annular cavity through
+  Octree→repel→kick→cull. PASS as of 2026-06-10 (sep/Δ=0.500, CV=0.140,
+  0 singular). Rerun: `jlrun validate_cavity.jl [Δ]`
 - `validate_repel.jl` (repo root): box.stl frozen-vs-live comparison.
 - Full `Pkg.test()` green (142k+ assertions) as of 2026-06-10.
 
-## Path forward (agreed 2026-06-10, resume 2026-06-11)
+## Housekeeping backlog
 
-**Phase 1 — deposition on real geometry (next session):**
-1. Cavity with deposition: decimate the imported boundary to ~h spacing (or
-   sparser) + `deposit_ratio=0.5`; compare gate vs face-center baseline.
-   Success = PASS **and cull silent (0 removed)**.
-2. Boundary-free entry point: discretize from `TriangleOctree` + spacing alone
-   (pure volume fill), deposition grows the boundary from nothing. Needs
-   empty-`PointBoundary` plumbing.
-
-**Phase 2 — make the cull permanently silent:**
-3. Fix boundary-projection collisions (pairs parked on shared edges/vertices) —
-   e.g. tangential separation at the landing site, or an acceptance-style
-   collision check for existing boundary points during projection.
-
-**Phase 3 — SOTA benchmark (the claim needs evidence):**
-4. Benchmark harness vs Medusa (Slak–Kosec PNP) on identical geometries:
-   separation/Δ, CV, p05/p95, coordination, stencil conditioning, wall-clock.
-5. Close the coordination gap (18.6 → 12–14): more convergence, better seeding,
-   or recalibrate the 1.4h threshold.
-
-**Phase 4 — speed (Tier C, now measurement-backed):**
-6. Octree NN search (`plan_octree_nn_search.md`) — justified: 0.73 GB alloc per
-   10 iters at 46.8k pts is `searchdists` allocations + per-iteration kd rebuild.
-7. `:jittered`/`:bridson` seeding, momentum, multi-grid.
-
-**Housekeeping:**
 - Update `CLAUDE.md` repel docs (`α_min`, `kick_after`, `cull_ratio` warn,
-  `deposit_ratio`, `trace`)
-- Float32/Float64 type mismatch fix in octree.jl
-- Commit the 2026-06-10 working tree (refactor first, deposition second, if
-  bisectability matters)
+  `deposit_ratio`, `trace`).
+- Float32/Float64 type-mismatch fix in `octree.jl`.
