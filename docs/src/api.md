@@ -100,8 +100,10 @@ Point distribution optimization.
 ```@docs
 repel
 RepelForceModel
+ClippedSpacingForce
 InverseDistanceForce
 SpacingEquilibriumForce
+StrongSpacingForce
 compute_force
 ```
 

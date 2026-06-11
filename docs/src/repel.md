@@ -42,21 +42,36 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `force_model` | `InverseDistanceForce(β)` | Force law, any [`RepelForceModel`](@ref) subtype |
+| `force_model` | `ClippedSpacingForce(β)` | Force law, any [`RepelForceModel`](@ref) subtype |
 | `β` | `0.2` | Repulsion softening — feeds the default `force_model` |
 | `α` | `0.05 × min(spacing)` | Step size — distance points move per iteration |
 | `k` | `21` | Number of nearest neighbors used in repulsion stencil |
 | `max_iters` | `1000` | Maximum number of repulsion iterations |
-| `tol` | `1e-6` | Convergence tolerance on relative point movement |
+| `tol` | `1e-6` | Convergence tolerance on the force norm |
+| `cv_target` | `0` (off) | Stop once the d_NN/spacing CV reaches this quality (`≈ 0.07` matches direct generation) |
+| `stall_after` | `0` (off) | Stop after this many iterations without CV improvement |
+| `kick_after` | `0` (off) | Break balanced standoffs by kicking the frozen closest pair |
 
 ## Force Models
 
 The force law is abstracted through [`RepelForceModel`](@ref) so users can choose
-how points interact. All models take a single softening parameter `β` and
+how points interact. All models take a softening parameter `β` and
 implement `compute_force(model, u)` where `u = r / s` is the ratio of neighbor
 distance to local target spacing.
 
-### [`InverseDistanceForce`](@ref) — default
+### [`ClippedSpacingForce`](@ref) — default
+
+```math
+F(u) = \begin{cases} \dfrac{u_0^2 - u^2}{(u^2 + \beta)^2} & u < u_0 \\ 0 & u \ge u_0 \end{cases}
+```
+
+Repulsion-only with compact support. Any configuration whose pairwise
+distances all exceed `u0·s` is an exact equilibrium — the Poisson-disk
+property — so an already-good (blue-noise) cloud is preserved or improved
+rather than re-packed. This is the right default for polishing seeded clouds
+and for re-relaxation inside a shape-optimization loop.
+
+### [`InverseDistanceForce`](@ref)
 
 ```math
 F(u) = \frac{1}{(u^2 + \beta)^2}
@@ -74,9 +89,12 @@ F(u) = \frac{1 - u^2}{(u^2 + \beta)^2}
 ```
 
 Zero at `u = 1` (neighbor exactly at the target spacing), positive for `u < 1`
-(push apart), negative for `u > 1` (pull together). Useful when the
-discretization is locally too sparse and you want repulsion to fill gaps as
-well as push crowded points apart.
+(push apart), negative for `u > 1` (pull together). Caution: the attractive
+branch behaves like a cohesion force whose preferred bond length is
+unreachable at the prescribed density, so long relaxations slowly condense
+the cloud into clusters and voids (rising spacing CV and coordination). Prefer
+[`ClippedSpacingForce`](@ref) unless you specifically want gap-filling
+attraction.
 
 ```julia
 cloud = repel(cloud, spacing, octree;

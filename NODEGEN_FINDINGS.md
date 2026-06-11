@@ -17,6 +17,15 @@ Validation target: annular cavity (R=1, r=0.547), judged by
 `validate_cavity.jl` (separation, spacing CV, coordination, per-stencil
 degree-3 Vandermonde σ_min/σ_max).
 
+Scale expectation (Davide, 2026-06-11): production runs will generate **many
+millions of volume points** in real geometries — the reference case is
+`examples/octree_boundary_layer.jl`: the Octree algorithm on `bunny.stl`
+(≈70k-facet STL, ~86 m across) with `BoundaryLayerSpacing` (0.8 m wall /
+4.0 m bulk) at `max_points = 600_000`, i.e. graded spacing at large N
+(currently `:jittered` placement). Algorithmic choices must be judged at
+10⁶–10⁷ points with boundary-layer grading, not at the 10⁴-point
+constant-spacing gate.
+
 ## ⚠ Geometry corruption notice (discovered 2026-06-11, Session 2)
 
 **Every cavity-gate number recorded before 2026-06-11 PM was measured on a
@@ -56,6 +65,12 @@ Cavity gate, Δ=0.08, **1 thread**, clean `cavity.stl` (4416 facets):
 | `:random` + face centers (old default) | MARGINAL | 0.151 | 0.500 | 0 | **626** | 300 |
 | `:bridson` + face centers | MARGINAL | 0.151 | 0.500 | 0 | 589 | 300 |
 | **`:bridson` + Poisson-disk boundary** | **PASS, raw** | **0.071** | **0.750** | **0** | **0** | **0** |
+
+*(Updated 2026-06-11 Session 3, new `ClippedSpacingForce` repel default: the
+seeded path after 300 repel iters is now PASS CV 0.044 / sep 0.694 / 0 culled
+— repel adds quality on top of the raw seed; the `:random` legacy path
+measures MARGINAL CV 0.184 / 650 culled under the new default — see Session 3
+verification notes.)*
 
 The direct-generation pipeline (`sample_surface` boundary + `:bridson` volume)
 satisfies the full gate **by construction in ~3 s single-threaded, zero repel
@@ -162,12 +177,14 @@ Open defects:
    CV 0.061 raw and culls zero. Boundary-projection collisions during repel
    (the original defect framing) remain plausible contributors when repel is
    used, but the dominant term was the import sampling all along.
-2. **Repel degrades constructed blue-noise** (new, Session 2): from a raw-PASS
-   cloud, 300 iterations drift CV 0.071 → 0.093 and sep 0.75 → 0.55, residual
-   plateaus ~0.2. Harmless for the gate (stays PASS) but disqualifying for
-   "repel as polisher." Needs a force model whose equilibrium matches PDS
-   statistics, or an early-stop/convergence criterion, before repel-in-loop
-   work (its actual remaining use case) is built.
+2. **Repel degrades constructed blue-noise** — **RESOLVED 2026-06-11 Session 3**
+   (see "Session 3 — repel quality refinement" below). Root cause: the
+   attractive branch of `SpacingEquilibriumForce` is a condensation
+   instability. Fix: `ClippedSpacingForce` (repulsion-only, compact support)
+   is the new `repel` default; 300 iters from the raw-PASS cloud now
+   *improve* CV 0.072 → 0.044 with sep/Δ 0.728. Verified: seeded gate PASS
+   improved (CV 0.044, cull silent), `Pkg.test()` green, legacy `:random`
+   path mildly worse but accepted (see Session 3 notes).
 3. **Coordination**: with the clean geometry and the resampled pipeline,
    coordination is 10.5 raw / 14.3 after repel — at or near the 12–14 ideal
    band; the historical 18.6 was a corrupt-domain artifact. Consider the
@@ -179,8 +196,38 @@ Open defects:
 
 ## Roadmap (assessed 2026-06-11)
 
-Framing: total cost = (iterations to converge) × (cost per iteration). The
-factors multiply and have independent levers:
+### Planned session sequence (Davide, 2026-06-11)
+
+The next three sessions, in order:
+
+1. ✅ **Done 2026-06-11 (Session 3, code landed; gate/Pkg.test re-runs
+   pending — see Session 3 notes).** **Refine repel for quality** — make repel produce *higher* quality than it
+   does today; concretely, resolve open defect 2 (repel currently degrades a
+   constructed blue-noise cloud: CV 0.071 → 0.093, sep 0.75 → 0.55 over 300
+   iters; residual plateaus ~0.2 without converging). Levers identified: a
+   force model whose equilibrium matches Poisson-disk statistics, step/decay
+   schedule, and a principled stopping criterion. Repel's mandate is the
+   shape-opt inner loop, so "quality" means: applied to an already-good
+   cloud, it must improve or at worst preserve it.
+2. **Octree gap-tracking sampler acceleration, tested against `bunny.stl`** —
+   build the design recorded below ("Sampler scaling — octree gap tracking")
+   and validate on the production rung: the `octree_boundary_layer.jl`
+   configuration pushed to ≥10⁶ points, graded spacing, stated thread count.
+3. **Remove the proven-inferior generation strategies** in favour of the
+   direct pipeline (Poisson-disk surface placement + `:bridson` volume).
+   Davide's assessment: if the octree pipeline proves robust enough, the
+   older algorithms are not needed at all — SlakKosec / VanDerSandeFornberg
+   are "totally incapable of discretizing bunny.stl". Scope: the legacy 3D
+   algorithms, and plausibly the per-leaf placements (`:jittered` measured
+   useless; `:lattice` untested in anger; `:random` perhaps kept as a cheap
+   debug mode). **Caveat to resolve before deleting:** `FornbergFlyer` is the
+   *only* 2D algorithm and `Octree` is 3D-only — removing the legacy set
+   either keeps FornbergFlyer for 2D, adds a quadtree variant, or explicitly
+   drops 2D support. Removal also touches CLAUDE.md, docs, examples, and the
+   test suite.
+
+Framing for the levers below: total cost = (iterations to converge) × (cost
+per iteration). The factors multiply and have independent levers:
 
 | Lever | Attacks | Expected gain | Effort to first result |
 |---|---|---|---|
@@ -191,6 +238,7 @@ factors multiply and have independent levers:
 | `rebuild_every` > 1 | cost/iter | **measured: ~5% — not a lever** (rebuild is 3% of loop) | done |
 | Octree NN search | cost/iter | demoted again: static generation no longer iterates; relevant only if repel-in-loop survives | only on measured need |
 | Momentum | iteration count | demoted: static pipeline needs 0 iterations; reconsider for shape-opt re-relaxation | only on measured need |
+| Octree gap-tracking sampler | sampler wall-clock at production N (10⁶–10⁷ pts) | ~5–20× fewer candidates, + parallel phase groups; maximality proof (design recorded below) | 1–2 sessions, build on trigger |
 
 ### Session 1 — cheap experiments, high information
 
@@ -339,20 +387,116 @@ direct-generation pipeline passing the gate raw. All numbers below:
 5. `Pkg.test()` green: **142,808 pass / 2 broken (pre-existing)**, including
    the `:bridson` and `sample_surface` testitems.
 
-### Session 3 — generality + benchmark harness
+### Session 3 — repel quality refinement (2026-06-11, plan item 1) ✅ landed and verified
+
+All numbers **1 thread**, clean `cavity.stl`, Δ=0.08, seeded cloud = 2770
+Poisson-disk boundary + 6842 `:bridson` volume points (9612 total, raw CV
+0.072, sep/Δ 0.750). Harness: `diagnose_repel_quality.jl` (repo root;
+`preserve` / `recover` / `stallkick` experiments, deterministic seed).
+
+**Diagnosis (preserve experiment, 300 staged iters from raw-PASS):**
+
+| config | CV @300 | sep/Δ @300 | coord @300 | residual @300 |
+|---|---|---|---|---|
+| A `SpacingEquilibriumForce(0.2)` (old default) | 0.095 ↑ | 0.602 | 14.4 ↑ | ~0.21 plateau |
+| B clipped repulsion-only, support u<1 | **0.044 ↓** | **0.728** | 10.1 | 0.069 ↓ |
+| C attraction damped ×0.1 | 0.039 ↓ | 0.747 | 10.5 | 0.064 ↓ |
+| D clipped, root u0=0.9 | 0.034 ↓ | 0.711 | 10.3 | 0.049 ↓ |
+| E old default, α×0.25 | 0.073 (slower ↑) | 0.625 | 12.1 | 0.18 |
+
+- **Root cause of defect 2: the attractive `u>1` branch is a condensation
+  instability**, not noise. At prescribed density `1/h³` the force's preferred
+  bond length `s` is unreachable (close-packing at bond `s` would need
+  ~1.4/h³), so the cloud condenses into locally denser clusters + voids:
+  coordination 10.5→14.4, CV up, sep down. E confirms: quarter step → same
+  drift, quarter speed (instability marches ∝ α). C confirms dose-response
+  (×0.1 attraction → ~10× slower, still improving at 300).
+- **Fix chosen: B — `ClippedSpacingForce(β=0.2, u0=1.0)`** (the
+  `SpacingEquilibriumForce` repulsive branch, zero for `u ≥ u0`). Equilibrium
+  set contains every Poisson-disk configuration (all pairs ≥ u0·s) —
+  "improve or preserve" is structural, not tuned. C scored marginally better
+  CV but keeps the condensation term at 1/10 strength (long-horizon risk);
+  D over-relaxes mean d_NN downward. **B is now the `repel` default** (`β`
+  still feeds it; old force selectable via `force_model=SpacingEquilibriumForce(β)`).
+- **Recover (all points perturbed by 0.3·h; proxy for one shape-opt step):**
+  gate-PASS (sep>0.1, CV<0.15) in **10 iterations** from CV 0.241/sep 0.197;
+  CV back at seed level (~0.07) by ~75–90 iters. Old default also reaches
+  gate-PASS ~10–20 but stalls at CV 0.092 and re-degrades (coord climbing).
+- **Stopping criterion:** force-norm `tol` is the wrong shape — a saturated
+  repulsion-only packing is a frustrated glass; residual plateaus ~0.05–0.07,
+  never reaches 1e-4. CV however keeps genuinely improving ~hundreds of
+  iters, so a pure stall detector doesn't fire either. Landed both, computed
+  free from the sweep's nn data (`_dnn_cv`): **`cv_target`** (primary; stop at
+  direct-pipeline quality, ≈0.07 on the cavity — relaxing past what a re-seed
+  gives is wasted budget) and **`stall_after`** (backstop, ≥0.1% improvement
+  window). Defaults 0 = off (backward compatible).
+- **Integrated production config** (`kick_after=10, cv_target=0.07,
+  stall_after=50`, single call): raw-PASS start stops in **6 iters / 1.6 s**
+  (CV 0.068 — recognized as already-good); perturbed start stops in
+  **90 iters / 4.2 s** (CV 0.070, sep 0.419, gate-PASS). Repel wall-clock at
+  9.6k pts, 1 thread: ~0.5 s / 10 iters.
+- ⚠ Caveats recorded honestly: (a) sep is a min-statistic and dips
+  transiently (e.g. 0.375 at the 6-iter early stop; 0.54 mid-run at 200) —
+  single standoff pairs; `kick_after` frees them (0.335 frozen → 0.557) but a
+  sep-aware stop or best-iterate return was *not* built; (b) the preserve
+  "clean win" (CV ≤0.075, sep ≥0.70 at 300 fixed iters) is met by B
+  (0.044 / 0.728).
+
+**Code landed:** `ClippedSpacingForce` in `src/repel_forces.jl` (+ export);
+default flip + `cv_target`/`stall_after` kwargs + `_dnn_cv` in `src/repel.jl`;
+tests updated/added in `test/repel.jl` (force values, β-feeds-default now vs
+clipped, stall/cv_target stopping); docs updated (`docs/src/repel.md` — was
+stale, claimed InverseDistanceForce default — and `docs/src/api.md`).
+
+**Verification (run 2026-06-11, after the session; gates 1 thread):**
+1. **Seeded gate (`--placement=bridson --resample-boundary`): PASS, improved**
+   — final (repel+kick+cull) CV **0.094 → 0.044**, sep/Δ **0.616 → 0.694**,
+   0 singular, **cull removed 0** (still silent). The 300 repel iterations now
+   add quality on top of the raw-PASS seed instead of eroding it.
+2. **Legacy gate (default `:random` + face centers): MARGINAL as before, but
+   mildly worse** — post-cull CV 0.151 → 0.184, culled 626 → 650 (sep 0.500,
+   0 singular unchanged). Mechanism: the clipped force no longer pulls the
+   uneven face-center boundary toward uniformity (no attraction), so the
+   boundary CV floor rises. Accepted: this is the proven-inferior pipeline
+   slated for removal (plan item 3); anyone needing the old behavior passes
+   `force_model=SpacingEquilibriumForce(β)` explicitly. The verdict class
+   (MARGINAL) and the gate-binding sep/singular criteria are unchanged.
+3. **`Pkg.test()`: green** — 142,816 pass / 2 broken (pre-existing), 5m10s,
+   including the new force-model and `cv_target`/`stall_after` testitems.
+4. **`validate_repel.jl` (box.stl): separation 0.0 / mesh_ratio Inf — NOT a
+   regression.** A/B on the identical cloud shows both forces end with
+   coincident bnd–bnd pairs (old default **381**, new default **349**): it is
+   the pre-existing deterministic-projection parking defect (open defect 1
+   family) on a scenario with h = diag/18 ≈ 2.4 m vs ~0.22 m face-center
+   spacing — the documented box.stl spacing-vs-tessellation trap — and the
+   script uses no `cull_ratio`. The script's frozen-vs-live comparison is
+   currently meaningless (both Inf); fixing it (resampled boundary or
+   `cull_ratio`) added to housekeeping.
+
+### Generality + benchmark harness
+
+*(Ordering superseded by the planned session sequence above; the geometry
+ladder folds naturally into plan item 2's bunny work, and the benchmark
+harness into plan item 3's removal justification.)*
 
 The Session-2 result reframes the program: the static-generation problem is
-solved on the cavity (direct generation passes raw, cull silent). Session 3
-should establish that this *generalizes* and quantify the SOTA claim:
+solved on the cavity (direct generation passes raw, cull silent). It remains
+to establish that this *generalizes* and to quantify the SOTA claim:
 
 - **Geometry ladder for the direct pipeline**
   (`sample_surface` + `:bridson`): `box.stl` (sharp edges/flat faces — watch
   the sampler near feature edges: continuous sampling has no special edge
   handling, and adjacent-face proximity blocking may under-sample creases) →
   `bifurcation.stl` (thin curved branches — watch the 3D-distance blocking
-  caveat if branch thickness approaches `h`). Success = raw gate-style PASS +
-  silent cull on all three. Also re-validate geometry sanity first (area vs
-  reference, isinside probes) — lesson learned.
+  caveat if branch thickness approaches `h`) → the
+  `examples/octree_boundary_layer.jl` configuration (`bunny.stl` +
+  `BoundaryLayerSpacing`), pushed to ≥10⁶ volume points — the
+  production-scale rung: graded spacing exercises both the `min(rᵢ,rⱼ)`
+  criterion at a real h-contrast and the background-grid memory behavior,
+  and its wall-clock is the measurement that triggers — or retires — the
+  gap-tracking sampler below. Success = raw gate-style PASS + silent cull on
+  all rungs. Re-validate geometry sanity first (area vs reference, isinside
+  probes) — lesson learned.
 - **Benchmark harness**: direct pipeline (≈ PNP-equivalent) vs the old
   repel pipeline on identical geometries; all gate metrics + wall-clock,
   stated thread counts. The raw Bridson-direct numbers are now meaningful
@@ -362,13 +506,16 @@ should establish that this *generalizes* and quantify the SOTA claim:
   building on it, address open defect 2 (repel degrades constructed
   blue-noise — force equilibrium vs PDS statistics, early stopping).
 
-### Session 4 (conditional) — octree NN search + momentum
+### Conditional — octree NN search + momentum (repel speed)
+
+*(Feeds plan item 1 if repel-quality work also needs speed; momentum and
+force-model work belong to that session, the NN search stays conditional.)*
 
 Trigger (updated after Session 1): the original premise — O(N) rebuild vs
 O(N log N) — is void; the rebuild is a measured 3% of loop time. The only
 remaining upside is query locality (kd traversal is ~50% of the loop), so
 build it only if the shape-opt loop's measured budget still demands ≤25%
-more speed after Bridson + momentum land. Design summary (full plan retired
+more speed after the quality work lands. Design summary (full plan retired
 to git history, `plan_octree_nn_search.md`):
 
 - **Option A**: `OctreeNN` wrapper around the existing `SpatialOctree`
@@ -388,6 +535,49 @@ Momentum as a cheap add-on: `v_i ← γ·v_i + α·F_i`, γ ≈ 0.5–0.8, ~2–
 smooth modes; the displacement cap is the divergence guard. Multi-grid
 (coarse k=8 pass → fine k=21, ≈60% wall-clock of a single fine pass) only if
 still needed after the above.
+
+### Sampler scaling — octree gap tracking (recorded 2026-06-11, design only)
+
+The direct pipeline is the new hot path, so its scaling matters at the
+production target (millions of points). Measured profile of the current
+dart thrower (cavity, 1 thread): **~3.3 µs/candidate, ~2.3% acceptance**
+(~290k candidates for 6.8k accepted — each retired active point burns its
+30 attempts mostly into covered or exterior space). Extrapolated serial cost
+at 10M points: **~20–25 min** — fine at gate scale, unacceptable at
+production scale. Two structural weaknesses appear at scale:
+
+1. **Wasted darts** dominate (the per-candidate work — `find_leaf` + bucket
+   scan — is already cheap; the count is the problem).
+2. **The uniform background grid breaks under graded spacing**: cell count
+   ∝ `(L/h_min)³` independent of N, so a boundary-layer `h_min` explodes
+   memory; the current `1<<27`-cell guard then coarsens cells and widens
+   scans.
+
+The fix for both is the same structure we already have: **octree gap
+tracking** (maximal Poisson-disk sampling, Ebeida/Gamito family), where the
+node octree replaces both the candidate generator and, at scale, the
+proximity buckets:
+
+- Maintain a pool of **uncovered cells**, seeded from the node-octree
+  interior/boundary leaves (containment becomes free by construction —
+  `SpacingCriterion` already subdivides to `≈ alpha·h(x)`, exactly the right
+  granularity for graded spacing, the awkward case in the literature).
+- Draw darts volume-weighted from the pool only; on acceptance mark covered
+  cells, subdivide partially-covered ones, keep uncovered children.
+- **Pool empty = maximality proof** — `stall_limit` and the fuzzy truncation
+  warning become exact statements ("saturated" vs "cap hit with gaps left").
+- Expected ~5–20× fewer candidate evaluations; composes with **parallel
+  phase groups** (leaves ≥ 2r apart are independent; 8-coloring on the
+  2:1-balanced tree) for another ~×n_threads. Order of magnitude at 10M
+  points, 8 threads: tens of seconds to ~2 min.
+- Same idea applies to `sample_surface` with uncovered triangle *fragments*.
+
+**Trigger to build it** (don't before): (a) the shape-opt loop chooses
+re-seed-per-design-step over incremental repel — a faster sampler then
+sidesteps open defect 2 entirely; or (b) the Session-3 benchmark at
+production N (e.g. bunny at h giving ≥10⁶ points) shows sampler wall-clock
+is material. Until then the simple dart thrower is correct and adequate at
+gate scale.
 
 ### After the speed push — deposition (the novelty)
 
@@ -432,3 +622,8 @@ and repel must first stop degrading seeded clouds (open defect 2).
   saturation count (the cavity gate case) — benign there (scattered
   single-dart holes, repel closes them), but consider only warning when the
   active front is still large relative to the generated count.
+- `validate_repel.jl` is currently meaningless: both frozen and live runs end
+  at separation 0 / mesh_ratio Inf (face-center boundary + projection parking
+  on box edges at h ≫ tessellation; pre-existing, not Session-3). Rework it
+  with a resampled boundary and/or `cull_ratio`, or retire it — the live-tree
+  fix it demonstrates is long since default.

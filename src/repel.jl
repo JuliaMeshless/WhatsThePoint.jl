@@ -16,13 +16,26 @@ one spacing unit. Convergence is the force norm `max_i(|F_i|·s_i)`, which
 vanishes at equilibrium.
 
 # Keywords
-- `force_model = SpacingEquilibriumForce(β)`: force law, any
-  [`RepelForceModel`](@ref); the default vanishes at `r = s`, so the cloud
-  settles at the prescribed density. `β = 0.2` feeds the default and is ignored
+- `force_model = ClippedSpacingForce(β)`: force law, any
+  [`RepelForceModel`](@ref); the default is repulsive below `r = s` and zero
+  beyond, so a cloud that already satisfies the Poisson-disk criterion is
+  preserved rather than re-packed. `β = 0.2` feeds the default and is ignored
   when `force_model` is passed explicitly.
 - `α`, `α_min`: step-size bounds. Defaults: `α = 0.05·min(spacing)`, `α_min = α/100`.
 - `k = 21`: neighborhood size.
 - `max_iters = 1000`, `tol = 1e-6`: iteration and convergence limits.
+- `cv_target = 0.0`: quality-based stop — end the relaxation once the movable
+  points' d_NN/s coefficient of variation drops to this value (read off the
+  sweep's nearest-neighbor data, no extra cost). The natural setting is the
+  raw quality of the direct generation pipeline (`≈ 0.07` on the cavity):
+  relaxing past the quality a re-seed would give is wasted budget. Off when
+  `0`.
+- `stall_after = 0`: stop when that same CV has not improved by ≥0.1 % for
+  this many consecutive iterations. The force residual of a saturated
+  repulsion-only packing plateaus at a nonzero value instead of reaching
+  `tol`, so `cv_target`/`stall_after` are the practical stops for the default
+  force; CV keeps creeping down for hundreds of iterations, making
+  `stall_after` the backstop and `cv_target` the primary. Off when `0`.
 - `rebuild_every = 1`: iterations between k-NN graph rebuilds (larger = cheaper,
   staler).
 - `kick_after = 0`: if the closest pair freezes at the same `r/s` for this many
@@ -39,7 +52,7 @@ function repel(
     cloud::PointCloud{𝔼{N},C},
     spacing;
     β=0.2,
-    force_model::RepelForceModel=SpacingEquilibriumForce(β),
+    force_model::RepelForceModel=ClippedSpacingForce(β),
     α=minimum(spacing.(to(cloud))) * 0.05,
     α_min=α / 100,
     k=21,
@@ -48,6 +61,8 @@ function repel(
     rebuild_every::Int=1,
     cull_ratio::Real=0.0,
     kick_after::Int=0,
+    stall_after::Int=0,
+    cv_target::Real=0.0,
     convergence::Union{Nothing,AbstractVector{<:AbstractFloat}}=nothing,
     trace::Union{Nothing,AbstractVector{<:NamedTuple}}=nothing,
 ) where {N,C<:CRS}
@@ -63,7 +78,7 @@ function repel(
         p, p_old, snap, spacing, force_model, (id, xi, x_proposed) -> x_proposed;
         n_fixed=n_bnd, n_protected=n_bnd,
         α_lo=ustrip(α_min), α_max=ustrip(α),
-        k, max_iters, tol, rebuild_every, kick_after, trace,
+        k, max_iters, tol, rebuild_every, kick_after, stall_after, cv_target, trace,
     )
     isnothing(convergence) || append!(convergence, conv)
 
@@ -104,7 +119,7 @@ function repel(
     spacing,
     octree::TriangleOctree;
     β=0.2,
-    force_model::RepelForceModel=SpacingEquilibriumForce(β),
+    force_model::RepelForceModel=ClippedSpacingForce(β),
     α=minimum(spacing.(to(cloud))) * 0.05,
     α_min=α / 100,
     k=21,
@@ -113,6 +128,8 @@ function repel(
     rebuild_every::Int=1,
     cull_ratio::Real=0.0,
     kick_after::Int=0,
+    stall_after::Int=0,
+    cv_target::Real=0.0,
     deposit_ratio::Real=0.0,
     convergence::Union{Nothing,AbstractVector{<:AbstractFloat}}=nothing,
     trace::Union{Nothing,AbstractVector{<:NamedTuple}}=nothing,
@@ -149,7 +166,8 @@ function repel(
         p, p_old, snap, spacing, force_model, constrain;
         n_fixed=0, n_protected=n_boundary,
         α_lo=ustrip(α_min), α_max=ustrip(α),
-        k, max_iters, tol, rebuild_every, kick_after, trace, deposit!,
+        k, max_iters, tol, rebuild_every, kick_after, stall_after, cv_target,
+        trace, deposit!,
     )
     isnothing(convergence) || append!(convergence, conv)
 
@@ -170,12 +188,16 @@ entries are static and whose tail mirrors `p`, refreshed every `rebuild_every`
 iterations. `constrain(id, xi, x_proposed)` maps a proposed position to the
 final one (identity, or the octree wall rule). `deposit!(p, method, i)`, when
 given, runs serially after each sweep. Kick targets prefer indices past
-`n_protected`. Returns the force-norm convergence history `max_i(|F_i|·s_i)`.
+`n_protected`. `cv_target > 0` and `stall_after > 0` add the
+quality-based stops: end when the movable points' d_NN/s CV (read off the
+sweep's nearest-neighbor data, no extra search) reaches the target, or has
+not improved for that many iterations. Returns the force-norm convergence
+history `max_i(|F_i|·s_i)`.
 """
 function _relax!(
     p, p_old, snap, spacing, force_model, constrain;
     n_fixed, n_protected, α_lo, α_max, k, max_iters, tol, rebuild_every,
-    kick_after, trace, (deposit!)=nothing,
+    kick_after, trace, stall_after=0, cv_target=0.0, (deposit!)=nothing,
 )
     n_move = length(p)
     kk = min(k, length(snap))
@@ -199,6 +221,8 @@ function _relax!(
         () -> (Vector{Int}(undef, kk), Vector{Float64}(undef, kk))
     )
     kick_state = (; pair=(0, 0), rs=Inf, count=0)
+    best_cv = Inf
+    last_cv_improvement = 0
 
     conv = Float64[]
     i = 1
@@ -254,6 +278,22 @@ function _relax!(
             @info "Node repel finished in $i iterations" convergence = conv[end]
             break
         end
+        if (stall_after > 0 || cv_target > 0) && n_move > 0
+            cv = _dnn_cv(nn_dist, spacings, n_fixed)
+            if cv_target > 0 && cv <= cv_target
+                @info "Node repel stopped in $i iterations: spacing CV target reached" cv cv_target
+                break
+            end
+            if stall_after > 0
+                if cv < best_cv * (1 - 1.0e-3)
+                    best_cv = cv
+                    last_cv_improvement = i
+                elseif i - last_cv_improvement >= stall_after
+                    @info "Node repel stopped in $i iterations: spacing CV stalled for $stall_after iterations" cv convergence = conv[end]
+                    break
+                end
+            end
+        end
         i += 1
     end
     if i > max_iters
@@ -286,6 +326,26 @@ function _safe_direction(xi, xj, r)
     end
     d = randn(SVector{3,Float64})
     return d / norm(d)
+end
+
+"""
+    _dnn_cv(nn_dist, spacings, n_fixed) -> Float64
+
+Coefficient of variation of `d_NN/s` over the movable points, read off the
+sweep's per-point nearest-neighbor data. The quality monitor behind
+`stall_after`: it tracks the gate's binding spacing-CV metric for free.
+"""
+function _dnn_cv(nn_dist, spacings, n_fixed)
+    n = length(nn_dist)
+    s1 = 0.0
+    s2 = 0.0
+    @inbounds for i in 1:n
+        u = nn_dist[i] / spacings[i+n_fixed]
+        s1 += u
+        s2 += u * u
+    end
+    μ = s1 / n
+    return sqrt(max(s2 / n - μ * μ, 0.0)) / μ
 end
 
 """

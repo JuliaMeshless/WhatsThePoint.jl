@@ -89,7 +89,8 @@ include("surface_sampling.jl")
 export sample_surface
 
 include("repel_forces.jl")
-export RepelForceModel, InverseDistanceForce, SpacingEquilibriumForce, StrongSpacingForce, compute_force
+export RepelForceModel, InverseDistanceForce, SpacingEquilibriumForce, StrongSpacingForce,
+    ClippedSpacingForce, compute_force
 
 include("repel.jl")
 export repel

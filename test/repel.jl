@@ -128,13 +128,30 @@ end
     @test compute_force(m2, 0.5) > 0
     @test compute_force(m2, 2.0) < 0
 
+    # ClippedSpacingForce matches the repulsive branch of SpacingEquilibriumForce
+    # for u < u0 and is exactly zero from u0 on (compact support).
+    m3 = ClippedSpacingForce(0.2)
+    @test m3.u0 == 1.0
+    for u in (0.0, 0.3, 0.7, 0.99)
+        @test compute_force(m3, u) ≈ compute_force(m2, u)
+        @test compute_force(m3, u) > 0
+    end
+    @test compute_force(m3, 1.0) == 0.0
+    @test compute_force(m3, 1.5) == 0.0
+    @test compute_force(m3, 10.0) == 0.0
+    # custom support radius moves the root
+    m4 = ClippedSpacingForce(0.2, 0.8)
+    @test compute_force(m4, 0.79) > 0
+    @test compute_force(m4, 0.8) == 0.0
+
     # Default β matches the original repel default (0.2)
     @test InverseDistanceForce().β == 0.2
     @test SpacingEquilibriumForce().β == 0.2
+    @test ClippedSpacingForce().β == 0.2
 end
 
 @testitem "repel β kwarg feeds default force_model" setup = [TestData, CommonImports] begin
-    # The β kwarg must continue to affect the default SpacingEquilibriumForce so that
+    # The β kwarg must continue to affect the default ClippedSpacingForce so that
     # existing callers that pass `β=...` keep working without passing force_model.
     boundary = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
@@ -147,7 +164,7 @@ end
     Random.seed!(1)
     c_model = repel(
         cloud, spacing, octree;
-        force_model = SpacingEquilibriumForce(0.5), max_iters = 5,
+        force_model = ClippedSpacingForce(0.5), max_iters = 5,
     )
 
     pts_beta = points(c_beta)
@@ -208,6 +225,37 @@ end
     # which model wins depend on α/β tuning and iteration count.
     @test after_inv.mean_error <= before.mean_error * 1.1
     @test after_eq.mean_error <= before.mean_error * 1.1
+end
+
+@testitem "repel stall_after stops on quality plateau" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
+
+    # The force residual of a saturated repulsion-only packing plateaus instead
+    # of reaching tol, so a tight-tol run burns the whole budget — stall_after
+    # must end it once the d_NN/s CV stops improving.
+    conv = Float64[]
+    repel(
+        cloud, spacing, octree;
+        max_iters = 200, tol = 1.0e-12, stall_after = 5, convergence = conv,
+    )
+    @test 5 < length(conv) < 200
+
+    # cv_target: a generous target must stop the relaxation almost immediately
+    # (the monitor sees the d_NN/s CV of the movable points each sweep).
+    conv_t = Float64[]
+    repel(
+        cloud, spacing, octree;
+        max_iters = 200, tol = 1.0e-12, cv_target = 10.0, convergence = conv_t,
+    )
+    @test length(conv_t) == 1
+
+    # Off by default: same configuration runs to max_iters.
+    conv_off = Float64[]
+    repel(cloud, spacing, octree; max_iters = 30, tol = 1.0e-12, convergence = conv_off)
+    @test length(conv_off) == 30
 end
 
 @testitem "near-duplicate cull mask" setup = [CommonImports] begin
