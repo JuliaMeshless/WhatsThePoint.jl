@@ -5,7 +5,7 @@
 """
     repel(cloud::PointCloud, spacing; kwargs...) -> PointCloud
 
-Optimize the point distribution via node repulsion (Miotti 2023). Only volume
+Optimize the point distribution via node repulsion. Only volume
 points move; boundary points form a fixed wall. Points pushed outside the
 domain are discarded (`isinside` filter). Returns a new cloud with `NoTopology`.
 
@@ -36,21 +36,21 @@ vanishes at equilibrium.
   (global boundary-then-volume indices, measured on that iteration's snapshot).
 """
 function repel(
-        cloud::PointCloud{𝔼{N}, C},
-        spacing;
-        β = 0.2,
-        force_model::RepelForceModel = SpacingEquilibriumForce(β),
-        α = minimum(spacing.(to(cloud))) * 0.05,
-        α_min = α / 100,
-        k = 21,
-        max_iters = 1000,
-        tol = 1.0e-6,
-        rebuild_every::Int = 1,
-        cull_ratio::Real = 0.0,
-        kick_after::Int = 0,
-        convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
-        trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
-    ) where {N, C <: CRS}
+    cloud::PointCloud{𝔼{N},C},
+    spacing;
+    β=0.2,
+    force_model::RepelForceModel=SpacingEquilibriumForce(β),
+    α=minimum(spacing.(to(cloud))) * 0.05,
+    α_min=α / 100,
+    k=21,
+    max_iters=1000,
+    tol=1.0e-6,
+    rebuild_every::Int=1,
+    cull_ratio::Real=0.0,
+    kick_after::Int=0,
+    convergence::Union{Nothing,AbstractVector{<:AbstractFloat}}=nothing,
+    trace::Union{Nothing,AbstractVector{<:NamedTuple}}=nothing,
+) where {N,C<:CRS}
     rebuild_every >= 1 || throw(ArgumentError("rebuild_every must be ≥ 1"))
     bnd_p = points(boundary(cloud))
     n_bnd = length(bnd_p)
@@ -61,8 +61,8 @@ function repel(
 
     conv = _relax!(
         p, p_old, snap, spacing, force_model, (id, xi, x_proposed) -> x_proposed;
-        n_fixed = n_bnd, n_protected = n_bnd,
-        α_lo = ustrip(α_min), α_max = ustrip(α),
+        n_fixed=n_bnd, n_protected=n_bnd,
+        α_lo=ustrip(α_min), α_max=ustrip(α),
         k, max_iters, tol, rebuild_every, kick_after, trace,
     )
     isnothing(convergence) || append!(convergence, conv)
@@ -100,23 +100,23 @@ The returned boundary is a single surface named `:boundary` (use
   edge/vertex.
 """
 function repel(
-        cloud::PointCloud{𝔼{3}, C},
-        spacing,
-        octree::TriangleOctree;
-        β = 0.2,
-        force_model::RepelForceModel = SpacingEquilibriumForce(β),
-        α = minimum(spacing.(to(cloud))) * 0.05,
-        α_min = α / 100,
-        k = 21,
-        max_iters = 1000,
-        tol = 1.0e-6,
-        rebuild_every::Int = 1,
-        cull_ratio::Real = 0.0,
-        kick_after::Int = 0,
-        deposit_ratio::Real = 0.0,
-        convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
-        trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
-    ) where {C <: CRS}
+    cloud::PointCloud{𝔼{3},C},
+    spacing,
+    octree::TriangleOctree;
+    β=0.2,
+    force_model::RepelForceModel=SpacingEquilibriumForce(β),
+    α=minimum(spacing.(to(cloud))) * 0.05,
+    α_min=α / 100,
+    k=21,
+    max_iters=1000,
+    tol=1.0e-6,
+    rebuild_every::Int=1,
+    cull_ratio::Real=0.0,
+    kick_after::Int=0,
+    deposit_ratio::Real=0.0,
+    convergence::Union{Nothing,AbstractVector{<:AbstractFloat}}=nothing,
+    trace::Union{Nothing,AbstractVector{<:NamedTuple}}=nothing,
+) where {C<:CRS}
     rebuild_every >= 1 || throw(ArgumentError("rebuild_every must be ≥ 1"))
     deposit_ratio >= 0 || throw(ArgumentError("deposit_ratio must be ≥ 0"))
     all_p = points(cloud)
@@ -147,8 +147,8 @@ function repel(
 
     conv = _relax!(
         p, p_old, snap, spacing, force_model, constrain;
-        n_fixed = 0, n_protected = n_boundary,
-        α_lo = ustrip(α_min), α_max = ustrip(α),
+        n_fixed=0, n_protected=n_boundary,
+        α_lo=ustrip(α_min), α_max=ustrip(α),
         k, max_iters, tol, rebuild_every, kick_after, trace, deposit!,
     )
     isnothing(convergence) || append!(convergence, conv)
@@ -173,10 +173,10 @@ given, runs serially after each sweep. Kick targets prefer indices past
 `n_protected`. Returns the force-norm convergence history `max_i(|F_i|·s_i)`.
 """
 function _relax!(
-        p, p_old, snap, spacing, force_model, constrain;
-        n_fixed, n_protected, α_lo, α_max, k, max_iters, tol, rebuild_every,
-        kick_after, trace, deposit! = nothing,
-    )
+    p, p_old, snap, spacing, force_model, constrain;
+    n_fixed, n_protected, α_lo, α_max, k, max_iters, tol, rebuild_every,
+    kick_after, trace, (deposit!)=nothing,
+)
     n_move = length(p)
     spacings = ustrip.(spacing.(snap))
     len_unit = Unitful.unit(Meshes.to(first(snap))[1])
@@ -190,14 +190,14 @@ function _relax!(
     # Ref so the per-iteration rebuild does not rebind a captured variable
     # (OhMyThreads' tmap! rejects boxed closure captures).
     method_ref = Ref(KNearestSearch(snap, k))
-    kick_state = (; pair = (0, 0), rs = Inf, count = 0)
+    kick_state = (; pair=(0, 0), rs=Inf, count=0)
 
     conv = Float64[]
     i = 1
     while i <= max_iters
         p_old .= p
         if (i - 1) % rebuild_every == 0
-            @views snap[(n_fixed + 1):end] .= p
+            @views snap[(n_fixed+1):end] .= p
             method_ref[] = KNearestSearch(snap, k)
         end
         # Jacobi-style sweep: every force is evaluated against the same frozen
@@ -228,10 +228,10 @@ function _relax!(
             end
             return constrain(id, xi, xi + disp)
         end
-        push!(conv, maximum(forces; init = 0.0))
+        push!(conv, maximum(forces; init=0.0))
         if n_move > 0 && (!isnothing(trace) || kick_after > 0)
             pair = _closest_pair(nn_dist, nn_id, spacings, n_fixed)
-            isnothing(trace) || push!(trace, (; iteration = i, pair...))
+            isnothing(trace) || push!(trace, (; iteration=i, pair...))
             if kick_after > 0
                 kick_state, kicked = _maybe_kick!(
                     p, pair, kick_state, kick_after, spacings, n_fixed,
@@ -267,7 +267,7 @@ function _safe_direction(xi, xj, r)
     if r > zero(r)
         return (xi - xj) / r
     end
-    d = randn(SVector{3, Float64})
+    d = randn(SVector{3,Float64})
     return d / norm(d)
 end
 
@@ -285,7 +285,7 @@ function _closest_pair(nn_dist, nn_id, spacings, n_fixed)
     ig = i + n_fixed
     r = nn_dist[i]
     s = (spacings[ig] + spacings[j]) / 2
-    return (; r, s, r_over_s = r / s, idx_a = min(ig, j), idx_b = max(ig, j))
+    return (; r, s, r_over_s=r / s, idx_a=min(ig, j), idx_b=max(ig, j))
 end
 
 """
@@ -299,23 +299,23 @@ picks a movable one (past `n_fixed`). `state` is the `(pair, rs, count)` tuple
 the caller threads through.
 """
 function _maybe_kick!(
-        p::AbstractVector, pair::NamedTuple, state::NamedTuple, kick_after::Int,
-        spacings::AbstractVector{<:AbstractFloat}, n_fixed::Int, n_protected::Int,
-        len_unit,
-    )
+    p::AbstractVector, pair::NamedTuple, state::NamedTuple, kick_after::Int,
+    spacings::AbstractVector{<:AbstractFloat}, n_fixed::Int, n_protected::Int,
+    len_unit,
+)
     frozen = (pair.idx_a, pair.idx_b) == state.pair &&
-        abs(pair.r_over_s - state.rs) < 1.0e-8
+             abs(pair.r_over_s - state.rs) < 1.0e-8
     count = frozen ? state.count + 1 : 1
     if count < kick_after
-        return (; pair = (pair.idx_a, pair.idx_b), rs = pair.r_over_s, count), false
+        return (; pair=(pair.idx_a, pair.idx_b), rs=pair.r_over_s, count), false
     end
 
     a, b = pair.idx_a, pair.idx_b
     target = a > n_protected ? a : (b > n_protected ? b : (a > n_fixed ? a : b))
     s = spacings[target]
-    d = randn(SVector{3, Float64})
-    p[target - n_fixed] += Vec(0.1 * s * (d / norm(d)) * len_unit)
-    return (; pair = (a, b), rs = pair.r_over_s, count = 0), true
+    d = randn(SVector{3,Float64})
+    p[target-n_fixed] += Vec(0.1 * s * (d / norm(d)) * len_unit)
+    return (; pair=(a, b), rs=pair.r_over_s, count=0), true
 end
 
 # ======================================================================
@@ -332,9 +332,9 @@ proposed position while it stays inside, and escapees revert — flagged in
 `escaped` as deposition candidates.
 """
 function _constrain_octree(
-        id, xi, x_proposed, is_bnd, escaped, tri_indices,
-        octree, offset_dist, len_unit,
-    )
+    id, xi, x_proposed, is_bnd, escaped, tri_indices,
+    octree, offset_dist, len_unit,
+)
     sv_proposed = _extract_vertex(Float64, x_proposed)
     if is_bnd[id]
         sv, tri_idx = _project_to_boundary(sv_proposed, octree, offset_dist)
@@ -363,9 +363,9 @@ conversion is one-way and a parallel pass would over-deposit when a whole
 layer escapes in one iteration.
 """
 function _deposit_escaped!(
-        p, method, escaped, is_bnd, tri_indices, octree,
-        spacing, deposit_ratio, offset_dist, len_unit,
-    )
+    p, method, escaped, is_bnd, tri_indices, octree,
+    spacing, deposit_ratio, offset_dist, len_unit,
+)
     n_dep = 0
     for id in eachindex(p)
         escaped[id] || continue
@@ -398,8 +398,8 @@ Nearest point on the mesh surface, nudged `offset_dist` inward along the
 triangle normal. `tri_idx == 0` means no triangle was found.
 """
 function _project_to_boundary(
-        sv::SVector{3, T}, octree::TriangleOctree, offset_dist::T,
-    ) where {T <: Real}
+    sv::SVector{3,T}, octree::TriangleOctree, offset_dist::T,
+) where {T<:Real}
     state = NearestTriangleState{T}(sv)
     _nearest_triangle_octree!(sv, octree.tree, octree.mesh, 1, state)
     state.closest_idx == 0 && return (sv, 0)
@@ -463,22 +463,22 @@ points take the landing triangle's normal; imported ones (`id ≤ n_boundary`)
 keep their original area, deposited ones get `spacing²`.
 """
 function _reconstruct_cloud(
-        cloud::PointCloud{𝔼{3}, C},
-        p::AbstractVector{<:Point{𝔼{3}, C}},
-        tri_indices::Vector{Int},
-        is_bnd::AbstractVector{Bool},
-        n_boundary::Int,
-        octree::TriangleOctree,
-        spacing,
-        keep::AbstractVector{Bool} = trues(length(p)),
-    ) where {C <: CRS}
+    cloud::PointCloud{𝔼{3},C},
+    p::AbstractVector{<:Point{𝔼{3},C}},
+    tri_indices::Vector{Int},
+    is_bnd::AbstractVector{Bool},
+    n_boundary::Int,
+    octree::TriangleOctree,
+    spacing,
+    keep::AbstractVector{Bool}=trues(length(p)),
+) where {C<:CRS}
     orig_normals = normal(boundary(cloud))
     orig_areas = area(boundary(cloud))
 
-    new_bnd_pts = Point{𝔼{3}, C}[]
-    new_bnd_normals = SVector{3, Float64}[]
+    new_bnd_pts = Point{𝔼{3},C}[]
+    new_bnd_normals = SVector{3,Float64}[]
     new_bnd_areas = eltype(orig_areas)[]
-    new_vol_pts = Point{𝔼{3}, C}[]
+    new_vol_pts = Point{𝔼{3},C}[]
 
     for id in eachindex(p)
         keep[id] || continue
@@ -496,8 +496,8 @@ function _reconstruct_cloud(
     end
 
     new_surf = PointSurface(new_bnd_pts, new_bnd_normals, new_bnd_areas)
-    new_bnd = PointBoundary(LittleDict{Symbol, typeof(new_surf)}(:boundary => new_surf))
-    new_vol = isempty(new_vol_pts) ? PointVolume{𝔼{3}, C}() : PointVolume(new_vol_pts)
+    new_bnd = PointBoundary(LittleDict{Symbol,typeof(new_surf)}(:boundary => new_surf))
+    new_vol = isempty(new_vol_pts) ? PointVolume{𝔼{3},C}() : PointVolume(new_vol_pts)
 
     return PointCloud(new_bnd, new_vol, NoTopology())
 end
