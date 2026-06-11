@@ -85,6 +85,9 @@ include("discretization/discretization.jl")
 export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, Octree
 export discretize
 
+include("surface_sampling.jl")
+export sample_surface
+
 include("repel_forces.jl")
 export RepelForceModel, InverseDistanceForce, SpacingEquilibriumForce, StrongSpacingForce, compute_force
 

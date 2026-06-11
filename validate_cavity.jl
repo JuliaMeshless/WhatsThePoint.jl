@@ -10,7 +10,8 @@
 #
 # Usage:  jlrun validate_cavity.jl
 #         jlrun validate_cavity.jl 0.06                  (custom spacing)
-#         jlrun validate_cavity.jl --placement=jittered  (octree seeding: random|jittered|lattice)
+#         jlrun validate_cavity.jl --placement=jittered  (octree seeding: random|jittered|lattice|bridson)
+#         jlrun validate_cavity.jl --resample-boundary   (Poisson-disk surface sampling instead of face centers)
 #         jlrun validate_cavity.jl --save-vtk            (dump final cloud to cavity_cloud.vtu for ParaView)
 using Pkg
 Pkg.activate(@__DIR__)
@@ -28,10 +29,17 @@ using Printf
 # ============================================================================
 
 function _make_sphere_mesh(R, nθ, nφ)
+    # NOTE index layout: the connectivity below addresses point (i, j) at linear
+    # index i*nφ + j + 1 (row-major over i). Julia comprehensions flatten
+    # column-major, so j must be the FIRST iterator. Having i first scrambled
+    # the connectivity (608 chord triangles through the interior, 6× the true
+    # surface area) and silently corrupted every STL-gate run until 2026-06-11
+    # — the d_NN-based gate metrics are blind to it. Guarded by the area check
+    # at export below.
     pts = [Meshes.Point(R * sin(π * i / nθ) * cos(2π * j / nφ),
                         R * sin(π * i / nθ) * sin(2π * j / nφ),
                         R * cos(π * i / nθ))
-           for i in 0:nθ, j in 0:(nφ - 1)][:]
+           for j in 0:(nφ - 1), i in 0:nθ][:]
 
     conn = Connectivity{Triangle}[]
     for i in 0:(nθ - 1), j in 0:(nφ - 1)
@@ -39,8 +47,12 @@ function _make_sphere_mesh(R, nθ, nφ)
         b = i * nφ + (j + 1) % nφ + 1
         c = (i + 1) * nφ + j + 1
         d = (i + 1) * nφ + (j + 1) % nφ + 1
-        push!(conn, connect((a, b, c)))
-        push!(conn, connect((b, d, c)))
+        # Pole rows collapse one quad edge (a==b at the north pole, c==d at the
+        # south pole): emit only the non-degenerate triangle there. The
+        # zero-area slivers otherwise fail the manifold-orientation edge test
+        # and put near-duplicate face centers at the poles.
+        i > 0 && push!(conn, connect((a, b, c)))
+        i < nθ - 1 && push!(conn, connect((b, d, c)))
     end
 
     return SimpleMesh(pts, conn)
@@ -81,22 +93,25 @@ function _parse_args(args)
     Δ = 0.08
     placement = :random
     save_vtk = false
+    resample = false
     for a in args
         if startswith(a, "--placement=")
             placement = Symbol(last(split(a, "=")))
         elseif a == "--save-vtk"
             save_vtk = true
+        elseif a == "--resample-boundary"
+            resample = true
         else
             Δ = parse(Float64, a)
         end
     end
-    return Δ, placement, save_vtk
+    return Δ, placement, save_vtk, resample
 end
 
-const Δ, PLACEMENT, SAVE_VTK = _parse_args(ARGS)
+const Δ, PLACEMENT, SAVE_VTK, RESAMPLE = _parse_args(ARGS)
 
-@printf("Annular cavity: R_outer=%.3f  r_inner=%.3f  Δ=%.4f  placement=%s\n",
-    R_OUTER, R_INNER, Δ, PLACEMENT)
+@printf("Annular cavity: R_outer=%.3f  r_inner=%.3f  Δ=%.4f  placement=%s  boundary=%s\n",
+    R_OUTER, R_INNER, Δ, PLACEMENT, RESAMPLE ? "poisson-disk" : "face-centers")
 
 # ----------------------------------------------------------------------------
 # STL roundtrip: export the programmatic mesh once, then always import from
@@ -109,6 +124,18 @@ if !isfile(STL_PATH)
     @printf("Building mesh (%d×%d per shell) and exporting to %s\n",
         N_ANGULAR, 2 * N_ANGULAR, STL_PATH)
     mesh_src = _make_annular_cavity_mesh(R_OUTER, R_INNER, N_ANGULAR, 2 * N_ANGULAR)
+
+    # Geometry sanity: total area must match the analytic value (tessellation
+    # deficit only). Catches connectivity scrambling, which the d_NN-based gate
+    # metrics cannot see (discovered 2026-06-11: a column-major/row-major index
+    # mismatch produced chord triangles with 6× the true area and a broken
+    # isinside, while every gate metric still looked plausible).
+    area_mesh = sum(ustrip(Meshes.area(e)) for e in Meshes.elements(mesh_src))
+    area_true = 4π * (R_OUTER^2 + R_INNER^2)
+    rel_err = abs(area_mesh - area_true) / area_true
+    @printf("mesh area: %.4f vs analytic %.4f (rel err %.2e)\n", area_mesh, area_true, rel_err)
+    rel_err < 0.02 || error("mesh area deviates $(rel_err) from analytic — connectivity bug?")
+
     GeoIO.save(STL_PATH, GeoIO.georef(nothing, mesh_src))
 
     # one-time verification: face centers must survive the roundtrip (Float32 noise only)
@@ -119,6 +146,9 @@ if !isfile(STL_PATH)
     @printf("STL roundtrip: %d → %d triangles, max face-center deviation %.2e\n",
         length(c_src), length(c_stl), maxdev)
     maxdev < 1.0e-5 || error("STL roundtrip deviation too large: $maxdev")
+    area_back = sum(ustrip(Meshes.area(e)) for e in Meshes.elements(back))
+    abs(area_back - area_true) / area_true < 0.02 ||
+        error("loaded STL area $(area_back) deviates from analytic $(area_true)")
 end
 
 mesh_raw = GeoIO.load(STL_PATH).geometry
@@ -129,9 +159,11 @@ mesh = Meshes.SimpleMesh(
 @printf("Loaded %s: %d vertices, %d triangles\n",
     STL_PATH, length(Meshes.vertices(mesh)), Meshes.nelements(mesh))
 
-boundary = PointBoundary(mesh)
 diag = norm(Meshes.boundingbox(mesh).max - Meshes.boundingbox(mesh).min)
 spacing = ConstantSpacing(Δ * m)
+boundary = RESAMPLE ? PointBoundary(mesh, spacing) : PointBoundary(mesh)
+@printf("Boundary: %d points (%s)\n", length(points(boundary)),
+    RESAMPLE ? "Poisson-disk sampled" : "face centers")
 
 # ============================================================================
 # Octree discretization

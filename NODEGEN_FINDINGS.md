@@ -17,42 +17,88 @@ Validation target: annular cavity (R=1, r=0.547), judged by
 `validate_cavity.jl` (separation, spacing CV, coordination, per-stencil
 degree-3 Vandermonde σ_min/σ_max).
 
-## Current status (2026-06-09 gate, branch `shape_optimization_utils`)
+## ⚠ Geometry corruption notice (discovered 2026-06-11, Session 2)
 
-Quality gate: **PASS** (cavity, Δ=0.08, 11450 pts, 300 iters):
+**Every cavity-gate number recorded before 2026-06-11 PM was measured on a
+corrupt geometry.** `_make_sphere_mesh` in `validate_cavity.jl` built its
+point list with a column-major comprehension while the connectivity assumed
+row-major indexing: the resulting "cavity" had a wrinkled non-watertight
+surface, a missing azimuthal wedge, 608 chord triangles through the interior
+(6× the true surface area), and an `isinside` that misclassified ~30% of the
+annulus. The bug is as old as the gate itself (first commit of
+`validate_cavity.jl`, 2026-06-09, verified via `git log -S`), so **all**
+historical cavity numbers — including the original PASS baseline and the
+repel-fix improvements — were measured on the corrupt domain. It went
+undetected because **every gate metric is d_NN-based (separation, spacing
+CV, coordination, stencil σ) — all local measures, structurally blind to
+coverage voids and wrong domains.** The
+"STL gate reproduces the programmatic baseline" check was self-consistent
+garbage (both sides used the same scrambled generator), and the one-time
+roundtrip check compared face centers — which survive scrambling.
 
-| Metric | value | target |
-|---|---|---|
-| separation / Δ | 0.500 | > 0.1 ✓ |
-| spacing CV (d_NN/h) | 0.140 | < 0.15 ✓ |
-| p05 / p95 (d_NN/h) | 0.541 / 0.863 | — |
-| coordination (≤1.4h) | 18.6 | 12–14 ✗ |
-| singular stencils (k=50, deg 3) | 0 / 11403 | 0 ✓ |
-| min / median σ_min/σ_max | 3.8e-4 / 1.49e-2 | — |
+Caught only when the surface Poisson-disk sampler placed 784 samples
+off-shell (it samples the actual surface; face centers of chord triangles had
+just blended in as interior junk). Fixes: generator index order corrected,
+degenerate pole slivers no longer emitted (they failed the manifold
+orientation check and planted near-duplicate face centers at the poles),
+`cavity.stl` regenerated (4416 facets, area 16.268 vs analytic 16.326), and
+the gate now asserts total mesh area against the analytic value at export
+*and* after re-import. **Lesson (reinforces the existing principle): validate
+the geometry itself (area, isinside probes) before trusting distribution
+metrics — d_NN statistics cannot see a broken domain.**
 
-Speed (re-measured 2026-06-11, after the `knn!` buffer fix): **0.47 s /
-10 iters at 45.7k pts on 8 threads, 0.096 GB allocated** (was 0.53 s /
-0.758 GB; single-threaded 2.66 s). ~300 iterations needed from a `:random`
-start — iteration count is now the dominant cost, and CV relaxation is what
-sets it (see Session 1 findings).
+## Current status (2026-06-11 clean-geometry gate, branch `shape_optimization_utils`)
 
-**Honest SOTA position:**
-- *Quality*: competitive on the internal gate, but no head-to-head vs the
-  reference direct generators (Medusa / Slak–Kosec PNP) has been run.
-- *Speed*: behind direct generation — PNP gets sep ≥ 0.5·h *by construction*
-  in one O(N log N) pass; we need ~300 iterations + kick.
+Cavity gate, Δ=0.08, **1 thread**, clean `cavity.stl` (4416 facets):
+
+| Pipeline | verdict | CV (post-cull) | sep/Δ | singular | culled | repel iters |
+|---|---|---|---|---|---|---|
+| `:random` + face centers (old default) | MARGINAL | 0.151 | 0.500 | 0 | **626** | 300 |
+| `:bridson` + face centers | MARGINAL | 0.151 | 0.500 | 0 | 589 | 300 |
+| **`:bridson` + Poisson-disk boundary** | **PASS, raw** | **0.071** | **0.750** | **0** | **0** | **0** |
+
+The direct-generation pipeline (`sample_surface` boundary + `:bridson` volume)
+satisfies the full gate **by construction in ~3 s single-threaded, zero repel
+iterations**, with the cull warning silent for the first time. The previous
+"PASS, CV 0.140, 56 culled" baseline was an artifact of the corrupt domain;
+on the true cavity the repel-from-random pipeline never passes pre-cull and
+leaves 626 near-duplicates.
+
+Repel speed (measured 2026-06-11 on the corrupt geometry, but a
+geometry-independent code property): 0.47 s / 10 iters at 45.7k pts on 8
+threads, 0.096 GB allocated (single-threaded 2.66 s) after the `knn!` buffer
+fix.
+
+**Honest SOTA position (updated 2026-06-11):**
+- *Quality*: the direct pipeline now meets the gate by construction
+  (sep ≥ 0.75·r, CV 0.07, 0 singular raw) — same construction class as the
+  reference direct generators (Medusa / Slak–Kosec PNP); a head-to-head on
+  identical geometries is still unrun (Session 3).
+- *Speed*: in the direct-generation class now — one O(N) advancing-front pass
+  per stage (~3 s total on the cavity, 1 thread); the 300-iteration repel
+  budget is gone for static geometry.
 - *Differentiator*: incremental re-relaxation in the shape-opt loop +
-  deposition (emergent boundary sampling; no published equivalent known).
+  deposition (emergent boundary sampling; no published equivalent known) —
+  both gated on fixing repel's blue-noise degradation (open defect 2).
 
-## Architecture verdict
+## Architecture verdict (revised 2026-06-11)
 
-The Octree→repel split is the right decomposition:
+Generation is now a two-stage *direct* pipeline; repel is an optional
+relaxation tool, no longer the quality workhorse:
+- **Boundary**: `sample_surface(mesh, spacing)` / `PointBoundary(mesh, spacing)`
+  (`src/surface_sampling.jl`) — graded surface Poisson-disk; supersedes
+  face-center import for quality-sensitive use.
 - **Octree** (`src/discretization/algorithms/octree.jl`): graded *density*
   (node count follows `h(x)`), arbitrary STL. Placement options: `:random`
   (Poisson per leaf, default), `:jittered` (stratified grid per leaf),
-  `:lattice`.
-- **Repel** (`src/repel.jl`): local *regularity* (blue-noise spacing) — what
-  conditions RBF-FD stencils and removes close-pair `SingularException`s.
+  `:lattice`, `:bridson` (global graded Poisson-disk, Session 2 — the only
+  mode with a cross-leaf separation guarantee; `bridson_factor` sets the disk
+  radius relative to `h`, default 0.75). With a Poisson-disk boundary,
+  `:bridson` output passes the gate raw.
+- **Repel** (`src/repel.jl`): retained for incremental re-relaxation under
+  boundary change (shape-opt) and deposition. Measured 2026-06-11: it
+  *degrades* an already-blue-noise cloud (open defect 2), so it should not
+  follow the direct pipeline on static geometry.
 
 ## Quality indicators
 
@@ -69,6 +115,12 @@ ratio dominated by a handful of outliers. Primary metrics
 | singular stencils | count of σ_min/σ_max < 1e-8 | 0 |
 
 ## Established findings
+
+*(Caveat added 2026-06-11: items below were measured on the corrupt cavity.
+The repel defects and their fixes are real dynamics mechanisms — frozen graph,
+force root, NaN direction, standoff — and remain in place, but their quoted
+metric improvements (e.g. sep 0.14 → 0.50) await clean re-measurement if they
+ever matter again; with the direct pipeline they mostly don't.)*
 
 Defects found and fixed (all in `src/repel.jl`):
 1. **Frozen neighbor graph** — kd-tree built once. Fixed: `rebuild_every=1`.
@@ -102,15 +154,27 @@ Negative results and principles (don't re-derive these):
   an under-filled volume deposits nothing.
 
 Open defects:
-1. **Boundary-projection collisions** — the cavity culls ~42–59 points/run
-   (projection parks pairs on shared edges/vertices). The one thing keeping
-   the cull warning loud.
-2. **Coordination 18.6 vs 12–14** — cloud denser than ideal blue-noise;
-   likely a seeding artifact (Poisson start), possibly a too-generous 1.4h
-   threshold.
-3. **Float32 STL → Octree Float64 CRS mismatch** — workaround: promote mesh.
+1. **Imported face-center boundaries are themselves a defect** (resolved for
+   generation by `sample_surface`, still open for face-center users): on the
+   clean cavity the tessellation's pole rings (min d_NN/h = 0.078) and uneven
+   face spacing floor the boundary CV at ~0.24 after 300 repel iterations and
+   leave 589–626 culled near-duplicates. The Poisson-disk boundary measures
+   CV 0.061 raw and culls zero. Boundary-projection collisions during repel
+   (the original defect framing) remain plausible contributors when repel is
+   used, but the dominant term was the import sampling all along.
+2. **Repel degrades constructed blue-noise** (new, Session 2): from a raw-PASS
+   cloud, 300 iterations drift CV 0.071 → 0.093 and sep 0.75 → 0.55, residual
+   plateaus ~0.2. Harmless for the gate (stays PASS) but disqualifying for
+   "repel as polisher." Needs a force model whose equilibrium matches PDS
+   statistics, or an early-stop/convergence criterion, before repel-in-loop
+   work (its actual remaining use case) is built.
+3. **Coordination**: with the clean geometry and the resampled pipeline,
+   coordination is 10.5 raw / 14.3 after repel — at or near the 12–14 ideal
+   band; the historical 18.6 was a corrupt-domain artifact. Consider the
+   defect closed pending re-measurement on other geometries.
+4. **Float32 STL → Octree Float64 CRS mismatch** — workaround: promote mesh.
    Worth fixing in `octree.jl`.
-4. **Deposition validated on one 834-pt box only** — curved geometry,
+5. **Deposition validated on one 834-pt box only** — curved geometry,
    variable h, boundary-free start untested.
 
 ## Roadmap (assessed 2026-06-11)
@@ -121,13 +185,22 @@ factors multiply and have independent levers:
 | Lever | Attacks | Expected gain | Effort to first result |
 |---|---|---|---|
 | `:jittered` validation | iteration count | **measured 2026-06-11: none** | done |
-| Bridson graded Poisson-disk | iteration count | 300 → ~30–80 iters | ~1 session |
+| Bridson graded Poisson-disk (volume) | iteration count | **measured 2026-06-11: vol CV 0.074 raw; gate stays boundary-bound with face centers** | done |
+| Surface Poisson-disk (boundary) | iteration count | **measured 2026-06-11: with `:bridson` volume the gate passes raw — iterations-to-PASS = 0** | done |
 | k-NN buffer reuse (`knn!`) | cost/iter | **measured: −87% alloc, GC 8.8→0.7%, −11% threaded wall** | done |
 | `rebuild_every` > 1 | cost/iter | **measured: ~5% — not a lever** (rebuild is 3% of loop) | done |
-| Octree NN search | cost/iter | ≤ ~25% of loop (query-locality only; rebuild premise measured void) | 1–2 sessions (design done) |
-| Momentum | iteration count | ~2–3× | hours (cap guards it) |
+| Octree NN search | cost/iter | demoted again: static generation no longer iterates; relevant only if repel-in-loop survives | only on measured need |
+| Momentum | iteration count | demoted: static pipeline needs 0 iterations; reconsider for shape-opt re-relaxation | only on measured need |
 
 ### Session 1 — cheap experiments, high information
+
+*(2026-06-11 caveat: all Session-1 gate numbers were measured on the corrupt
+cavity. The profiling/allocation results (items 2–3) are geometry-independent
+and stand. Item 0's "STL gate reproduces the programmatic baseline" was
+self-consistent garbage — both sides shared the scrambled generator. Item 1's
+jittered-vs-random null result is mechanistically geometry-independent
+(per-leaf jitter has no cross-leaf constraint) and was reconfirmed in spirit
+by the clean-geometry decomposition.)*
 
 0. ✅ **Done 2026-06-11.** STL-based gate: cavity exported to
    `test/data/cavity.stl` (4608 binary facets), `validate_cavity.jl` now
@@ -176,36 +249,118 @@ Exit criterion met. Consequences for later sessions:
 - Iteration count (Bridson, momentum) is now confirmed as the dominant
   remaining lever, exactly as the staged-gate data implied.
 
-### Session 2 — `:bridson` graded Poisson-disk seeding
+### Session 2 — `:bridson` volume seeding + `sample_surface` boundary seeding ✅ (2026-06-11)
 
-Bridson with graded h is essentially the reference PNP algorithm, so it pays
-twice:
-- A start that satisfies the separation gate *by construction*; repel reduces
-  to a short CV/coordination polish. The most plausible path to coordination
-  12–14 and the CV < 0.10 stretch goal (iterations demonstrably don't fix CV).
-- An in-house PNP-equivalent **baseline for the SOTA benchmark** — no need to
-  stand up Medusa (C++) first; keep it as stretch validation.
+Session 2 grew beyond its plan: it delivered the volume Bridson placement,
+then (after the user asked how the boundary projection equilibrium works) the
+surface Poisson-disk sampler — which immediately exposed the geometry
+corruption (see notice at top), forced a re-baseline, and ended with the
+direct-generation pipeline passing the gate raw. All numbers below:
+**1 thread**, clean `cavity.stl` (4416 facets), Δ=0.08 unless noted.
 
-Implementation notes: O(N); min separation ≥ h by construction; adapt to
-graded spacing with an `h_min/√3` background grid. (CVT one-Lloyd-step
-pre-relaxation removes ~80% of Poisson clustering but has diminishing returns
-once Bridson exists.)
+**Implemented:**
 
-Acceptance criterion from the Session-1 staged data: the seeding only pays if
-its **raw CV lands below ~0.18** (the post-cliff level) — true blue-noise
-does, stratified jitter doesn't. Measure raw `spacing_fidelity_metrics`
-before any repel as the first checkpoint.
+- `placement = :bridson` (`src/discretization/algorithms/octree.jl`): single
+  global advancing-front pass (Bridson 2007) seeded from the boundary points,
+  disk radius `r(x) = bridson_factor·h(x)`, domain-spanning background bucket
+  grid (cell `= r_min/√3`, linked-list buckets because boundary seeds violate
+  the disk criterion among themselves). Candidates are domain-tested through
+  the node-octree leaf classification (interior leaves trusted, boundary
+  leaves get exact `isinside`) and separation-tested globally:
+  `‖xᵢ−xⱼ‖ ≥ min(rᵢ, rⱼ)` against *all* points, boundary included, by
+  construction. The front saturates at the disk-packing density, so
+  `max_points` is a **cap, not a target** (warn on truncation); per-leaf
+  allocation and the deficit fill are bypassed. ~1 s for 6842 points.
+  Placement validation added to both `Octree` constructors (the mesh-based one
+  previously validated nothing).
+- `sample_surface(mesh, spacing; factor=0.75)` + `PointBoundary(mesh, spacing)`
+  (`src/surface_sampling.jl`): graded Poisson-disk dart throwing on the
+  continuous triangle surface (area-weighted triangle pick, uniform-in-triangle
+  sample, same `min(rᵢ,rⱼ)` criterion and grid machinery). Samples carry the
+  parent triangle's normal; per-point areas preserve total mesh area ∝ r².
+  Continuous sampling (not face-center thinning) removes tessellation
+  artifacts *and* fills regions coarser than the target spacing. ~0.6 s for
+  2.8k points. Caveat noted in code: 3D-distance blocking means sub-`h` thin
+  sheets would suppress one side.
+- Testitems for both (separation guarantees brute-forced, constant + graded
+  spacing, area preservation, normals).
 
-### Session 3 — benchmark harness + cull silence
+**Findings:**
 
-- Harness: Bridson-direct (≈ PNP) vs full pipeline on identical geometries;
-  all gate metrics + wall-clock. Turns "SOTA" from belief into a number.
-  Geometry ladder: `cavity.stl` (calibrated baseline) → `box.stl` (sharp
-  edges/flat faces) → `bifurcation.stl` (thin curved branches, realism — the
-  generality claim).
-- Fix boundary-projection collisions (tangential separation at the landing
-  site, or an acceptance-style check against existing boundary points) →
-  cull permanently silent.
+1. **`bridson_factor = 1.0` (strict d_NN ≥ h) is a measured dead end.** A
+   saturated 3D dart-throwing front packs only η ≈ 0.39 points per `r³`
+   (measured), so r = h yields ~45% fewer points than the prescribed `1/h³`.
+   That starts `SpacingEquilibriumForce` in its **attractive branch**
+   (`u ≈ 1.05 > 1`): repel compacts the cloud toward its denser equilibrium
+   and destroys the seeding (corrupt-geometry run: CV 0.50 → 0.22 at 300
+   iters, FAIL — direction of the effect is geometry-independent). Default is
+   therefore **`bridson_factor = 0.75`** (≈ η^(1/3) = 0.73 density-matching
+   point): the saturated front lands at the prescribed density and at repel's
+   own equilibrium spacing.
+
+2. **Volume seeding works perfectly; the gate was boundary-bound.** Clean
+   staged decomposition (chained repel, kick_after=10, face-center boundary):
+
+   | cum iters | bridson vol CV | bridson bnd CV | random vol CV | random bnd CV |
+   |---|---|---|---|---|
+   | 0 | 0.074 | 0.398 | 0.388 | 0.406 |
+   | 25 | 0.065 | 0.294 | 0.129 | 0.286 |
+   | 300 | 0.083 | 0.246 | 0.094 | 0.238 |
+
+   The Bridson volume at **zero iterations** beats the random volume at 300.
+   But with face centers the boundary CV floors at ~0.24 and the full-cloud
+   gate stalls at CV ≈ 0.18 pre-cull from either start — **the entire
+   iteration budget was always boundary redistribution.** Face-center culls on
+   the clean geometry: 626 (random) / 589 (bridson) — the old "56 culled" was
+   a corrupt-domain artifact; per the cull-is-a-defect-signal principle, the
+   imported face-center boundary is itself the defect.
+
+3. **The headline: direct generation passes the gate raw.**
+   `sample_surface` boundary (2758 pts, CV 0.061) + `:bridson` volume
+   (6842 pts, CV 0.075): the raw cloud measures **CV 0.071, sep/Δ 0.750,
+   0 singular stencils, coordination 10.5** — full gate criteria met by
+   construction in ~3 s single-threaded, **zero repel iterations**
+   (baseline budget: 300 iterations and still MARGINAL). Official run:
+   `validate_cavity.jl --placement=bridson --resample-boundary` → **PASS**
+   (sep/Δ 0.616, CV 0.094, 0 singular, **cull removed 0** — silent for the
+   first time). Iterations-to-PASS: **0**.
+
+4. **Repel *degrades* a constructed blue-noise cloud.** From the raw-PASS
+   start, 300 repel iterations drift CV 0.071 → 0.093, sep 0.75 → 0.55, while
+   coordination rises 10.5 → 14.3; residual hovers at ~0.2 without
+   converging. Repel's force equilibrium (k=21, SpacingEquilibriumForce) is
+   simply a *worse* configuration than saturated Poisson-disk. Consequences:
+   (a) for static clouds, repel after good seeding is unnecessary-to-harmful;
+   (b) repel's remaining role is incremental re-relaxation under boundary
+   *change* (the shape-opt loop) and deposition; (c) if sub-seeding quality
+   matters there, the force model/step needs revisiting (a force whose
+   equilibrium reproduces PDS statistics, or an early-stop criterion).
+
+5. `Pkg.test()` green: **142,808 pass / 2 broken (pre-existing)**, including
+   the `:bridson` and `sample_surface` testitems.
+
+### Session 3 — generality + benchmark harness
+
+The Session-2 result reframes the program: the static-generation problem is
+solved on the cavity (direct generation passes raw, cull silent). Session 3
+should establish that this *generalizes* and quantify the SOTA claim:
+
+- **Geometry ladder for the direct pipeline**
+  (`sample_surface` + `:bridson`): `box.stl` (sharp edges/flat faces — watch
+  the sampler near feature edges: continuous sampling has no special edge
+  handling, and adjacent-face proximity blocking may under-sample creases) →
+  `bifurcation.stl` (thin curved branches — watch the 3D-distance blocking
+  caveat if branch thickness approaches `h`). Success = raw gate-style PASS +
+  silent cull on all three. Also re-validate geometry sanity first (area vs
+  reference, isinside probes) — lesson learned.
+- **Benchmark harness**: direct pipeline (≈ PNP-equivalent) vs the old
+  repel pipeline on identical geometries; all gate metrics + wall-clock,
+  stated thread counts. The raw Bridson-direct numbers are now meaningful
+  (0 singular on the cavity raw cloud with the resampled boundary).
+- **Repel's remaining mandate** (feeds Session 4 decision): incremental
+  re-relaxation under boundary change (shape-opt) and deposition. Before
+  building on it, address open defect 2 (repel degrades constructed
+  blue-noise — force equilibrium vs PDS statistics, early stopping).
 
 ### Session 4 (conditional) — octree NN search + momentum
 
@@ -244,21 +399,36 @@ still needed after the above.
 
 ### Target end state
 
-Seeded start (jittered/Bridson) → coarse repel (k=8, momentum) → fine repel
-(k=21, `kick_after`) → force-norm stop. Expected ~30–50 total iterations
-(vs current 200–400), ~5–10× wall-clock. Stretch: spacing CV < 0.10
-(currently 0.14).
+**Reached for static generation (2026-06-11), better than the original
+target:** Poisson-disk boundary + graded Bridson volume → gate PASS **by
+construction, zero repel iterations**, ~3 s single-threaded on the cavity
+(the original target was ~30–50 iterations). CV 0.071 raw also beats the
+< 0.10 stretch goal. Remaining end-state work is the *dynamic* case: fast
+re-relaxation when the boundary changes inside the shape-opt loop —
+re-seeding from scratch each design step (3 s) vs incremental repel
+(0.47 s / 10 iters at 45.7k pts, 8 threads) is now a measurable trade-off,
+and repel must first stop degrading seeded clouds (open defect 2).
 
 ## Validation assets
 
 - `validate_cavity.jl` (repo root): annular cavity through
-  Octree→repel→kick→cull. PASS as of 2026-06-10 (sep/Δ=0.500, CV=0.140,
-  0 singular). Rerun: `jlrun validate_cavity.jl [Δ]`
+  Octree→repel→kick→cull. Geometry regenerated clean 2026-06-11 (4416
+  facets, area-asserted at export and re-import; the corrupt original is
+  parked untracked at `test/data/cavity_corrupt_backup.stl`). Flags:
+  `--placement=random|jittered|lattice|bridson`, `--resample-boundary`,
+  `--save-vtk`. Current verdicts (1 thread): default → MARGINAL (CV 0.151,
+  626 culled); `--placement=bridson --resample-boundary` → **PASS**
+  (sep/Δ=0.616, CV=0.094, 0 singular, 0 culled).
 - `validate_repel.jl` (repo root): box.stl frozen-vs-live comparison.
-- Full `Pkg.test()` green (142k+ assertions) as of 2026-06-10.
+- Full `Pkg.test()` green (142k+ assertions), including `:bridson` and
+  `sample_surface` testitems.
 
 ## Housekeeping backlog
 
 - Update `CLAUDE.md` repel docs (`α_min`, `kick_after`, `cull_ratio` warn,
   `deposit_ratio`, `trace`).
 - Float32/Float64 type-mismatch fix in `octree.jl`.
+- Bridson truncation warning fires when the cap sits exactly at the
+  saturation count (the cavity gate case) — benign there (scattered
+  single-dart holes, repel closes them), but consider only warning when the
+  active front is still large relative to the generated count.

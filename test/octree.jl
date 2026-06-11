@@ -109,6 +109,70 @@ end
     end
 end
 
+@testitem "Octree :bridson placement enforces global separation" setup = [
+        CommonImports, OctreeTestData,
+    ] begin
+    using Random
+    using LinearAlgebra: norm
+    using Unitful: ustrip
+    import Meshes
+    Random.seed!(789)
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    bnd = PointBoundary(mesh)
+    spacing = ConstantSpacing(0.15m)
+    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
+    cloud = discretize(bnd, spacing; alg, max_points = 2000)
+
+    vol = points(WhatsThePoint.volume(cloud))
+    @test length(vol) > 50              # front saturates well below max_points
+    @test length(vol) <= 2000
+
+    # Poisson-disk guarantee: every volume point is at least
+    # bridson_factor·h (default 0.75) from every other point in the cloud,
+    # boundary included — global, not per-leaf.
+    raw = [Float64.(ustrip.(Meshes.to(p))) for p in points(cloud)]
+    n_bnd = length(points(WhatsThePoint.boundary(cloud)))
+    min_sep = minimum(
+        norm(raw[i] - raw[j])
+            for i in (n_bnd + 1):length(raw) for j in eachindex(raw) if i != j
+    )
+    @test min_sep >= 0.75 * 0.15 - 1.0e-9
+end
+
+@testitem "Octree :bridson placement with graded spacing" setup = [
+        CommonImports, OctreeTestData,
+    ] begin
+    using Random
+    using LinearAlgebra: norm
+    using Unitful: ustrip
+    import Meshes
+    Random.seed!(101)
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    bnd = PointBoundary(mesh)
+    spacing = BoundaryLayerSpacing(
+        points(bnd); at_wall = 0.1m, bulk = 0.25m, layer_thickness = 0.2m,
+    )
+    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson, bridson_factor = 1.0)
+    cloud = discretize(bnd, spacing; alg, max_points = 2000)
+
+    vol = points(WhatsThePoint.volume(cloud))
+    @test length(vol) > 50
+
+    # Graded guarantee at bridson_factor = 1: ‖xᵢ − xⱼ‖ ≥ min(h(xᵢ), h(xⱼ))
+    # for volume points against the whole cloud.
+    allp = points(cloud)
+    raw = [Float64.(ustrip.(Meshes.to(p))) for p in allp]
+    h = [Float64(ustrip(spacing(p))) for p in allp]
+    n_bnd = length(points(WhatsThePoint.boundary(cloud)))
+    ok = all(
+        norm(raw[i] - raw[j]) >= min(h[i], h[j]) - 1.0e-9
+            for i in (n_bnd + 1):length(raw) for j in eachindex(raw) if i != j
+    )
+    @test ok
+end
+
 @testitem "Octree errors on unclassified octree" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
@@ -125,6 +189,7 @@ end
     octree = TriangleOctree(mesh; classify_leaves = true)
 
     @test_throws ArgumentError Octree(octree; placement = :invalid)
+    @test_throws ArgumentError Octree(mesh; placement = :invalid)
 end
 
 @testitem "Octree invalid oversampling throws" setup = [CommonImports, OctreeTestData] begin
