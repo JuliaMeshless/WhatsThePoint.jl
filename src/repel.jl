@@ -28,8 +28,9 @@ vanishes at equilibrium.
   points' d_NN/s coefficient of variation drops to this value (read off the
   sweep's nearest-neighbor data, no extra cost). The natural setting is the
   raw quality of the direct generation pipeline (`≈ 0.07` on the cavity):
-  relaxing past the quality a re-seed would give is wasted budget. Off when
-  `0`.
+  relaxing past the quality a re-seed would give is wasted budget. The stop
+  returns the configuration the measurement describes (the pre-sweep
+  snapshot), so a cloud already at target comes back unchanged. Off when `0`.
 - `stall_after = 0`: stop when that same CV has not improved by ≥0.1 % for
   this many consecutive iterations. The force residual of a saturated
   repulsion-only packing plateaus at a nonzero value instead of reaching
@@ -281,6 +282,11 @@ function _relax!(
         if (stall_after > 0 || cv_target > 0) && n_move > 0
             cv = _dnn_cv(nn_dist, spacings, n_fixed)
             if cv_target > 0 && cv <= cv_target
+                # The monitor reads the sweep's nn data, which measures the
+                # *pre-sweep* snapshot — return that configuration, so a cloud
+                # already at target comes back untouched (also undoes this
+                # iteration's kick/deposit, which postdate the measurement).
+                p .= p_old
                 @info "Node repel stopped in $i iterations: spacing CV target reached" cv cv_target
                 break
             end

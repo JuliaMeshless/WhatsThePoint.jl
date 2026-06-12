@@ -276,3 +276,29 @@ end
     @test alg2 isa Octree
     @test alg2.triangle_octree isa WhatsThePoint.TriangleOctree
 end
+
+@testitem "Octree discretization promotes Float32 STL boundaries" setup = [TestData, CommonImports] begin
+    # Binary STL stores Float32 by spec; the Octree algorithm emits Float64
+    # volume points. discretize must promote the boundary itself instead of
+    # failing to assemble a single-CRS PointCloud (callers previously had to
+    # promote the mesh by hand — the workaround in the validate scripts).
+    mesh_raw = GeoIO.load(TestData.BOX_PATH).geometry
+    bnd = PointBoundary(mesh_raw)
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(bnd)))) === Float32
+
+    alg = Octree(mesh_raw)
+    cloud = discretize(bnd, ConstantSpacing(3.0m); alg, max_points = 50)
+    @test cloud isa PointCloud
+    @test length(WhatsThePoint.volume(cloud)) > 0
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
+
+    # Promotion preserves surface names (and the boundary point count).
+    @test names(WhatsThePoint.boundary(cloud)) == names(bnd)
+    @test length(WhatsThePoint.boundary(cloud)) == length(bnd)
+
+    # Non-Octree algorithms are untouched: same Float32 boundary still works
+    # through SlakKosec without promotion.
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    cloud32 = discretize(bnd, ConstantSpacing(3.0f0m); alg = SlakKosec(octree), max_points = 20)
+    @test cloud32 isa PointCloud
+end

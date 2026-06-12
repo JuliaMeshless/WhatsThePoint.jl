@@ -37,6 +37,9 @@ function discretize(
         alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
         max_points = 10_000_000,
     )
+    # The Octree algorithm emits Float64 volume points; a Float32 boundary
+    # (binary STL precision) would make the cloud assembly below fail.
+    alg isa Octree && (bnd = _ensure_float64_boundary(bnd))
     cloud = PointCloud(bnd)
     new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())

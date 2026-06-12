@@ -76,7 +76,7 @@ end
 
         for _ in 1:5
             p = bbox_min + rand(SVector{3, Float64}) .* (bbox_max - bbox_min)
-            sd = _compute_signed_distance_octree(p, octree.mesh, octree.tree)
+            sd = _compute_signed_distance_octree(p, octree)
             global n_checked += 1
             global positive_sd_count += sd > 1.0e-10 ? 1 : 0
         end

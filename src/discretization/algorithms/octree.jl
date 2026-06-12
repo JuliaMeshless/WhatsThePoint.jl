@@ -538,7 +538,26 @@ function _generate_bridson(
     end
 
     if n_generated >= max_points && !isempty(active)
-        @warn "Bridson front truncated by max_points before saturation — parts of the domain may be unfilled" max_points
+        # The cap aborts the sweep with unprocessed entries still in `active`,
+        # so a non-empty front alone cannot distinguish "cap == saturation
+        # count" (benign: scattered single-dart holes at most) from a genuine
+        # truncation that leaves uncovered volume. Probe with a bounded burst
+        # of extra darts (nothing inserted): any acceptable candidate proves
+        # room remains and the warning is real.
+        truncated = false
+        for _ in 1:200
+            a = active[rand(1:length(active))]
+            ρ = rs[a] * (1 + rand(T))
+            d = randn(SVector{3, T})
+            c = pts[a] + ρ * (d / norm(d))
+            _bridson_inside(c, node_tree, classification, tri_octree) || continue
+            r_c = f * _spacing_value(T, spacing, c)
+            _bridson_separated(grid, pts, rs, c, r_c) || continue
+            truncated = true
+            break
+        end
+        truncated &&
+            @warn "Bridson front truncated by max_points before saturation — parts of the domain may be unfilled" max_points
     end
 
     return pts[(n_seeds + 1):end]
@@ -650,4 +669,27 @@ function _discretize_volume(
 
     # Convert to Point objects
     return PointVolume([Point(pt...) for pt in raw_points])
+end
+
+"""
+    _ensure_float64_boundary(bnd::PointBoundary) -> PointBoundary
+
+Promote a boundary with a non-Float64 machine type to Float64, preserving
+surface names, normals, and areas. Binary STL stores Float32 by spec, while
+the Octree algorithm generates Float64 volume points and `PointCloud`
+requires one CRS across boundary and volume — without promotion the cloud
+assembly fails. Returns `bnd` unchanged when already Float64.
+"""
+function _ensure_float64_boundary(bnd::PointBoundary{M, C}) where {M, C}
+    CoordRefSystems.mactype(C) === Float64 && return bnd
+    promoted = [
+        name => PointSurface(
+            [Point((1.0 .* to(p))...) for p in points(surf)],
+            collect(normal(surf)),
+            [1.0 * a for a in area(surf)],
+        ) for (name, surf) in namedsurfaces(bnd)
+    ]
+    isempty(promoted) && return bnd
+    surfaces = LittleDict{Symbol, typeof(last(first(promoted)))}(promoted...)
+    return PointBoundary(surfaces)
 end

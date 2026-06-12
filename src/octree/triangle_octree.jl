@@ -1,4 +1,31 @@
 """
+    MeshPseudonormals{T}
+
+Angle-weighted pseudonormals (Bærentzen & Aanæs 2005) for exact sign
+determination in signed-distance queries. For a watertight, consistently
+outward-oriented triangle mesh, `sign(dot(p - cp, n_feature))` is provably
+correct for every query point `p`, where `cp` is the closest point on the
+mesh and `n_feature` is the normal of the closest *feature*: the face normal
+on a face interior, the sum of the two incident face normals on an edge, and
+the incidence-angle-weighted sum of face normals at a vertex. (Only the sign
+of the dot product is used, so the edge/vertex sums are stored unnormalized.)
+
+This replaces the previous distance-weighted "local sign vote" over the
+triangles of one leaf, which was heuristic — it could come back ambiguous
+(mapped to EXTERIOR by `isinside`) and could mix votes from the two sides of
+a thin sheet — and slower (a second `find_leaf` plus a closest-point
+computation per vote triangle on every query).
+
+Edges and vertices are keyed by exact coordinates, so triangle-soup input
+(e.g. binary STL with duplicated vertices) needs no topology cleanup.
+"""
+struct MeshPseudonormals{T <: Real}
+    face::Vector{SVector{3, T}}
+    edge::Dict{Tuple{SVector{3, T}, SVector{3, T}}, SVector{3, T}}
+    vertex::Dict{SVector{3, T}, SVector{3, T}}
+end
+
+"""
 Octree spatial index for triangle mesh queries. Accelerates isinside(), signed distance, etc.
 """
 struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
@@ -7,12 +34,11 @@ struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
     leaf_classification::Union{Nothing, Vector{Int8}}
     mesh_bbox_min::SVector{3, T}  # Actual mesh bounding box (not expanded octree bounds)
     mesh_bbox_max::SVector{3, T}
+    pseudonormals::MeshPseudonormals{T}
 end
 
 const _BBOX_EXPANSION = 1.02
 const _DEGENERATE_EPS = 1.0e-10
-const _SIGN_VOTE_EPS_REL = 1.0e-6
-const _SIGN_AMBIGUITY_REL = 1.0e-3
 
 """
 Subdivide based on vertex density within box bounds.
@@ -71,10 +97,16 @@ mutable struct NearestTriangleState{T <: Real}
     best_dist_sq::T
     closest_idx::Int
     closest_pt::SVector{3, T}
+    # Winning triangle's feature + vertices, kept so the signed-distance query
+    # can select the feature pseudonormal without re-extracting the triangle.
+    closest_feature::Int8
+    v1::SVector{3, T}
+    v2::SVector{3, T}
+    v3::SVector{3, T}
 end
 
 NearestTriangleState{T}(point::SVector{3, T}) where {T <: Real} =
-    NearestTriangleState{T}(typemax(T), 0, point)
+    NearestTriangleState{T}(typemax(T), 0, point, FEATURE_FACE, point, point, point)
 
 @inline function _normalize_normal(::Type{T}, n_vec) where {T}
     n = SVector{3, T}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
@@ -146,6 +178,62 @@ end
     return v1 < v2 ? (v1, v2) : (v2, v1)
 end
 
+@inline function _corner_angle(vc::SVector{3, T}, va::SVector{3, T}, vb::SVector{3, T}) where {T}
+    u = va - vc
+    w = vb - vc
+    den = sqrt(dot(u, u) * dot(w, w))
+    den < eps(T) && return zero(T)
+    return acos(clamp(dot(u, w) / den, -one(T), one(T)))
+end
+
+function MeshPseudonormals(::Type{T}, mesh::SimpleMesh) where {T <: Real}
+    n = Meshes.nelements(mesh)
+    face = Vector{SVector{3, T}}(undef, n)
+    edge = Dict{Tuple{SVector{3, T}, SVector{3, T}}, SVector{3, T}}()
+    vertex = Dict{SVector{3, T}, SVector{3, T}}()
+    sizehint!(edge, 3 * n ÷ 2 + 1)
+    sizehint!(vertex, n ÷ 2 + 2)
+    z = zero(SVector{3, T})
+
+    for i in 1:n
+        v1, v2, v3 = _get_triangle_vertices(T, mesh, i)
+        nhat = _get_triangle_normal(T, mesh, i)
+        face[i] = nhat
+        for (va, vb) in ((v1, v2), (v2, v3), (v3, v1))
+            k = _edge_key(va, vb)
+            edge[k] = get(edge, k, z) + nhat
+        end
+        for (vc, va, vb) in ((v1, v2, v3), (v2, v3, v1), (v3, v1, v2))
+            vertex[vc] = get(vertex, vc, z) + _corner_angle(vc, va, vb) * nhat
+        end
+    end
+
+    return MeshPseudonormals(face, edge, vertex)
+end
+
+"""
+Pseudonormal of the feature (face / edge / vertex) the closest point lies on.
+Falls back to the face normal if the feature key is missing — cannot happen
+for features built from this mesh's own triangles, but keeps the query total.
+"""
+@inline function _feature_pseudonormal(
+        pn::MeshPseudonormals{T},
+        tri_idx::Int,
+        feature::Int8,
+        v1::SVector{3, T},
+        v2::SVector{3, T},
+        v3::SVector{3, T},
+    ) where {T}
+    f = pn.face[tri_idx]
+    feature == FEATURE_FACE && return f
+    feature == FEATURE_VERTEX_1 && return get(pn.vertex, v1, f)
+    feature == FEATURE_VERTEX_2 && return get(pn.vertex, v2, f)
+    feature == FEATURE_VERTEX_3 && return get(pn.vertex, v3, f)
+    feature == FEATURE_EDGE_12 && return get(pn.edge, _edge_key(v1, v2), f)
+    feature == FEATURE_EDGE_13 && return get(pn.edge, _edge_key(v1, v3), f)
+    return get(pn.edge, _edge_key(v2, v3), f)
+end
+
 """
 Check if triangle faces are consistently oriented (manifold orientation test).
 """
@@ -182,6 +270,23 @@ function has_consistent_normals(::Type{T}, mesh::SimpleMesh) where {T}
 end
 
 has_consistent_normals(mesh::SimpleMesh) = has_consistent_normals(Float64, mesh)
+
+"""
+Signed volume of a closed triangle mesh (divergence theorem,
+`Σ dot(v1, v2 × v3) / 6`). Positive iff the winding orients normals outward.
+Catches globally inside-out meshes, which `has_consistent_normals` cannot
+(a perfectly consistent but inverted mesh classifies its complement as
+interior — exactly the 2026-06-11 cavity corruption #2). Only meaningful for
+closed surfaces.
+"""
+function _signed_volume(::Type{T}, mesh::SimpleMesh) where {T <: Real}
+    vol = zero(T)
+    for i in 1:Meshes.nelements(mesh)
+        v1, v2, v3 = _get_triangle_vertices(T, mesh, i)
+        vol += dot(v1, cross(v2, v3))
+    end
+    return vol / 6
+end
 
 function _create_root_octree(::Type{T}, mesh::SimpleMesh, n_triangles::Int) where {T}
     bbox_min, bbox_max = _compute_bbox(T, mesh)
@@ -231,6 +336,30 @@ function TriangleOctree(
         )
     end
 
+    # A consistently-wound mesh can still be globally inside-out (all normals
+    # pointing into the solid): isinside would then classify the complement of
+    # the intended domain as interior, and no d_NN-type downstream metric can
+    # detect it. The signed volume is an O(n) exact witness for closed meshes:
+    # an inverted mesh measures minus the domain volume. Gated on
+    # classify_leaves (open surfaces, fine for distance-only queries, have a
+    # meaningless ≈0 signed volume — the scale-relative threshold lets them
+    # through).
+    if verify_orientation && classify_leaves
+        bbox_min, bbox_max = _compute_bbox(T, mesh)
+        vol_floor = -T(_DEGENERATE_EPS) * norm(bbox_max - bbox_min)^3
+        if _signed_volume(T, mesh) < vol_floor
+            throw(
+                ArgumentError(
+                    "Triangle mesh is inside-out (negative signed volume): " *
+                        "the winding orients normals into the solid, so isinside() " *
+                        "would classify the complement of the domain as interior. " *
+                        "Flip the triangle winding. To skip this check, pass " *
+                        "`verify_orientation=false`.",
+                )
+            )
+        end
+    end
+
     criterion = VertexResolutionCriterion(
         mesh;
         tolerance_relative = tolerance_relative,
@@ -240,12 +369,15 @@ function TriangleOctree(
     tree = _create_root_octree(T, mesh, n_triangles)
     _subdivide_triangle_octree!(tree, mesh, 1, criterion)
     balance_octree!(tree, criterion)
-    classification = classify_leaves ? _classify_leaves(tree, mesh) : nothing
+    pseudonormals = MeshPseudonormals(T, mesh)
+    classification = classify_leaves ? _classify_leaves(tree, mesh, pseudonormals) : nothing
 
     # Store actual mesh bounding box (not the expanded cubic octree bounds)
     mesh_bbox_min, mesh_bbox_max = _compute_bbox(T, mesh)
 
-    return TriangleOctree(tree, mesh, classification, mesh_bbox_min, mesh_bbox_max)
+    return TriangleOctree(
+        tree, mesh, classification, mesh_bbox_min, mesh_bbox_max, pseudonormals
+    )
 end
 
 function TriangleOctree(filepath::String; kwargs...)
@@ -310,7 +442,7 @@ end
         state::NearestTriangleState{T},
     ) where {T <: Real}
     v1, v2, v3 = _get_triangle_vertices(T, mesh, tri_idx)
-    cp = closest_point_on_triangle(point, v1, v2, v3)
+    cp, feature = closest_point_on_triangle_feature(point, v1, v2, v3)
     dvec = point - cp
     d2 = dot(dvec, dvec)
 
@@ -318,6 +450,10 @@ end
         state.best_dist_sq = d2
         state.closest_idx = tri_idx
         state.closest_pt = cp
+        state.closest_feature = feature
+        state.v1 = v1
+        state.v2 = v2
+        state.v3 = v3
     end
 
     return nothing
@@ -366,49 +502,18 @@ function _nearest_triangle_octree!(
     end
 end
 
-function _local_sign_vote(
-        point::SVector{3, T},
-        mesh::SimpleMesh,
-        tree::SpatialOctree{Int, T},
-        nearest_pt::SVector{3, T},
-        nearest_dist::T,
-    ) where {T <: Real}
-    vote_leaf_idx = find_leaf(tree, nearest_pt)
-    vote_tris = tree.element_lists[vote_leaf_idx]
-    isempty(vote_tris) && return 0
-
-    eps_w = max(T(_SIGN_VOTE_EPS_REL) * max(nearest_dist, one(T))^2, eps(T))
-    vote = zero(T)
-    weight_sum = zero(T)
-
-    @inbounds for tri_idx in vote_tris
-        v1, v2, v3 = _get_triangle_vertices(T, mesh, tri_idx)
-        cp = closest_point_on_triangle(point, v1, v2, v3)
-        dvec = point - cp
-        d2 = dot(dvec, dvec)
-        ni = _get_triangle_normal(T, mesh, tri_idx)
-        signed_proj = dot(dvec, ni)
-        w = inv(d2 + eps_w)
-        vote += w * signed_proj
-        weight_sum += w
-    end
-
-    weight_sum <= zero(T) && return 0
-
-    avg_vote = vote / weight_sum
-    amb_tol = max(
-        T(_SIGN_AMBIGUITY_REL) * max(nearest_dist, one(T)),
-        T(_CLASSIFY_TOLERANCE_ABS),
-    )
-
-    abs(avg_vote) <= amb_tol && return 0
-    return avg_vote < 0 ? -1 : 1
-end
-
+"""
+Signed distance to the mesh: distance to the closest point, signed by the
+angle-weighted pseudonormal of the closest feature (exact for watertight,
+consistently outward-oriented meshes — Bærentzen & Aanæs 2005). Returns 0
+only for points exactly on the surface (or at a degenerate fold where the
+feature pseudonormal vanishes).
+"""
 function _compute_signed_distance_octree(
         point::SVector{3, T},
         mesh::SimpleMesh,
         tree::SpatialOctree{Int, T},
+        pn::MeshPseudonormals{T},
     ) where {T <: Real}
     state = NearestTriangleState{T}(point)
     _nearest_triangle_octree!(point, tree, mesh, 1, state)
@@ -417,16 +522,30 @@ function _compute_signed_distance_octree(
         return typemax(T)
     end
 
-    nearest_dist = sqrt(state.best_dist_sq)
-    voted_sign = _local_sign_vote(point, mesh, tree, state.closest_pt, nearest_dist)
-    voted_sign == 0 && return zero(T)
+    n = _feature_pseudonormal(
+        pn, state.closest_idx, state.closest_feature, state.v1, state.v2, state.v3
+    )
+    s = dot(point - state.closest_pt, n)
 
-    return voted_sign * nearest_dist
+    nearest_dist = sqrt(state.best_dist_sq)
+    s < zero(T) && return -nearest_dist
+    s > zero(T) && return nearest_dist
+    return zero(T)
 end
 
-function _classify_leaves(tree::SpatialOctree{Int, T}, mesh::SimpleMesh) where {T <: Real}
+function _compute_signed_distance_octree(
+        point::SVector{3, T}, octree::TriangleOctree
+    ) where {T <: Real}
+    return _compute_signed_distance_octree(
+        point, octree.mesh, octree.tree, octree.pseudonormals
+    )
+end
+
+function _classify_leaves(
+        tree::SpatialOctree{Int, T}, mesh::SimpleMesh, pn::MeshPseudonormals{T}
+    ) where {T <: Real}
     function mesh_query(point::SVector{3, T}, tol::T) where {T <: Real}
-        sd = _compute_signed_distance_octree(point, mesh, tree)
+        sd = _compute_signed_distance_octree(point, mesh, tree, pn)
         return _leaf_class_from_signed_distance(sd, tol)
     end
 
@@ -455,7 +574,7 @@ function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real
     end
 
     if isnothing(octree.leaf_classification)
-        return _compute_signed_distance_octree(point, octree.mesh, octree.tree) < 0
+        return _compute_signed_distance_octree(point, octree) < 0
     end
 
     leaf_idx = find_leaf(octree.tree, point)
@@ -464,7 +583,7 @@ function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real
     classification == LEAF_EXTERIOR && return false
     classification == LEAF_INTERIOR && return true
 
-    return _compute_signed_distance_octree(point, octree.mesh, octree.tree) < 0
+    return _compute_signed_distance_octree(point, octree) < 0
 end
 
 function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}

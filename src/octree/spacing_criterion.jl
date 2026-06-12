@@ -98,16 +98,15 @@ function build_node_octree(triangle_octree, spacing, alpha, node_min_ratio)
 end
 
 @inline function _mesh_geometry_query(pt::SVector{3, T}, tol, octree) where {T}
-    # Sign voting inside `_compute_signed_distance_octree` can flip for points
-    # far outside the triangle octree's cubic root, producing negative signed
-    # distances (and therefore LEAF_INTERIOR) above regions of space that are
-    # obviously exterior to the mesh. The mesh bbox is the authoritative
-    # envelope — anything strictly outside it (by more than the classification
-    # tolerance) is exterior, matching the fast-path used by `isinside`.
+    # The mesh bbox is the authoritative envelope — anything strictly outside
+    # it (by more than the classification tolerance) is exterior, matching the
+    # fast-path used by `isinside`. (Kept although the pseudonormal signed
+    # distance, unlike the retired sign vote, cannot flip far from the mesh:
+    # the bbox test is also cheaper than a tree traversal.)
     if any(pt .< octree.mesh_bbox_min .- tol) || any(pt .> octree.mesh_bbox_max .+ tol)
         return LEAF_EXTERIOR
     end
-    sd = _compute_signed_distance_octree(pt, octree.mesh, octree.tree)
+    sd = _compute_signed_distance_octree(pt, octree)
     return _leaf_class_from_signed_distance(sd, tol)
 end
 

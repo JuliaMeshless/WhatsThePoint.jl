@@ -244,13 +244,18 @@ end
     @test 5 < length(conv) < 200
 
     # cv_target: a generous target must stop the relaxation almost immediately
-    # (the monitor sees the d_NN/s CV of the movable points each sweep).
+    # (the monitor sees the d_NN/s CV of the movable points each sweep), and —
+    # because the monitor measures the pre-sweep snapshot — the cloud must come
+    # back untouched, not one-sweep-moved.
     conv_t = Float64[]
-    repel(
+    c_t = repel(
         cloud, spacing, octree;
         max_iters = 200, tol = 1.0e-12, cv_target = 10.0, convergence = conv_t,
     )
     @test length(conv_t) == 1
+    for (a, b) in zip(points(c_t), points(cloud))
+        @test a ≈ b
+    end
 
     # Off by default: same configuration runs to max_iters.
     conv_off = Float64[]

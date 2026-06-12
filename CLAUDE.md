@@ -78,6 +78,7 @@ Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing
 
 ### Optimization (`src/`)
 - `repel.jl` - Node repulsion algorithm (Miotti 2023) for improving point distribution quality
+- `repel_forces.jl` - Force laws for `repel` (`ClippedSpacingForce` default, `InverseDistanceForce`, `SpacingEquilibriumForce`, `StrongSpacingForce`)
 
 ## Important Technical Details
 
@@ -200,10 +201,30 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
 octree = TriangleOctree("model.stl"; classify_leaves=true)
 cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000)
 
-# Collect convergence history via keyword
+# Production configuration: standoff kicks + quality-based stopping
 conv = Float64[]
-cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000, convergence=conv)
+cloud = repel(cloud, spacing, octree;
+              max_iters=300, kick_after=10, cv_target=0.07, stall_after=50,
+              convergence=conv)
 ```
+
+Key keywords (see the `repel` docstrings for the full list):
+
+- `force_model = ClippedSpacingForce(β)` — default force: repulsion-only with
+  compact support, so a cloud that already satisfies the Poisson-disk
+  criterion is preserved or improved (never re-packed). The previous default
+  `SpacingEquilibriumForce` is still available but its attractive branch
+  slowly condenses good clouds (clusters + voids) over long relaxations.
+- `cv_target` / `stall_after` — quality-based stopping (off by default). The
+  force residual of a saturated repulsion-only packing plateaus instead of
+  reaching `tol`, so use `cv_target ≈ 0.07` (direct-pipeline raw quality) as
+  the primary stop and `stall_after` as the backstop.
+- `kick_after` — breaks balanced standoffs (a frozen closest pair) with a
+  small random kick; `10`–`20` is reasonable.
+- `cull_ratio` — near-duplicate safety net that should NEVER remove anything
+  in healthy generation; it `@warn`s when it fires (cull = defect signal).
+- `deposit_ratio` (octree method) — escaped volume points convert into
+  boundary points (emergent surface sampling).
 
 ### Visualization
 

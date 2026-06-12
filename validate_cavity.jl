@@ -51,8 +51,17 @@ function _make_sphere_mesh(R, nθ, nφ)
         # south pole): emit only the non-degenerate triangle there. The
         # zero-area slivers otherwise fail the manifold-orientation edge test
         # and put near-duplicate face centers at the poles.
-        i > 0 && push!(conn, connect((a, b, c)))
-        i < nθ - 1 && push!(conn, connect((b, d, c)))
+        # Winding order makes Meshes.normal point OUTWARD (away from the
+        # sphere center). Discovered 2026-06-11 (shape-opt trade-off session):
+        # the previous order (a,b,c)/(b,d,c) wound INWARD, so the assembled
+        # cavity was inside-out — the signed-distance classification put the
+        # solid annulus OUTSIDE and the complement (inner hole + bbox corners)
+        # INSIDE, and every volume fill landed in the complement. The
+        # d_NN-based gate metrics cannot see that (second corruption in one
+        # day with the same blind spot); the area check cannot see orientation
+        # either. Guarded by the isinside probes after octree construction.
+        i > 0 && push!(conn, connect((a, c, b)))
+        i < nθ - 1 && push!(conn, connect((b, c, d)))
     end
 
     return SimpleMesh(pts, conn)
@@ -171,6 +180,16 @@ boundary = RESAMPLE ? PointBoundary(mesh, spacing) : PointBoundary(mesh)
 
 println("\n############ OCTREE DISCRETIZATION ############")
 octree = TriangleOctree(mesh; classify_leaves = true)
+
+# Orientation guard (2026-06-11): area checks cannot see winding orientation;
+# these probes can. A cavity.stl written by the old inward-winding generator
+# fails here — delete the file and re-run to regenerate it correctly.
+isinside(SVector(0.5 * (R_INNER + R_OUTER), 0.01, 0.02), octree) || error(
+    "mid-annulus probe classified OUTSIDE — cavity.stl is inside-out (old " *
+    "generator winding); delete test/data/cavity.stl and re-run to regenerate")
+!isinside(SVector(0.5 * R_INNER, 0.01, 0.02), octree) || error(
+    "inner-hole probe classified INSIDE — cavity.stl is inside-out (old " *
+    "generator winding); delete test/data/cavity.stl and re-run to regenerate")
 alg = Octree(mesh; spacing, alpha = 1.0, placement = PLACEMENT)
 
 max_pts = round(Int, (4 / 3) * π * (R_OUTER^3 - R_INNER^3) / Δ^3)

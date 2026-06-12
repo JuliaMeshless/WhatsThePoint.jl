@@ -56,7 +56,57 @@ the gate now asserts total mesh area against the analytic value at export
 the geometry itself (area, isinside probes) before trusting distribution
 metrics — d_NN statistics cannot see a broken domain.**
 
+## ⚠ Geometry corruption notice #2 (discovered 2026-06-11, Session 4)
+
+**The 2026-06-11 "clean geometry" was inside-out.** The corrected
+`_make_sphere_mesh` wound its triangles **inward**, so the regenerated cavity
+(and `test/data/cavity.stl`) had outer-shell normals pointing in and
+inner-shell normals pointing out: the signed-distance classification put the
+solid annulus OUTSIDE and the complement (inner hole + bbox-corner region)
+INSIDE. Direct check on the Session-2/3 seeded configuration: **0 of 6842
+volume points were in the annulus** (1297 in the hole, 5545 between the outer
+sphere and the bbox). Every Session 2/3 cavity number — the raw-PASS headline,
+the Session-3 force-model table, the production-config timings — was measured
+on a blue-noise cloud filling the *complement* domain. The d_NN gate is
+structurally blind to point *location*, so everything still PASSed; the
+Bridson truncation warning that Session 3 rationalized as "benign mild
+truncation" was a symptom (the complement is larger than the annulus). The
+area assertion added after corruption #1 cannot see orientation.
+
+A second, independent src defect was exposed while diagnosing this:
+`_local_sign_vote` returned "ambiguous" whenever `find_leaf` on the nearest
+surface point tie-broke into a leaf holding no triangles, and `isinside` maps
+ambiguous (sd = 0) to EXTERIOR — **11.6% of true annulus-interior points
+misclassified as outside** even after the winding fix (0% in the opposite
+direction). Fixed in `src/octree/triangle_octree.jl`, then the whole vote was
+replaced by the exact angle-weighted pseudonormal sign and an inside-out
+construction guard was added (Session 4b below). Post-fix scan: 0 / 300k
+misclassifications.
+
+Fixes landed (Session 4): generator winding corrected in `validate_cavity.jl`
+(and the experiment's copy), orientation guard added to the gate (mid-annulus
++ hole isinside probes that **error** on an inside-out mesh), sign-vote fix in
+src. **`test/data/cavity.stl` on disk is still the inside-out artifact** — the
+gate now refuses it with instructions to delete and regenerate (left to
+Davide; no test in `test/` uses the file). Lesson, now twice paid: validate
+the domain with isinside probes *and* check where generated points actually
+land (radius histogram / outside-count / fill distance) — area and d_NN
+metrics each have a blind spot that these close.
+
+Dynamics-level conclusions from Sessions 2–3 (condensation instability,
+clipped force preserving Poisson-disk statistics, cv_target/stall stopping,
+kick mechanics) are force-model properties measured on a *legitimate (if
+unintended) domain* and were re-confirmed in spirit by Session 4's true-annulus
+runs; the specific quoted metrics are superseded by the Session-4 baseline
+below.
+
 ## Current status (2026-06-11 clean-geometry gate, branch `shape_optimization_utils`)
+
+*(Superseded 2026-06-11 Session 4: numbers below were measured on the
+inside-out domain — see corruption notice #2. True-annulus baseline, 1 thread,
+final code: direct pipeline **PASS raw, sep/Δ 0.750, CV 0.056, coord 12.1,
+0 singular, fill max 1.18Δ, cull silent**, 9633 pts in ~5.4 s
+boundary+volume + ~4 s TriangleOctree.)*
 
 Cavity gate, Δ=0.08, **1 thread**, clean `cavity.stl` (4416 facets):
 
@@ -193,6 +243,21 @@ Open defects:
    Worth fixing in `octree.jl`.
 5. **Deposition validated on one 834-pt box only** — curved geometry,
    variable h, boundary-free start untested.
+6. **`_local_sign_vote` empty-vote-leaf misclassification** — **RESOLVED
+   2026-06-11 Session 4** (see corruption notice #2): nearest surface point
+   could land in a triangle-free leaf via `find_leaf` tie-break → ambiguous →
+   EXTERIOR; 11.6% of true cavity-interior points misclassified. Initial fix
+   (nearest triangle always votes) was then superseded the same day by
+   removing the vote entirely: exact angle-weighted pseudonormal sign
+   (Session 4b). Verified: 0/300k misclassified, `Pkg.test()` green.
+7. **`test/data/cavity.stl` is the inside-out artifact** (corruption #2) —
+   the gate errors on it with regeneration instructions; delete + re-run
+   `validate_cavity.jl` to regenerate (intentionally left to Davide).
+8. **TriangleOctree construction cost**: ~3.6–5 s on the 4416-facet cavity,
+   ~12 s on 70k-facet bunny (1 thread, with `classify_leaves`; post-4b
+   numbers — the vote-era cavity build was ~6 s), paid once per design step
+   by *both* arms (A inside the `Octree` alg, B for repel's wall test). At
+   production N this is a first-order in-loop cost — fold into plan item 2.
 
 ## Roadmap (assessed 2026-06-11)
 
@@ -213,6 +278,8 @@ The next three sessions, in order:
    build the design recorded below ("Sampler scaling — octree gap tracking")
    and validate on the production rung: the `octree_boundary_layer.jl`
    configuration pushed to ≥10⁶ points, graded spacing, stated thread count.
+   **(Trigger fired in Session 4: re-seed-per-design-step won the shape-opt
+   trade-off; include octree-build cost in scope — see Session 4 section.)**
 3. **Remove the proven-inferior generation strategies** in favour of the
    direct pipeline (Poisson-disk surface placement + `:bridson` volume).
    Davide's assessment: if the octree pipeline proves robust enough, the
@@ -473,6 +540,164 @@ stale, claimed InverseDistanceForce default — and `docs/src/api.md`).
    currently meaningless (both Inf); fixing it (resampled boundary or
    `cull_ratio`) added to housekeeping.
 
+### Session 4 — shape-opt re-relaxation trade-off (2026-06-11, pre-step for plan item 2) ✅
+
+Question: per design step of the shape-opt loop, is it cheaper/better to
+**re-seed from scratch (A)** or to **warm-start repel from the previous
+cloud (B)**? Decides repel's in-loop role and is trigger (a) for the
+gap-tracking sampler. Harness: `shape_opt_tradeoff.jl` (repo root), all runs
+**1 thread**, Δ=0.08, deterministic seeds, both arms from the same base state
+(true-annulus direct-pipeline cloud, 2791 bnd + 6842 vol). Every deformed
+geometry validated before measuring (area vs analytic incl. Thomsen ellipsoid
+area, 42 isinside probes) — which is how corruption #2 was caught (see notice).
+
+Deformation ladder: r_inner 0.547 → {0.550, 0.560, 0.600} (wall moves
+0.04/0.16/0.66·Δ; domain shrinks → old points strand outside) + 5% ellipsoidal
+x-stretch of the outer shell (domain grows → fresh near-wall underdensity).
+Arms: **A** = Poisson-disk boundary + `:bridson` volume from scratch;
+**B** = same new boundary + old volume points, production repel
+(`kick_after=10, cv_target=0.07, stall_after=50, cull_ratio=0.5`);
+**B2** = B with stranded-outside old points dropped first (one isinside pass,
+~0.07 s). Beyond the gate, each final cloud got an **outside-point count** and
+a **fill-distance probe** (20k interior probes; d_NN metrics see neither).
+
+Numbers below are from the final code state (after the Session-4b
+pseudonormal/octree changes, which cut all walls ~35%); the pre-4b run
+reached identical verdicts and conclusions on every rung.
+
+| rung | arm | wall | iters | sep/Δ | CV | fill max/Δ | outside | culled | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| +0.5% | A | 6.2 s | — | 0.750 | 0.057 | 1.25 | 0 | 0 | PASS |
+| +0.5% | B | 5.4 s | 13 | 0.511 | 0.069 | 1.18 | 0 | **1** | PASS |
+| +2.4% | A | 5.1 s | — | 0.750 | 0.056 | 1.23 | 0 | 0 | PASS |
+| +2.4% | B | 5.6 s | 19 | 0.530 | 0.069 | 1.18 | **1** | **1** | PASS |
+| +2.4% | B2 | 5.6 s | 19 | 0.530 | 0.069 | 1.18 | 0 | **1** | PASS |
+| +9.7% | A | 5.1 s | — | 0.750 | 0.057 | 1.08 | 0 | 0 | PASS |
+| +9.7% | B | 14.5 s | 116 | 0.558 | 0.070 | 1.17 | **154** | 0 | PASS* |
+| +9.7% | B2 | 7.8 s | 48 | 0.557 | 0.069 | 1.18 | 0 | **1** | PASS |
+| stretch 1.05 | A | 5.4 s | — | 0.750 | 0.057 | 1.12 | 0 | 0 | PASS |
+| stretch 1.05 | B | 5.7 s | 7 | 0.509 | 0.069 | 1.20 | 0 | **1** | PASS |
+
+Correspondence (B's qualitative edge for warm-starting RBF-FD weights —
+fraction of surviving volume points displaced < 0.25Δ): +0.5% **100%**
+(median 0.022Δ), +2.4% **100%** (0.032Δ), +9.7% B2 **97%** (0.067Δ, 80%
+< 0.1Δ); surviving fraction 1.000 / 1.000 / 0.977. A has zero correspondence
+by construction.
+
+**Decision: re-seed per design step (arm A) wins; repel-in-loop is retired as
+the default.** The evidence:
+
+1. **A is deformation-size-invariant and strictly higher quality everywhere**:
+   sep/Δ 0.750 vs 0.51–0.56, CV 0.056 vs 0.069, cull always silent, zero
+   stranded points, wall-clock flat at ~5–6 s regardless of step size.
+2. **B-unfiltered is disqualified outright**: old points outside the deformed
+   domain *cannot re-enter* — the octree wall rule reverts any outside
+   proposal, and in-domain neighbors push escapees further out. At +9.7%,
+   154 of 156 stranded points remained in the hole at stop while the d_NN
+   gate still said PASS (PASS* above) — exactly the metric blind spot of
+   corruption #1/#2 reproduced inside a healthy run. Any warm start MUST
+   pre-filter with an isinside pass (B2; ~0.05 s — negligible).
+3. **The cull defect signal fired in 5 of 6 B-arm runs** (1 point each): the
+   fresh Poisson-disk boundary lands points within 0.5Δ of old volume points
+   and the `cv_target` stop fires before repel separates the pair. This is
+   the Session-3 caveat (sep is a min-statistic; no sep-aware stop was built)
+   materializing — warm-start + early stop structurally risks near-duplicate
+   wall pairs. A never culled.
+4. **Wall-clock is octree-dominated, not sampler-dominated, at this scale**:
+   of A's ~5–6 s, the `:bridson` fill itself is ~0.9 s and the boundary
+   sample 0.06 s; ~3.5–4 s is `TriangleOctree` construction + ~1.2 s
+   node-octree build/classify (B pays the same TriangleOctree for repel's
+   wall test). The marginal cost of A over B2's repel only favors B at small
+   steps (B2 repel ~1.4 s at ≤2.4% vs A's ~2.1 s octree+fill), and that
+   advantage is bought with lower quality.
+5. The ellipsoid (growth) rung is the one *positive* repel surprise:
+   repulsion-only expansion did fill the new 0.6Δ-deep near-wall layer
+   (fill max 1.20Δ, no void) in 7 iterations — warm-start is not
+   coverage-broken under growth, just lower-quality (near-wall CV 0.072 vs
+   0.055) and 6% under-dense globally.
+
+**Consequences:**
+- **Trigger (a) for the gap-tracking sampler FIRES**: re-seed-per-design-step
+  is the chosen mode, so sampler + octree-build wall-clock at production N is
+  the binding in-loop cost. Plan item 2 rises in priority, and its scope
+  should include the **TriangleOctree/node-octree build cost** (~7.8 s of the
+  ~8 s step at a mere 4.4k facets / 9.6k points; production is 70k facets /
+  10⁶–10⁷ points) — at minimum incremental octree reuse under small boundary
+  deformation, alongside the sampler acceleration.
+- **Repel's remaining mandates**: deposition (unchanged), and *optional*
+  correspondence-preserving refinement at small steps (≤2.4%), where B2
+  keeps ~100% of points within 0.25Δ — valuable only if Macchiato's RBF-FD
+  weight reuse is worth more than the sep 0.75→0.53 quality loss; that is a
+  solver-side trade-off to be measured there, not assumed here. If it ever
+  revives, repel needs the sep-aware stop (finding 3).
+- The Session-3 production config (`cv_target=0.07`) behaves as designed on
+  warm starts (stops at direct-pipeline CV), but `cv_target` alone is not a
+  sufficient acceptance test: pair it with the cull warning (fired) and an
+  outside-count (new) in any future in-loop use.
+
+### Session 4b — isinside hardening: pseudonormal signed distance (2026-06-11)
+
+Follow-up to the sign-vote defect (corruption notice #2): the distance-weighted
+local sign vote was replaced wholesale by the **angle-weighted pseudonormal
+test** (Bærentzen & Aanæs 2005) in `src/octree/triangle_octree.jl` +
+`geometric_utils.jl`:
+
+- `closest_point_on_triangle` now has a `_feature` variant returning which
+  triangle feature (face / edge / vertex) the closest point lies on — a free
+  by-product of the Ericson region tests, no tolerance involved.
+- `MeshPseudonormals` (built once per `TriangleOctree`, O(n), coordinate-keyed
+  so STL triangle soup needs no topology cleanup): face normals, per-edge
+  normal sums, angle-weighted per-vertex normal sums.
+- `_compute_signed_distance_octree` signs by
+  `dot(p − cp, pseudonormal(closest feature))` — **provably exact for
+  watertight, consistently outward-oriented meshes**; the vote's failure
+  modes (ambiguous → EXTERIOR bias; mixed votes across thin sheets — the
+  bifurcation caveat; the empty-vote-leaf bug) are eliminated structurally,
+  not patched. The nearest-triangle traversal caches the winning feature, so
+  the exact query does strictly less work than one vote iteration.
+- New construction guard: **signed-volume check** (`Σ dot(v1, v2×v3)/6`,
+  divergence theorem) under `verify_orientation && classify_leaves` — an O(n)
+  exact witness that a *consistently wound but globally inside-out* closed
+  mesh is rejected at construction with a clear error. This is the check that
+  would have caught corruption #2 the moment the first `TriangleOctree` was
+  built. (`has_consistent_normals` cannot see global inversion. The rejection
+  threshold is scale-relative — clearly negative volume only — so open/flat
+  surfaces with meaningless ≈0 signed volume still construct; they remain
+  fine for distance-only use, and `classify_leaves=false` skips the check
+  entirely. Verified: inverted cube vol −1 and the inside-out cavity vol
+  −3.48 rejected; open square and all authored STLs accepted.)
+- Testitems added (`test/octree_isinside.jl`): pseudonormal sign correctness
+  for queries whose closest feature is a cube corner / edge / face (the cases
+  a face-normal sign test gets wrong), and the signed-volume guard contract
+  (inverted cube rejected, distance-only allowed, open square allowed).
+
+Measured (1 thread, `bench_isinside.jl`, 200k queries/class, vote baseline
+includes the empty-leaf patch):
+
+| mesh | build | uniform-bbox query | near-surface query |
+|---|---|---|---|
+| cavity 4.4k facets (vote) | 5.4 s | 6.6 µs | 12.9 µs |
+| cavity (pseudonormal) | **3.7 s** | **4.0 µs** | **6.9 µs** |
+| bunny 70k facets (vote) | 13.1 s | 0.32 µs | 2.45 µs |
+| bunny (pseudonormal) | 12.2 s | 0.33 µs | 2.62 µs |
+
+Cavity exact path ~2× faster (coarse mesh → big vote leaves → the vote loop
+was the cost); bunny within noise (the octree traversal dominates and is
+untouched — that, not the sign, is the next efficiency lever if octree-build/
+query cost matters at production scale, plan item 2). Correctness: 0/300k
+misclassifications on the corrected cavity (interior and exterior), the
+formerly-failing exact-tie probes (mid-annulus on the z-axis/diagonal) now
+classify correctly, and the inside-out generator output is rejected at
+construction.
+
+**Verification (2026-06-12 AM, end of session): full `Pkg.test()` green —
+189,673 pass / 2 broken (pre-existing) / 0 failed, 4m53s — including the new
+pseudonormal-feature and signed-volume-guard testitems, after the guard
+threshold was made scale-relative (the first run errored on the open
+`simple_square_mesh` testitem, signed volume ≡ 0; clearly-negative-only fixed
+it). The trade-off benchmark re-run on the final code reproduced every
+Session-4 verdict with ~35% lower walls (table above).**
+
 ### Generality + benchmark harness
 
 *(Ordering superseded by the planned session sequence above; the geometry
@@ -579,6 +804,11 @@ production N (e.g. bunny at h giving ≥10⁶ points) shows sampler wall-clock
 is material. Until then the simple dart thrower is correct and adequate at
 gate scale.
 
+**Trigger (a) FIRED 2026-06-11 (Session 4)**: re-seed won the trade-off on
+every deformation rung — build the sampler next, and include the
+octree-construction cost in its scope (Session 4 finding 4: octree builds,
+not the dart thrower, dominate the per-step wall at gate scale).
+
 ### After the speed push — deposition (the novelty)
 
 1. Cavity with decimated boundary (~h or sparser) + `deposit_ratio=0.5`;
@@ -591,39 +821,85 @@ gate scale.
 
 **Reached for static generation (2026-06-11), better than the original
 target:** Poisson-disk boundary + graded Bridson volume → gate PASS **by
-construction, zero repel iterations**, ~3 s single-threaded on the cavity
-(the original target was ~30–50 iterations). CV 0.071 raw also beats the
-< 0.10 stretch goal. Remaining end-state work is the *dynamic* case: fast
-re-relaxation when the boundary changes inside the shape-opt loop —
-re-seeding from scratch each design step (3 s) vs incremental repel
-(0.47 s / 10 iters at 45.7k pts, 8 threads) is now a measurable trade-off,
-and repel must first stop degrading seeded clouds (open defect 2).
+construction, zero repel iterations** (true-annulus re-measurement, Session 4:
+sep/Δ 0.750, CV 0.056, fill max 1.18Δ; ~5.4 s single-threaded
+boundary+volume of which ~3.3 s is octree build/classify, +~4 s
+TriangleOctree if wall queries are needed). CV raw beats the < 0.10 stretch
+goal. The *dynamic* case is now **decided (Session 4)**: re-seed from scratch
+each design step — deformation-size-invariant PASS at ~5–6 s — beats incremental
+repel (lower quality everywhere, strands points under shrink without an
+isinside pre-filter, trips the cull signal). Remaining end-state work is
+making the re-seed step fast at production N: gap-tracking sampler + octree
+build cost (plan item 2).
 
 ## Validation assets
 
 - `validate_cavity.jl` (repo root): annular cavity through
   Octree→repel→kick→cull. Geometry regenerated clean 2026-06-11 (4416
   facets, area-asserted at export and re-import; the corrupt original is
-  parked untracked at `test/data/cavity_corrupt_backup.stl`). Flags:
+  parked untracked at `test/data/cavity_corrupt_backup.stl`). **Session 4:
+  generator winding fixed (was inside-out — corruption #2) and an
+  orientation guard added (mid-annulus/hole isinside probes); the gate now
+  errors on the stale on-disk `cavity.stl` until it is deleted and
+  regenerated. Pre-Session-4 verdict lines below were measured on the
+  inside-out domain.** Flags:
   `--placement=random|jittered|lattice|bridson`, `--resample-boundary`,
-  `--save-vtk`. Current verdicts (1 thread): default → MARGINAL (CV 0.151,
-  626 culled); `--placement=bridson --resample-boundary` → **PASS**
-  (sep/Δ=0.616, CV=0.094, 0 singular, 0 culled).
-- `validate_repel.jl` (repo root): box.stl frozen-vs-live comparison.
+  `--save-vtk`. Verdicts (1 thread, inside-out domain): default → MARGINAL
+  (CV 0.151, 626 culled); `--placement=bridson --resample-boundary` → PASS
+  (sep/Δ=0.616, CV=0.094, 0 singular, 0 culled). True-annulus direct
+  pipeline (Session 4 harness): **PASS raw — sep/Δ 0.750, CV 0.056,
+  coord 12.1, fill max 1.18Δ, 0 singular, 0 culled.**
+- `shape_opt_tradeoff.jl` (repo root, Session 4): deformation-ladder
+  re-seed-vs-warm-start benchmark with programmatic (corrected) cavity
+  generator, per-rung geometry validation, outside-count, fill-distance and
+  displacement-correspondence metrics.
+- `bench_isinside.jl` (repo root, Session 4b): TriangleOctree construction +
+  isinside query throughput on the cavity and `bunny.stl` (uniform-bbox and
+  near-surface query mixes).
+- `validate_repel.jl` (repo root): box.stl geometry-ladder rung 1 — direct
+  pipeline seeding + repel improve-or-preserve verdict (reworked 2026-06-11;
+  PASS, see housekeeping notes).
 - Full `Pkg.test()` green (142k+ assertions), including `:bridson` and
   `sample_surface` testitems.
 
 ## Housekeeping backlog
 
-- Update `CLAUDE.md` repel docs (`α_min`, `kick_after`, `cull_ratio` warn,
-  `deposit_ratio`, `trace`).
-- Float32/Float64 type-mismatch fix in `octree.jl`.
-- Bridson truncation warning fires when the cap sits exactly at the
-  saturation count (the cavity gate case) — benign there (scattered
-  single-dart holes, repel closes them), but consider only warning when the
-  active front is still large relative to the generated count.
-- `validate_repel.jl` is currently meaningless: both frozen and live runs end
-  at separation 0 / mesh_ratio Inf (face-center boundary + projection parking
-  on box edges at h ≫ tessellation; pre-existing, not Session-3). Rework it
-  with a resampled boundary and/or `cull_ratio`, or retire it — the live-tree
-  fix it demonstrates is long since default.
+All four items closed in the 2026-06-11 housekeeping sweep (post-Session 3,
+pre-shape-opt-trade-off-test); `Pkg.test()` green after the sweep (189,671
+pass / 2 pre-existing broken — count grew vs 142k because several testitems
+assert per generated point/pair and point counts shifted with RNG state):
+
+- ✅ `CLAUDE.md` repel docs updated (default `ClippedSpacingForce`,
+  `cv_target`/`stall_after`, `kick_after`, cull-warn principle,
+  `deposit_ratio`; `repel_forces.jl` listed in components).
+- ✅ Float32/Float64 fix: `discretize` now promotes Float32 (binary-STL)
+  boundaries to Float64 itself when `alg isa Octree`
+  (`_ensure_float64_boundary` in `octree.jl`, preserves surface
+  names/normals/areas; testitem in `test/octree.jl`). Scripts no longer need
+  the manual mesh-promotion workaround; `validate_repel.jl` already dropped
+  it, `validate_cavity.jl` still carries it (harmless — remove on next gate
+  touch).
+- ✅ Bridson truncation warning is now evidence-based: on cap-hit with a
+  non-empty front, a bounded probe (200 darts, nothing inserted) checks
+  whether uncovered volume actually remains; warn only then. Outcome on the
+  cavity seed: the warning **still fires and is correct** — the analytic-count
+  cap (6842) sits slightly below true front saturation, a genuine mild
+  truncation (benign at gate scale). The silenced case is cap == exact
+  saturation.
+- ✅ `validate_repel.jl` reworked into geometry-ladder rung 1 (box.stl, sharp
+  edges): direct pipeline (Poisson-disk boundary 713 + `:bridson` volume
+  1244) + repel improve-or-preserve verdict. Measured (1 thread): raw
+  CV 0.048 / sep 0.750; **300 repel iters → CV 0.020, sep/Δ 0.870** (PASS —
+  flat faces let repel approach near-crystal order); production stopping
+  (`cv_target=0.07`) correctly recognizes the already-at-target cloud and
+  returns it **unchanged** in 1 iteration (PASS). The old frozen-vs-live
+  comparison is retired (live tree long since default; its face-center
+  scenario ended in projection-parked coincident pairs, sep 0 both arms).
+  Bonus rung-1 datum: the surface sampler handled box.stl's sharp edges
+  without under-sampling artifacts visible in the metrics (boundary CV
+  folded into full-cloud CV 0.048 raw).
+- Also landed during the sweep: `cv_target` stop now reverts to the
+  pre-sweep configuration it actually measured (`p .= p_old` before break) —
+  an already-at-target cloud is returned bit-identical instead of
+  one-sweep-moved (the sweep had nudged box CV 0.048 → 0.053 before the fix);
+  testitem asserts identity.
