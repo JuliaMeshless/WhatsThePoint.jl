@@ -134,19 +134,23 @@ geometry-independent code property): 0.47 s / 10 iters at 45.7k pts on 8
 threads, 0.096 GB allocated (single-threaded 2.66 s) after the `knn!` buffer
 fix.
 
-**Honest SOTA position (updated 2026-06-11):**
+**Honest SOTA position (updated 2026-06-11, revised 2026-06-16):**
 - *Quality*: the direct pipeline now meets the gate by construction
   (sep ≥ 0.75·r, CV 0.07, 0 singular raw) — same construction class as the
   reference direct generators (Medusa / Slak–Kosec PNP); a head-to-head on
   identical geometries is still unrun (Session 3).
 - *Speed*: in the direct-generation class now — one O(N) advancing-front pass
   per stage (~3 s total on the cavity, 1 thread); the 300-iteration repel
-  budget is gone for static geometry.
+  budget is gone for static geometry. **⚠ BUT: Bridson does not scale —
+  bunny.stl (70k facets, 129k m³) timed out at every spacing finer than the
+  coarse original parameters (Session 5). The "direct pipeline passes raw"
+  claim holds only at cavity scale (~10k points). Production scale
+  (10⁵–10⁷ points) requires the gap-tracking sampler.**
 - *Differentiator*: incremental re-relaxation in the shape-opt loop +
   deposition (emergent boundary sampling; no published equivalent known) —
   both gated on fixing repel's blue-noise degradation (open defect 2).
 
-## Architecture verdict (revised 2026-06-11)
+## Architecture verdict (revised 2026-06-11, revised 2026-06-16)
 
 Generation is now a two-stage *direct* pipeline; repel is an optional
 relaxation tool, no longer the quality workhorse:
@@ -159,7 +163,11 @@ relaxation tool, no longer the quality workhorse:
   `:lattice`, `:bridson` (global graded Poisson-disk, Session 2 — the only
   mode with a cross-leaf separation guarantee; `bridson_factor` sets the disk
   radius relative to `h`, default 0.75). With a Poisson-disk boundary,
-  `:bridson` output passes the gate raw.
+  `:bridson` output passes the gate raw. **⚠ Scaling caveat (Session 5):
+  `:bridson` does not scale to production geometry — bunny.stl timed out at
+  every spacing finer than the coarse original parameters. The gap-tracking
+  sampler (plan item 2) must replace the dart thrower before `:bridson` is
+  usable at production N.**
 - **Repel** (`src/repel.jl`): retained for incremental re-relaxation under
   boundary change (shape-opt) and deposition. Measured 2026-06-11: it
   *degrades* an already-blue-noise cloud (open defect 2), so it should not
@@ -251,13 +259,23 @@ Open defects:
    removing the vote entirely: exact angle-weighted pseudonormal sign
    (Session 4b). Verified: 0/300k misclassified, `Pkg.test()` green.
 7. **`test/data/cavity.stl` is the inside-out artifact** (corruption #2) —
-   the gate errors on it with regeneration instructions; delete + re-run
-   `validate_cavity.jl` to regenerate (intentionally left to Davide).
+   **RESOLVED 2026-06-16**: deleted the old artifact and regenerated with
+   corrected winding. Verified: signed volume +3.478 (positive = outward),
+   consistent normals, mid-annulus isinside = true, inner-hole isinside =
+   false. ParaView inspection confirmed by Davide.
 8. **TriangleOctree construction cost**: ~3.6–5 s on the 4416-facet cavity,
    ~12 s on 70k-facet bunny (1 thread, with `classify_leaves`; post-4b
    numbers — the vote-era cavity build was ~6 s), paid once per design step
    by *both* arms (A inside the `Octree` alg, B for repel's wall test). At
    production N this is a first-order in-loop cost — fold into plan item 2.
+9. **Bridson dart thrower does not scale to production geometry** — **OPEN
+   (Session 5, 2026-06-16)**. bunny.stl (70k facets, 129k m³): timed out at
+   every spacing finer than `at_wall=0.8m, bulk=4.0m, layer_thickness=3.0m`
+   (which itself produced only 14k volume points). Bottlenecks: `_bridson_h_min`
+   O(leaves) scan + dart acceptance rate collapse at fine spacing. Fix: gap-
+   tracking sampler (plan item 2, design already recorded). This is now the
+   critical path — the direct pipeline cannot fill production geometries
+   without it.
 
 ## Roadmap (assessed 2026-06-11)
 
@@ -280,6 +298,9 @@ The next three sessions, in order:
    configuration pushed to ≥10⁶ points, graded spacing, stated thread count.
    **(Trigger fired in Session 4: re-seed-per-design-step won the shape-opt
    trade-off; include octree-build cost in scope — see Session 4 section.)**
+   **⚠ CRITICAL PATH (Session 5, 2026-06-16): Bridson timed out on bunny.stl
+   at every spacing finer than the coarse original parameters. The direct
+   pipeline cannot fill production geometries without this. See Session 5.**
 3. **Remove the proven-inferior generation strategies** in favour of the
    direct pipeline (Poisson-disk surface placement + `:bridson` volume).
    Davide's assessment: if the octree pipeline proves robust enough, the
@@ -305,7 +326,7 @@ per iteration). The factors multiply and have independent levers:
 | `rebuild_every` > 1 | cost/iter | **measured: ~5% — not a lever** (rebuild is 3% of loop) | done |
 | Octree NN search | cost/iter | demoted again: static generation no longer iterates; relevant only if repel-in-loop survives | only on measured need |
 | Momentum | iteration count | demoted: static pipeline needs 0 iterations; reconsider for shape-opt re-relaxation | only on measured need |
-| Octree gap-tracking sampler | sampler wall-clock at production N (10⁶–10⁷ pts) | ~5–20× fewer candidates, + parallel phase groups; maximality proof (design recorded below) | 1–2 sessions, build on trigger |
+| Octree gap-tracking sampler | sampler wall-clock at production N (10⁶–10⁷ pts) | ~5–20× fewer candidates, + parallel phase groups; maximality proof (design recorded below) | **CRITICAL PATH — Bridson timed out on bunny.stl (Session 5)** |
 
 ### Session 1 — cheap experiments, high information
 
@@ -830,7 +851,11 @@ each design step — deformation-size-invariant PASS at ~5–6 s — beats incre
 repel (lower quality everywhere, strands points under shrink without an
 isinside pre-filter, trips the cull signal). Remaining end-state work is
 making the re-seed step fast at production N: gap-tracking sampler + octree
-build cost (plan item 2).
+build cost (plan item 2). **⚠ Session 5 (2026-06-16): confirmed this is the
+critical path — Bridson timed out on bunny.stl at production-relevant
+spacings. The "reached" claim above holds only at cavity scale (~10k
+points); production geometry (10⁵–10⁷ points) requires the gap-tracking
+sampler before the direct pipeline is usable.**
 
 ## Validation assets
 
@@ -903,3 +928,58 @@ assert per generated point/pair and point counts shifted with RNG state):
   an already-at-target cloud is returned bit-identical instead of
   one-sweep-moved (the sweep had nudged box CV 0.048 → 0.053 before the fix);
   testitem asserts identity.
+
+### Session 5 — bunny.stl production-scale validation (2026-06-16) ✅ findings
+
+Attempted to run the direct pipeline (`sample_surface` boundary + `:bridson`
+volume) on `bunny.stl` (69,664 facets, ~129k m³ interior volume, ~86 m
+across) — the production-scale geometry referenced in the roadmap.
+
+**Mesh properties (verified):**
+- Consistent normals: yes
+- Signed volume: 128,807 m³ (solid closed surface, not a thin shell)
+- Bbox: 86 × 67 × 86 m
+
+**Run 1 — original parameters** (`at_wall=0.8m, bulk=4.0m,
+layer_thickness=3.0m`): completed in ~3.5 min. Boundary: 19k Poisson-disk
+points. Volume: **14k Bridson points**. Metrics: sep/Δ 0.753, CV 0.158,
+coordination 14.2, cull silent. Plot inspected — no points flying outside,
+correct graded density near walls.
+
+**Problem identified:** 14k volume points is far below the expected count.
+Root cause: `BoundaryLayerSpacing` with `bulk=4.0m` and `layer_thickness=3.0m`
+puts the bunny's entire interior at 4.0m spacing. The boundary layer is a thin
+shell (3 m deep), and the bunny's interior beyond that is nearly empty at 4 m
+resolution. Expected volume points at 4 m: 128,807/64 ≈ 2,000. The 14k count
+is mostly boundary-layer fill.
+
+**Run 2 — tighter spacing** (`at_wall=0.4m, bulk=2.0m, layer_thickness=6.0m`):
+boundary: 80k points (227 s). Node octree: 345k leaves (18 s). Bridson front
+**timed out** after 20 min — `_bridson_h_min` iterating 345k leaves + dart
+throwing acceptance rate collapsed at the finer spacing.
+
+**Run 3 — very fine spacing** (`at_wall=0.15m, bulk=1.5m,
+layer_thickness=8.0m`): node octree: 10.5M leaves (470 s). Bridson front
+timed out during `_bridson_h_min` alone.
+
+**Conclusion: the Bridson dart thrower does not scale to production geometry.**
+The two bottlenecks are:
+
+1. **`_bridson_h_min`**: iterates over *all* octree leaves to find the minimum
+   spacing — O(leaves). At 345k–10.5M leaves this dominates wall-clock before
+   the front even starts.
+2. **Dart throwing acceptance rate**: at fine spacing the fraction of candidates
+   that pass the separation + isinside tests drops below ~2%, so the front burns
+   hundreds of millions of rejected darts. Each rejection is cheap (bucket scan
+   + isinside), but the count is the problem.
+
+The gap-tracking sampler (plan item 2, design recorded 2026-06-11) directly
+addresses both: the octree pool replaces `_bridson_h_min` (spacing is known per
+pool cell) and eliminates wasted darts (draw only from uncovered cells). This
+is now **the critical path** for the node generation pipeline — correctness and
+quality are solved, but the direct pipeline cannot fill production geometries
+in reasonable time without it.
+
+**Action:** implement the octree gap-tracking sampler. Scope includes the
+TriangleOctree/node-octree build cost (measured ~7.8 s at gate scale, first-order
+at production N).
