@@ -98,16 +98,7 @@ function build_node_octree(triangle_octree, spacing, alpha, node_min_ratio)
 end
 
 @inline function _mesh_geometry_query(pt::SVector{3, T}, tol, octree) where {T}
-    # The mesh bbox is the authoritative envelope — anything strictly outside
-    # it (by more than the classification tolerance) is exterior, matching the
-    # fast-path used by `isinside`. (Kept although the pseudonormal signed
-    # distance, unlike the retired sign vote, cannot flip far from the mesh:
-    # the bbox test is also cheaper than a tree traversal.)
-    if any(pt .< octree.mesh_bbox_min .- tol) || any(pt .> octree.mesh_bbox_max .+ tol)
-        return LEAF_EXTERIOR
-    end
-    sd = _compute_signed_distance_octree(pt, octree)
-    return _leaf_class_from_signed_distance(sd, tol)
+    return _classify_point_octree(pt, octree; tol = T(tol))
 end
 
 function _box_may_contain_interior(node_tree, box_idx, triangle_octree)

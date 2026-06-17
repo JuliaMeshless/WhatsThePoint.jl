@@ -30,6 +30,19 @@ function _min_distance(p, boundary)
     return dmin
 end
 
+# O(log n) nearest-neighbor query via KDTree
+function _min_distance(p, boundary, tree::KDTree)
+    q = Float64.(ustrip.(to(p)))
+    idxs, dists = knn(tree, q, 1)
+    return dists[1] * unit(eltype(to(first(boundary))))
+end
+
+# Build a KDTree from boundary points for O(log n) nearest-neighbor queries
+function _build_boundary_tree(boundary_points)
+    coords = [Float64.(ustrip.(to(p))) for p in boundary_points]
+    return KDTree(coords)
+end
+
 """
     ConstantSpacing{L<:Unitful.Length} <: AbstractSpacing
 
@@ -53,6 +66,7 @@ struct LogLike{B, G, P} <: VariableSpacing
     boundary::P
     base_size::B
     growth_rate::G
+    tree::Union{KDTree, Nothing}
 end
 
 function LogLike(cloud::PointCloud, base_size, growth_rate)
@@ -60,8 +74,13 @@ function LogLike(cloud::PointCloud, base_size, growth_rate)
     return LogLike(points(cloud), base_size, growth_rate)
 end
 
+function LogLike(boundary_points, base_size, growth_rate)
+    tree = isempty(boundary_points) ? nothing : _build_boundary_tree(boundary_points)
+    return LogLike(boundary_points, base_size, growth_rate, tree)
+end
+
 function (s::LogLike)(p::Union{Point, Vec})
-    x = _min_distance(p, s.boundary)
+    x = isnothing(s.tree) ? _min_distance(p, s.boundary) : _min_distance(p, s.boundary, s.tree)
     inv_growth = 1 - (s.growth_rate - 1)
     a = s.base_size * inv_growth  # characteristic length scale with proper units
     return s.base_size * x / (a + x)
@@ -91,6 +110,7 @@ struct BoundaryLayerSpacing{B, L, P} <: VariableSpacing
     at_wall::B
     bulk::B
     layer_thickness::L
+    tree::Union{KDTree, Nothing}
 end
 
 function BoundaryLayerSpacing(boundary_points; at_wall, bulk, layer_thickness)
@@ -103,17 +123,20 @@ function BoundaryLayerSpacing(boundary_points; at_wall, bulk, layer_thickness)
     h_wall = convert(B, at_wall)
     h_bulk = convert(B, bulk)
 
+    tree = isempty(boundary_points) ? nothing : _build_boundary_tree(boundary_points)
+
     return BoundaryLayerSpacing{B, typeof(layer_thickness), typeof(boundary_points)}(
         boundary_points,
         h_wall,
         h_bulk,
         layer_thickness,
+        tree,
     )
 end
 
 function (s::BoundaryLayerSpacing)(p::Union{Point, Vec})
     # Distance to nearest boundary point
-    x = _min_distance(p, s.boundary)
+    x = isnothing(s.tree) ? _min_distance(p, s.boundary) : _min_distance(p, s.boundary, s.tree)
     d = Float64(ustrip(x))
 
     # Sigmoid transition: center at δ/2, width ≈ δ/6 (smooth S-curve over boundary layer)

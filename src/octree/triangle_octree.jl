@@ -565,25 +565,38 @@ num_leaves(octree::TriangleOctree) = length(all_leaves(octree.tree))
 num_triangles(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
 
 """
+    _classify_point_octree(point, octree; tol=0) -> Int8
+
+Shared classification of a point against a TriangleOctree. Returns
+`LEAF_INTERIOR`, `LEAF_EXTERIOR`, or `LEAF_BOUNDARY`. Uses the cached leaf
+classification for fast INTERIOR/EXTERIOR dispatch; only BOUNDARY probes
+fall through to the full signed-distance computation.
+
+`tol` expands the mesh bounding box for the exterior fast-path (set to 0 for
+exact bbox checks, or a positive tolerance for conservative classification).
+"""
+@inline function _classify_point_octree(
+        point::SVector{3, T}, octree::TriangleOctree; tol::T = zero(T)
+    ) where {T <: Real}
+    if any(point .< octree.mesh_bbox_min .- tol) || any(point .> octree.mesh_bbox_max .+ tol)
+        return LEAF_EXTERIOR
+    end
+    tri_cls = octree.leaf_classification
+    if !isnothing(tri_cls)
+        leaf_idx = find_leaf(octree.tree, point)
+        cls = tri_cls[leaf_idx]
+        cls != LEAF_BOUNDARY && return cls
+    end
+    sd = _compute_signed_distance_octree(point, octree)
+    tol_val = isnothing(tri_cls) ? zero(T) : tol
+    return _leaf_class_from_signed_distance(sd, tol_val)
+end
+
+"""
 Fast interior/exterior test using octree spatial index.
 """
 function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
-    # Use actual mesh bounding box, not expanded octree bounds
-    if any(point .< octree.mesh_bbox_min) || any(point .> octree.mesh_bbox_max)
-        return false
-    end
-
-    if isnothing(octree.leaf_classification)
-        return _compute_signed_distance_octree(point, octree) < 0
-    end
-
-    leaf_idx = find_leaf(octree.tree, point)
-    classification = octree.leaf_classification[leaf_idx]
-
-    classification == LEAF_EXTERIOR && return false
-    classification == LEAF_INTERIOR && return true
-
-    return _compute_signed_distance_octree(point, octree) < 0
+    return _classify_point_octree(point, octree) == LEAF_INTERIOR
 end
 
 function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}
