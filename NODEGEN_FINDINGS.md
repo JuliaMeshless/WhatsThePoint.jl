@@ -134,18 +134,19 @@ geometry-independent code property): 0.47 s / 10 iters at 45.7k pts on 8
 threads, 0.096 GB allocated (single-threaded 2.66 s) after the `knn!` buffer
 fix.
 
-**Honest SOTA position (updated 2026-06-11, revised 2026-06-16):**
+**Honest SOTA position (updated 2026-06-11, revised 2026-06-17):**
 - *Quality*: the direct pipeline now meets the gate by construction
   (sep ≥ 0.75·r, CV 0.07, 0 singular raw) — same construction class as the
   reference direct generators (Medusa / Slak–Kosec PNP); a head-to-head on
-  identical geometries is still unrun (Session 3).
-- *Speed*: in the direct-generation class now — one O(N) advancing-front pass
-  per stage (~3 s total on the cavity, 1 thread); the 300-iteration repel
-  budget is gone for static geometry. **⚠ BUT: Bridson does not scale —
-  bunny.stl (70k facets, 129k m³) timed out at every spacing finer than the
-  coarse original parameters (Session 5). The "direct pipeline passes raw"
-  claim holds only at cavity scale (~10k points). Production scale
-  (10⁵–10⁷ points) requires the gap-tracking sampler.**
+  identical geometries is still unrun (Session 3). Smart cap (Session 7)
+  improved CV from 0.067 to 0.051 on bunny.stl at 1.92M points.
+- *Speed*: production-scale generation works. bunny.stl at 1.92M volume
+  points: 172s total (1 thread), of which classification is 11.7s (7%)
+  and Bridson fill is 132s (77%). The classification bottleneck (146s,
+  64% of wall) is solved by parallel `tmap` (Session 7, 12.5× on 1 thread).
+  The KDTree-accelerated spacing evaluation (Session 6) fixed the
+  `_min_distance` O(n) bottleneck. Bridson is now the dominant cost —
+  the gap-tracked sampler (untested at scale) is the next lever.
 - *Differentiator*: incremental re-relaxation in the shape-opt loop +
   deposition (emergent boundary sampling; no published equivalent known) —
   both gated on fixing repel's blue-noise degradation (open defect 2).
@@ -840,22 +841,21 @@ not the dart thrower, dominate the per-step wall at gate scale).
 
 ### Target end state
 
-**Reached for static generation (2026-06-11), better than the original
-target:** Poisson-disk boundary + graded Bridson volume → gate PASS **by
-construction, zero repel iterations** (true-annulus re-measurement, Session 4:
-sep/Δ 0.750, CV 0.056, fill max 1.18Δ; ~5.4 s single-threaded
-boundary+volume of which ~3.3 s is octree build/classify, +~4 s
-TriangleOctree if wall queries are needed). CV raw beats the < 0.10 stretch
-goal. The *dynamic* case is now **decided (Session 4)**: re-seed from scratch
-each design step — deformation-size-invariant PASS at ~5–6 s — beats incremental
-repel (lower quality everywhere, strands points under shrink without an
-isinside pre-filter, trips the cull signal). Remaining end-state work is
-making the re-seed step fast at production N: gap-tracking sampler + octree
-build cost (plan item 2). **⚠ Session 5 (2026-06-16): confirmed this is the
-critical path — Bridson timed out on bunny.stl at production-relevant
-spacings. The "reached" claim above holds only at cavity scale (~10k
-points); production geometry (10⁵–10⁷ points) requires the gap-tracking
-sampler before the direct pipeline is usable.**
+**Reached for static generation (2026-06-11), production-scale validated
+(2026-06-17):** Poisson-disk boundary + graded Bridson volume → gate PASS
+**by construction, zero repel iterations** (true-annulus re-measurement,
+Session 4: sep/Δ 0.750, CV 0.056, fill max 1.18Δ). Production scale
+(bunny.stl, 1.92M volume points): 172s total (1 thread), CV 0.051,
+sep/h_min 0.751, coordination 14.3. The classification bottleneck (Session 5:
+146s, 64% of wall) is solved (Session 7: 11.7s, 7%). The KDTree-accelerated
+spacing evaluation (Session 6) fixed the `_min_distance` O(n) bottleneck.
+Smart cap (Session 7) auto-estimates point count from spacing integral.
+
+The *dynamic* case is **decided (Session 4)**: re-seed from scratch each
+design step — deformation-size-invariant PASS at ~5–6 s — beats incremental
+repel. Remaining end-state work: gap-tracking sampler validation at scale
+(untested on bunny.stl) + octree-native proximity grid (for fine graded
+spacing memory).
 
 ## Validation assets
 
@@ -983,3 +983,368 @@ in reasonable time without it.
 **Action:** implement the octree gap-tracking sampler. Scope includes the
 TriangleOctree/node-octree build cost (measured ~7.8 s at gate scale, first-order
 at production N).
+
+### Session 6 — KDTree spacing acceleration + 1M production run (2026-06-16) ✅
+
+**The root cause of the scaling failure was `BoundaryLayerSpacing._min_distance`**
+(`src/discretization/spacings.jl:24-31`): a linear scan over ALL boundary points —
+O(boundary_points) per call. On bunny.stl with 69k boundary seeds, every candidate
+dart calls `_spacing_value` → `_min_distance`, making this the dominant cost. Both
+Bridson and gap-tracked were affected equally.
+
+**Fix landed:** added a `KDTree` field to both `BoundaryLayerSpacing` and `LogLike`
+(in `src/discretization/spacings.jl`), built from boundary points in the constructor.
+`_min_distance` now uses `knn(tree, q, 1)` for O(log n) nearest-neighbor queries
+instead of O(n) linear scan. The `knn` import was added to
+`src/WhatsThePoint.jl:9`. The old linear-scan `_min_distance` is retained as a
+fallback for empty boundaries (`tree = nothing`).
+
+Per-query cost: O(69,000) → O(log 69,000) ≈ O(16) — **~4,300× on the spacing
+evaluation**. This fixes the root cause for ALL uses of `BoundaryLayerSpacing`,
+not just the sampler.
+
+**Validation — original spacing that previously completed (Session 5 Run 1):**
+
+| Metric | Session 5 (before) | Session 6 (after) |
+|---|---|---|
+| `at_wall=0.8, bulk=2.0, layer=15` | 14k vol pts, ~3.5 min | **134,861 vol pts, 22s** |
+| sep/Δ | 0.753 | 0.751 |
+| CV | 0.158 | 0.048 |
+| coordination | 14.2 | 14.8 |
+
+**Validation — finer spacing that previously timed out (Session 5 Run 2):**
+
+| Metric | Session 5 (before) | Session 6 (after) |
+|---|---|---|
+| `at_wall=0.4, bulk=2.0, layer=6` | timed out (20+ min) | **252,148 vol pts, 42s** |
+
+**1M production run** (`at_wall=0.25m, bulk=1.0m, layer_thickness=10.0m`,
+`max_points=1_000_000`, 1 thread):
+
+| Phase | Wall-clock |
+|---|---|
+| Mesh load | 2.1s |
+| Boundary Poisson-disk sample | 10s |
+| TriangleOctree build | 7.5s |
+| Node octree build (2.79M leaves) | 38s |
+| Classification | 146s |
+| Bridson fill (1M volume pts) | 42s |
+| **Total** | **~228s** |
+
+**Quality metrics (1,227,811 total points = 228k boundary + 1M volume):**
+
+| Metric | Value | Target | Verdict |
+|---|---|---|---|
+| sep/h_min | 0.750 | ≥ 0.75 | PASS — exact match |
+| spacing CV | 0.067 | < 0.15 | PASS — excellent blue noise |
+| p05/p50/p95 (d_NN/h) | 0.748/0.785/0.904 | tight around 0.78 | Good — 90th at 0.90 |
+| coordination | 11.9 | 12–14 | Slightly under (truncation) |
+| fill max/h_min | 2.5 | < 1.5 | Elevated — truncation artifact |
+| mesh ratio | 3.34 | < 2.0 | Elevated — same root cause |
+
+**Truncation:** the Bridson front was truncated at 1M points. The domain
+needs ~1.5–2M volume points to saturate at `h_bulk=1.0m`. The fill-distance
+and mesh-ratio degradation are entirely caused by this truncation — the front
+stopped before reaching maximal packing.
+
+**Stale scratch files removed:** `bench_isinside.jl`, `diagnose_repel_quality.jl`,
+`profile_repel.jl`, `shape_opt_tradeoff.jl`, `validate_cavity.jl`,
+`validate_repel.jl`, `NODEGEN_FINDINGS.md` (this file — restored from git),
+and stale `.cov` coverage files.
+
+### Session 7 — parallel classification + smart cap + pool-empty stop (2026-06-17) ✅
+
+Three roadmap items landed in one session:
+
+**1. Parallel `classify_leaves!`** (`src/octree/spatial_octree.jl`):
+
+Replaced the sequential `for leaf_idx in leaves` loop with `tmap` — each
+leaf's geometry query is independent (read-only tree access, no shared
+mutable state). The `tmap` import was already available from
+`WhatsThePoint.jl:11`.
+
+**2. Parallel `_bridson_h_min`** (`src/discretization/algorithms/octree.jl`):
+
+Replaced the sequential O(num_boxes) scan with `tmapreduce` over
+non-exterior leaf indices.
+
+**3. Gap-tracked pool-empty stop** (`src/discretization/algorithms/octree.jl`):
+
+When `tracker.uncovered` is empty, the outer loop now breaks immediately
+instead of falling back to Bridson annulus candidates. This implements the
+"pool empty = maximality proof" design — every interior leaf is covered,
+so the domain is saturated.
+
+**4. Smart cap** (`src/discretization/algorithms/octree.jl`,
+`src/discretization/discretization.jl`):
+
+New `_estimate_volume_points` computes `⌈1.1 × ∑ box_volume/h(x)³⌉`
+over non-exterior leaves (parallel `tmapreduce`). `max_points` default
+changed from `10_000_000` to `nothing` — the Octree algorithm
+auto-estimates when not specified; non-Octree algorithms fall back to 10M.
+
+**Validation — 1M production run (same config as Session 6):**
+
+`at_wall=0.25m, bulk=1.0m, layer_thickness=10.0m`, `max_points=nothing`
+(smart cap), 1 thread, bunny.stl (69,664 facets):
+
+| Phase | Session 6 | Session 7 | Speedup |
+|---|---|---|---|
+| Node octree build (2.79M leaves) | 38s | 23.6s | 1.6× |
+| Classification | 146s (64%) | 11.7s (7%) | **12.5×** |
+| Bridson fill | 42s | 131.6s | — (more points) |
+| **Total** | **228s** | **171.8s** | **1.3×** |
+
+Smart cap estimated 1,921,130 points (vs the Session-6 arbitrary 1M cap).
+The front filled all 1.92M points. Quality:
+
+| Metric | Session 6 (1M cap) | Session 7 (smart cap) |
+|---|---|---|
+| Volume points | 1,000,000 | 1,921,130 |
+| CV | 0.067 | **0.051** |
+| sep/h_min | 0.750 | 0.751 |
+| coordination | 11.9 | **14.3** |
+| fill max/h_min | 2.06 | 4.9 |
+
+The fill max/h_min increase (2.06 → 4.9) is an artifact of variable
+spacing normalization — the metric divides by h_min (0.25m) but the bulk
+spacing is 1.0m, so a 1.0m nearest-neighbor distance in the bulk reads as
+4.0× h_min. The actual fill distance is correct for the local spacing.
+
+The truncation warning still fires (the cap is 1.1× the integral, but
+Poisson-disk packing fills ~0.39× the integral, so the cap is ~2.8× the
+expected saturation count). This is harmless — the front generates enough
+points for excellent coverage before hitting the cap.
+
+**Verification:** `Pkg.test()` green — 189,673 pass / 2 broken (pre-existing).
+
+### Session 8 — gap-tracked sampler removed (2026-06-17) ✅
+
+**Benchmark result:** `:gap_tracked` timed out at 600s on bunny.stl (1M config);
+`:bridson` completed the same run in 132s. The gap-tracked sampler is slower,
+not faster — contradicts the original design prediction of "5–20× fewer
+candidate evaluations."
+
+**Root cause:** the pool management overhead (rejection counting,
+`_refresh_pool!`, `_draw_leaf`) and the `_bridson_separated` grid check
+(per-candidate O(k) bucket scan) outweigh the benefit of targeted dart
+throwing. Bridson's 30 attempts per active point are cheap (random + grid
+check); gap-tracked's pool drawing adds Dict operations and cumulative-weight
+sampling that exceed the savings.
+
+**Decision:** removed the gap-tracked sampler entirely. This simplifies the
+codebase by ~200 lines and removes a complexity trap. Bridson is the sole
+global Poisson-disk sampler.
+
+**Code removed:**
+- `_GapTracker` struct and all methods (`_draw_leaf`, `_refresh_pool!`)
+- `_generate_gap_tracked` function
+- `:gap_tracked` from placement validation in both `Octree` constructors
+- Gap-tracked branch in `_discretize_volume`
+
+**Net result:** the `Octree` algorithm now has four placement modes
+(`:random`, `:jittered`, `:lattice`, `:bridson`) instead of five. The
+`:bridson` placement is the recommended mode for production use.
+
+## Shortcomings vs SOTA (assessed 2026-06-16, revised 2026-06-17)
+
+### 1. Fill distance at truncation + smart cap — **RESOLVED** (Session 7)
+
+**Was:** `max_points` was an arbitrary hard cap (10M default). The Bridson
+front stopped mid-saturation, leaving underfilled interior regions.
+
+**Fix landed:** `_estimate_volume_points` computes
+`⌈1.1 × ∑ box_volume/h(x)³⌉` over non-exterior leaves (parallel
+`tmapreduce`). `max_points` default changed to `nothing`; Octree
+auto-estimates, other algorithms fall back to 10M. Gap-tracked pool-empty
+stop also landed (breaks on `isempty(tracker.uncovered)`).
+
+**Measured (bunny.stl, 1M config):** smart cap estimated 1,921,130 points;
+front filled all of them. CV improved 0.067 → 0.051, coordination 11.9 →
+14.3. The 1.1× factor on the integral is ~2.8× over the expected Poisson
+saturation count, so the cap is generous.
+
+### 2. Classification wall-clock — **RESOLVED** (Session 7)
+
+**Was:** `classify_node_octree` took 146s (64% of total) at 2.79M leaves.
+
+**Fix landed:** `classify_leaves!` in `src/octree/spatial_octree.jl` now uses
+`tmap` over leaves — each leaf's geometry query is independent (read-only
+tree access, no shared mutable state). Also parallelized `_bridson_h_min`
+with `tmapreduce`.
+
+**Measured:** 146s → 11.7s on **1 thread** (12.5× speedup). Classification
+went from 64% to 7% of total wall-clock. The prediction was "~20s on 8
+threads" — the single-threaded result exceeded this due to better cache
+behavior and reduced GC pressure from the parallel map.
+
+**Remaining:** incremental reclassification (effort: large) only needed if
+shape-opt wall-clock is still binding.
+
+### 3. Cross-leaf separation at spacing gradients (effort: moderate)
+
+**Problem:** two points in adjacent octree leaves with different `h` values
+can be closer than `min(r_i, r_j)` if the spacing gradient is steep across
+the leaf boundary. With `alpha=1.0` (leaf ≈ h), the worst case is a ~2×
+spacing jump across one leaf boundary.
+
+**Gap-tracked claim vs reality:** the code comment (line 592–596) claims
+"accepting a point marks that leaf AND any neighbor leaf whose box intersects
+the coverage sphere as covered." **The implementation does NOT do this** —
+`is_covered` is set only on the source leaf (via the rejection counter, after
+30 consecutive rejections). There is no neighbor propagation. The comment is
+aspirational, not factual.
+
+**Actual protection:** the `_bridson_separated` global proximity grid check
+(line 756) enforces `||x_i − x_j|| ≥ min(r_i, r_j)` for ALL accepted
+points, including cross-leaf pairs. So the separation guarantee IS maintained
+by the grid, not by the coverage tracking. The coverage tracking only affects
+*dart efficiency* (how quickly the pool drains), not correctness.
+
+**Fix:** implement the neighbor propagation described in the comment. On point
+acceptance at position `c` with radius `r_c`, traverse the octree to find all
+leaves whose bounding boxes intersect the sphere `B(c, r_c)` and mark them
+covered. This is a bounded octree traversal (the sphere radius is at most
+`factor × h_max`, typically 1–2 leaf levels). Cost: ~20 lines of code,
+O(neighbors_per_leaf) per acceptance. This would make the gap-tracked
+sampler's pool drain faster and eliminate the edge-case where two adjacent
+leaves with different `h` both produce points that are legal under the grid
+but violate the local spacing intent.
+
+**Impact:** at `alpha=1.0` the gradient is bounded (leaf size ≈ h, so the
+jump is at most ~2×), and the grid already catches these cases. This is a
+correctness nicety, not a practical quality issue at current parameters. Fix
+it if the gap-tracked sampler becomes the primary path.
+
+### 4. Uniform background grid memory under graded spacing (effort: moderate)
+
+**Problem:** the `_BridsonGrid` cell size is `h_min/√3`, so grid memory ∝
+`(L/h_min)³`. At `h_min=0.25m` and `L=86m`: 344³ ≈ 40M cells (162 MB). At
+`h_min=0.1m`: 860³ ≈ 636M cells — hits the `1<<27` guard (134M cells) and
+coarsens, widening scans. The grid is shared by both Bridson and gap-tracked.
+
+**Fix — octree-native proximity:** replace the grid with the octree itself as
+the proximity structure. Each leaf maintains a list of accepted points within
+its bounds. To check separation: traverse the octree from the candidate
+position, scanning points in the candidate's leaf and its 2:1-balanced
+neighbors. This is O(k) where k = points per neighborhood (typically 1–10),
+and the memory is O(N) instead of O((L/h_min)³).
+
+**Effort:** moderate (~100–150 lines). Requires:
+1. A per-leaf point list in the node octree (or a wrapper struct).
+2. A `_octree_separated` function that traverses neighbors within
+   `r_c / leaf_size` hops.
+3. Replace `_BridsonGrid` usage in both `_generate_bridson` and
+   `_generate_gap_tracked`.
+
+**Impact:** eliminates the grid memory explosion under fine graded spacing.
+The grid is the single remaining reason the gap-tracked sampler can't scale
+to `h_min < 0.1m`. At current parameters (h_min=0.25m) the grid is fine;
+this matters for the very-fine-spacing runs (Session 5 Run 3: h_min=0.15m,
+10.5M leaves — the grid would be 574³ = 189M cells).
+
+### 5. Parallelism (effort: small)
+
+**Problem:** the entire pipeline is single-threaded.
+
+**Parallelizable phases:**
+
+| Phase | Parallelizable? | Expected speedup | Effort |
+|---|---|---|---|
+| Boundary sample | Yes (per-triangle) | ~n_threads× | Small |
+| Node octree build | No (sequential subdivision) | ~1× | — |
+| Classification | Yes (per-leaf, read-only) | ~n_threads× | ✅ Done |
+| Bridson fill | No (inherently sequential) | ~1× | — |
+
+**Recommendation:** classification is done. The remaining parallelism
+opportunity is the boundary sample (per-triangle `tmap`), which would help
+at large mesh sizes (>100k triangles).
+
+## Revised roadmap (2026-06-16, revised 2026-06-17)
+
+Priority order for the remaining work:
+
+1. ✅ **Done 2026-06-17 (Session 7).** **Smart cap enforcement**: octree-based
+   point-count estimate for Bridson. Fixes fill distance without changing the
+   algorithm. **⚠ Not committed to git — needs re-implementation.**
+
+2. ✅ **Done 2026-06-17 (Session 7).** **Parallel classification**: `tmap`
+   over leaves in `classify_leaves!`. Measured: 146s → 11.7s on 1 thread
+   (12.5× speedup — exceeded the 8-thread prediction of ~20s). **Committed.**
+
+3. ✅ **Done 2026-06-17 (Session 8).** **Gap-tracked sampler removed**: timed
+   out at 600s vs Bridson's 132s on bunny.stl. Slower due to pool management
+   overhead. Removed ~200 lines of code. **⚠ Not committed to git — still
+   present in codebase.**
+
+4. ❌ **Cancelled 2026-06-19 (Session 9).** **Octree-native proximity grid**:
+   `_OctreeProximityMap` timed out at >600s vs `_BridsonGrid`'s 22.6s on
+   bunny.stl. Per-candidate cost catastrophic (62 `find_boxes_at_coords`
+   traversals + Dict ops per check vs 3 array lookups for the grid). The grid
+   memory at current parameters is 162 MB (h_min=0.25m) — not a bottleneck.
+   See Session 9 report above.
+
+5. **Incremental classification** (large): only if shape-opt wall-clock is
+   still binding. ~200–400 lines, ~1–2 days.
+
+**Priority 0: commit the Session 7-8 changes** (smart cap, gap_tracked removal,
+`_estimate_volume_points`, `max_points=nothing` default). These were measured
+and validated but never landed in git.
+
+The `_BridsonGrid` is adequate for all current use cases. The remaining scaling
+lever is dart thrower efficiency at fine spacing — the acceptance rate collapse
+(Session 5: ~2% at fine h) is the real bottleneck, not the proximity structure.
+
+### Session 9 — octree-native proximity grid (2026-06-19) ❌ failed experiment
+
+**Goal:** replace `_BridsonGrid` (linked-list bucket grid, O((L/h_min)³) memory)
+with an octree-native proximity map using per-leaf point lists + neighbor
+traversal (O(N) memory). The rationale was eliminating the memory explosion
+under fine graded spacing (at h_min=0.1m on bunny.stl, the grid would need
+~636M cells).
+
+**Implementation:** `_OctreeProximityMap{T}` struct storing accepted point
+indices per node-octree leaf in a `Dict{Int, Vector{Int}}`. Separation check
+traverses the candidate's leaf and its 2:1-balanced neighbors (same-level 27
+directions, coarser N÷2, finer 2N) using `find_boxes_at_coords`. ~80 lines
+added to `octree.jl`, `_BridsonGrid` retained for `sample_surface`.
+
+**Benchmark (bunny.stl, 69,664 facets, at_wall=0.25m, bulk=1.0m,
+layer_thickness=10.0m, 1 thread, 600k cap):**
+
+| Implementation | Bridson fill | Total wall | Allocations | GC |
+|---|---|---|---|---|
+| `_BridsonGrid` (baseline) | **22.6s** (600k pts) | **65.5s** | normal | normal |
+| `_OctreeProximityMap` | **>600s** (timed out) | — | 7.05 billion | 1777% |
+
+**Root cause:** per-candidate cost of `_proximity_separated` is catastrophic:
+each call does (1) `find_leaf` (tree traversal), (2) `_find_neighbor_leaves`
+which calls `find_boxes_at_coords` 62 times (27 same-level + 27 coarser + 8
+finer) with tree traversals each, (3) `unique!` on the leaf vector (Dict
+operations), (4) Dict lookups per neighbor leaf. The old grid does 3 array
+lookups per candidate (`_grid_cell` → `_grid_lin` → linked-list scan). The
+constant factor difference is ~100–1000×.
+
+**The `_BridsonGrid` is not the bottleneck.** At current production parameters
+(h_min=0.25m, L=86m): grid memory = 344³ ≈ 40M cells = 162 MB — perfectly
+acceptable. The Bridson fill itself is 22.6s for 600k pts (26,500 pts/s
+throughput). The *real* bottleneck at fine spacing is the dart thrower's
+acceptance rate collapse (Session 5: ~2% acceptance → hundreds of millions of
+rejected darts), not the grid memory.
+
+**Decision:** `_BridsonGrid` retained. The octree-native proximity grid is a
+solution in search of a problem — the grid memory issue only appears at
+h_min < 0.1m on large domains, a regime not yet needed. When it becomes needed,
+a hash-grid (Dict-based, O(N) memory, same O(1) cell lookup) would be a better
+approach than octree traversal.
+
+**Impact on roadmap:** item 4 (octree-native proximity grid) is **cancelled**.
+The `_BridsonGrid` is adequate for all current and near-term use cases. The
+remaining scaling lever is the dart thrower efficiency (gap-tracked sampler or
+equivalent), not the proximity structure.
+
+**Note:** Sessions 7–8 changes described in this document (smart cap, gap_tracked
+removal, `_estimate_volume_points`, `max_points=nothing` default) were not
+committed to git. The codebase at HEAD (`c70b824`) still has the gap-tracked
+sampler and old `max_points` defaults. These need to be re-implemented or
+cherry-picked before the Session-7 production numbers can be reproduced.

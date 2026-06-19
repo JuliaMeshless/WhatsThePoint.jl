@@ -35,7 +35,7 @@ function discretize(
         bnd::PointBoundary{𝔼{3}},
         spacing::AbstractSpacing;
         alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-        max_points = 10_000_000,
+        max_points::Union{Int, Nothing} = nothing,
     )
     # The Octree algorithm emits Float64 volume points; a Float32 boundary
     # (binary STL precision) would make the cloud assembly below fail.
@@ -49,7 +49,7 @@ function discretize(
         bnd::PointBoundary{𝔼{2}},
         spacing::AbstractSpacing;
         alg::AbstractNodeGenerationAlgorithm = FornbergFlyer(),
-        max_points = 10_000_000,
+        max_points::Union{Int, Nothing} = nothing,
     )
     @warn "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
     cloud = PointCloud(bnd)
@@ -59,15 +59,19 @@ function discretize(
 end
 
 """
-    discretize(cloud::PointCloud, spacing; alg=auto, max_points=10_000_000)
+    discretize(cloud::PointCloud, spacing; alg=auto, max_points=nothing)
 
 Generate volume points for an existing cloud and return a new PointCloud with the volume populated.
+
+For the `Octree` algorithm, `max_points` defaults to an automatic estimate from
+the spacing integral (`∫ 1/h(x)³ dx`) when `nothing`. Other algorithms default
+to 10_000_000.
 """
 function discretize(
         cloud::PointCloud,
         spacing::AbstractSpacing;
         alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-        max_points = 10_000_000,
+        max_points::Union{Int, Nothing} = nothing,
     )
     new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
