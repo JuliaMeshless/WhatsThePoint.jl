@@ -140,6 +140,38 @@ end
     @test min_sep >= 0.75 * 0.15 - 1.0e-9
 end
 
+@testitem "Octree auto-estimates max_points when unset" setup = [
+        CommonImports, OctreeTestData,
+    ] begin
+    using Random
+    Random.seed!(2718)
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    spacing = ConstantSpacing(0.15m)
+    bnd = PointBoundary(mesh, spacing)
+    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
+
+    # max_points unset → the Octree algorithm estimates the cap from the
+    # spacing integral instead of erroring on `nothing` (regression: the
+    # default path was previously unreachable and crashed with a MethodError).
+    cloud = discretize(bnd, spacing; alg)
+    vol = points(WhatsThePoint.volume(cloud))
+
+    # A saturated Poisson-disk front fills ≈ 0.39× the spacing integral —
+    # a healthy, non-empty fill that does not depend on a hand-set cap.
+    @test length(vol) > 20
+
+    # The estimator returns a positive Int, and its 1.1× pad keeps the cap
+    # above the saturated count (so the front saturates, not truncates).
+    node_tree = WhatsThePoint.build_node_octree(
+        alg.triangle_octree, spacing, alg.alpha, alg.node_min_ratio,
+    )
+    classification = WhatsThePoint.classify_node_octree(node_tree, alg.triangle_octree)
+    est = WhatsThePoint._estimate_volume_points(node_tree, classification, spacing)
+    @test est isa Int
+    @test est > length(vol)
+end
+
 @testitem "Octree :bridson placement with graded spacing" setup = [
         CommonImports, OctreeTestData,
     ] begin

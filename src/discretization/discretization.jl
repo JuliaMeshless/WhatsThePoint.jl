@@ -7,7 +7,7 @@ include("algorithms/slak_kosec.jl")
 include("algorithms/octree.jl")
 
 """
-    discretize(bnd::PointBoundary, spacing; alg=auto, max_points=10_000_000)
+    discretize(bnd::PointBoundary, spacing; alg=auto, max_points=nothing)
 
 Generate volume points for the given boundary and return a new PointCloud.
 
@@ -16,7 +16,9 @@ Generate volume points for the given boundary and return a new PointCloud.
 
 # Keyword Arguments
 - `alg`: Discretization algorithm (default: `SlakKosec()` for 3D)
-- `max_points`: Maximum number of volume points to generate
+- `max_points`: Maximum number of volume points to generate. For the `Octree`
+  algorithm, defaults to an automatic estimate from the spacing integral
+  (`∫ 1/h(x)³ dx`) when `nothing`; other algorithms default to 10_000_000.
 
 # Example
 ```julia
