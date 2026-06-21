@@ -27,6 +27,39 @@ end
     end
 end
 
+@testitem "export_vtk with solution fields" setup = [TestData, CommonImports] begin
+    using StaticArrays: SVector
+    using Unitful: Pa
+
+    boundary = PointBoundary(TestData.BOX_PATH)
+    cloud = PointCloud(boundary)
+    n = length(cloud)
+
+    mktempdir() do tmpdir
+        # bare geometry export (point_type + surface_id + normals)
+        geo = joinpath(tmpdir, "geo")
+        export_vtk(geo, cloud)
+        @test isfile(geo * ".vtu")
+
+        # scalar (unitful) + vector solution fields, ordered like points(cloud)
+        sol = joinpath(tmpdir, "sol")
+        p = [(101325.0 + i) * Pa for i in 1:n]
+        u = [SVector(0.1i, 0.0, -0.1i) for i in 1:n]
+        export_vtk(sol, cloud; fields = ("p" => p, "U" => u))
+        @test isfile(sol * ".vtu")
+
+        # a single bare pair is accepted (no tuple needed)
+        one = joinpath(tmpdir, "one")
+        export_vtk(one, cloud; fields = "p" => p)
+        @test isfile(one * ".vtu")
+
+        # mismatched field length is rejected loudly
+        @test_throws DimensionMismatch export_vtk(
+            joinpath(tmpdir, "bad"), cloud; fields = ("bad" => [1.0, 2.0, 3.0],),
+        )
+    end
+end
+
 @testitem "save VTK boundary" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
 

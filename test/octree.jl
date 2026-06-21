@@ -110,8 +110,8 @@ end
 end
 
 @testitem "Octree :bridson placement enforces global separation" setup = [
-        CommonImports, OctreeTestData,
-    ] begin
+    CommonImports, OctreeTestData,
+] begin
     using Random
     using LinearAlgebra: norm
     using Unitful: ustrip
@@ -141,8 +141,8 @@ end
 end
 
 @testitem "Octree auto-estimates max_points when unset" setup = [
-        CommonImports, OctreeTestData,
-    ] begin
+    CommonImports, OctreeTestData,
+] begin
     using Random
     Random.seed!(2718)
 
@@ -173,8 +173,8 @@ end
 end
 
 @testitem "Octree :bridson placement with graded spacing" setup = [
-        CommonImports, OctreeTestData,
-    ] begin
+    CommonImports, OctreeTestData,
+] begin
     using Random
     using LinearAlgebra: norm
     using Unitful: ustrip
@@ -229,6 +229,62 @@ end
     octree = TriangleOctree(mesh; classify_leaves = true)
 
     @test_throws ArgumentError Octree(octree; boundary_oversampling = -1.0)
+end
+
+@testitem "Octree invalid max_growth throws" setup = [CommonImports, OctreeTestData] begin
+    mesh = OctreeTestData.unit_cube_mesh()
+    octree = TriangleOctree(mesh; classify_leaves = true)
+
+    @test_throws ArgumentError Octree(octree; max_growth = -0.1)
+    @test_throws ArgumentError Octree(mesh; max_growth = -0.1)
+end
+
+@testitem "Octree max_growth smooths steep spacing gradients" setup = [
+    CommonImports, OctreeTestData,
+] begin
+    using Random
+    using LinearAlgebra: norm
+    using Unitful: ustrip
+    using NearestNeighbors: KDTree, knn
+    import Meshes
+    Random.seed!(424242)
+
+    # Worst-neighbor spacing ratio: how abruptly d_NN changes between a point
+    # and its nearest neighbor. The gradient limiter should shrink it.
+    function max_neighbor_dnn_ratio(cloud)
+        pts = [Float64.(ustrip.(Meshes.to(p))) for p in points(cloud)]
+        tree = KDTree(pts)
+        idxs, dists = knn(tree, pts, 2, true)
+        dnn = [d[2] for d in dists]
+        return maximum(
+            max(dnn[i] / dnn[idxs[i][2]], dnn[idxs[i][2]] / dnn[i]) for i in eachindex(pts)
+        )
+    end
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    # Steep boundary layer: fine 0.04 at the wall, coarse 0.22 in the bulk,
+    # over a thin 0.15 layer — a gradient no meshless stencil wants raw.
+    spacing = BoundaryLayerSpacing(
+        points(PointBoundary(mesh)); at_wall = 0.04m, bulk = 0.22m, layer_thickness = 0.15m,
+    )
+    bnd = PointBoundary(mesh, spacing)
+
+    alg_raw = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
+    alg_lim = Octree(mesh; spacing, alpha = 1.0, placement = :bridson, max_growth = 0.15)
+
+    cloud_raw = discretize(bnd, spacing; alg = alg_raw)
+    cloud_lim = discretize(bnd, spacing; alg = alg_lim)
+
+    ratio_raw = max_neighbor_dnn_ratio(cloud_raw)
+    ratio_lim = max_neighbor_dnn_ratio(cloud_lim)
+
+    # The limiter must produce a strictly smoother field, and a clearly bounded
+    # worst-case neighbor ratio (steep-but-smooth).
+    @test ratio_lim < ratio_raw
+    @test ratio_lim < 2.5
+
+    # Limiting makes the transition band finer → at least as many points.
+    @test length(WhatsThePoint.volume(cloud_lim)) >= length(WhatsThePoint.volume(cloud_raw))
 end
 
 @testitem "Octree octree subdivision behavior" setup = [CommonImports, OctreeTestData] begin

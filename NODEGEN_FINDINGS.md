@@ -45,6 +45,55 @@ Two validation rungs are used throughout:
 
 ---
 
+## ✅ RESOLVED (2026-06-21) — coarse-spacing usability: `suggest_spacing` + bridson clamp-and-warn
+
+`:bridson` is the default placement (correct — it must be). Making it the
+default exposed a **step-0 usability failure**: on a **1×1×1 unit cube with
+`ConstantSpacing(1m)`**, `:bridson` returned **0 volume points, silently** — the
+entire interior lies within one disk radius (`bridson_factor·h = 0.75·1 =
+0.75 m`) of the boundary seeds, so every candidate is rejected. Unit-/small-
+domain geometries are extremely common, so a default sampler that yields nothing
+on "h ≈ domain size" was unusable. This is now fixed (landed on
+`shape_optimization_utils`); the previously-RED coarse-spacing tests are green
+again *without* pinning to `:random`.
+
+**What landed** (`src/discretization/spacing_guidance.jl`,
+wired into `src/discretization/algorithms/octree.jl`):
+
+1. **`suggest_spacing(mesh | boundary | "model.stl")`** — the "step 0" probe,
+   exported. A quick `du -sh`-style report of domain extent, enclosed volume,
+   facet count, and three spacing landmarks:
+   - `h_ceiling = L_min/(2·bridson_factor)` — at/above this the Poisson-disk
+     interior is empty (the hard limit);
+   - `h_baseline` — recommended start: ≈10 points across the shortest axis, or
+     `cbrt(volume/n_points)` capped below the ceiling when a budget is given;
+   - `h_fine = h_baseline/2`.
+   Returns a `NamedTuple` so it composes directly into `discretize`.
+2. **Bridson never fails silently** — before the node octree is built (its
+   resolution is spacing-driven, so the check must precede subdivision),
+   `_guard_coarse_spacing` probes the *interior* min spacing on a grid. When it
+   is at/above `h_ceiling`, it emits a loud `@warn` (reporting the ceiling and
+   the clamp target) and wraps the spacing in `_ClampedSpacing` capped at
+   `L_min/10`, so generation still yields a usable cloud. Spacings that are
+   already fillable are passed through untouched. A post-bridson
+   `isempty → throw ArgumentError` is the belt-and-suspenders for degenerate /
+   non-watertight domains the interior probe can't catch.
+3. **Contract chosen: clamp + loud warn** (over warn+refuse). Rationale:
+   "bridson must work out-of-the-box on everything" + the "ok-ish first
+   estimate, then refine" workflow both favor producing *something* usable with
+   a loud diagnostic over throwing and forcing a retry. The interior-grid probe
+   (not the field's boundary minimum `at_wall`) is deliberate: a boundary-layer
+   field bottoms out only in an infinitesimal wall shell that can't host a
+   packing, so the interior sample is the honest "is this fillable?" test.
+
+The coarse-spacing tests in `test/octree.jl` ("Octree with different spacing
+types", "points are inside", "#76 high aspect ratio", "promotes Float32 STL
+boundaries") now pass via the clamp; `test/spacing_guidance.jl` covers the new
+helper and the warn path. Everything else in this document (direct pipeline,
+gradient limiter, smart cap, etc.) stands unchanged.
+
+---
+
 ## 2. Current state — what is committed and works (HEAD `08dd8eb`)
 
 The branch is **+3918 / −318 lines over `main`** across 29 files. Generation
@@ -59,6 +108,7 @@ relaxation tool. The following are landed in git and exercised by tests:
 | **Parallel leaf classification** (`tmap`) | `src/octree/spatial_octree.jl` | ✅ landed `08dd8eb` (12.5× on classification) |
 | **Parallel `_bridson_h_min`** (`tmapreduce`) | `octree.jl` | ✅ landed 2026-06-20 (was still sequential; doc had over-claimed) |
 | **Smart cap** — `max_points = nothing` default; Octree auto-estimates `⌈1.1·∑ box_vol/h³⌉` (`_estimate_volume_points`) | `octree.jl`, `discretization.jl` | ✅ landed 2026-06-20 (see §3 — `08dd8eb` shipped only the `nothing` default, which crashed) |
+| **Gradient-limited spacing** (`max_growth`) — Lipschitz envelope of `h(x)` on octree leaves + node refinement: steep-but-smooth grading for CFD/RBF-FD | `octree.jl` | ✅ landed 2026-06-21 (see §4a) |
 | **Exact pseudonormal isinside** (Bærentzen & Aanæs) + signed-volume inside-out guard | `src/octree/triangle_octree.jl`, `geometric_utils.jl` | ✅ landed, tested |
 | **`ClippedSpacingForce` repel default** (repulsion-only) + `cv_target`/`stall_after` stopping | `src/repel.jl`, `repel_forces.jl` | ✅ landed, tested |
 | **Spacing-fidelity metrics** (`spacing_metrics`, `spacing_fidelity_metrics`) | `src/metrics.jl` | ✅ landed |
@@ -184,6 +234,77 @@ discretizing bunny.stl" (Davide) and are slated for eventual removal in favour
 of the direct pipeline — but removal touches the 2D story (`FornbergFlyer` is
 the *only* 2D path), CLAUDE.md, docs, examples, and tests. **Out of scope for
 this PR**; do it as a focused follow-up.
+
+---
+
+## 4a. Steep spacing gradients & the gradient limiter (`max_growth`, 2026-06-21)
+
+Steep spacing variation (boundary layers, wakes, shocks) is the crucial CFD
+case. How the pipeline handles it, across the three independent layers:
+
+1. **Separation correctness — exact at any steepness.** The Bridson grid scans
+   radius `r_c = factor·h(c)` around each candidate and rejects within
+   `min(r_c, r_j)`; whichever radius is smaller, every true violator lies within
+   `r_c`, so the scan is sufficient regardless of gradient. (The old §"cross-leaf
+   separation at gradients" worry is moot — the global grid is exact.)
+2. **Octree subdivision — center-only criterion + 2:1 balance.** Adjacent leaf
+   *sizes* grade ≤2×, but this bounds the leaf structure, **not** the point
+   density.
+3. **Sampler density — followed exact `h(c)` with no grading limit (the gap).**
+   A steep prescribed `h` produced an abrupt density jump: points pack at the
+   fine spacing right up to the transition, then switch — a non-smooth `d_NN`
+   field that distorts RBF-FD stencils straddling it. Measured on the cavity
+   with a steep BL: worst adjacent-point `d_NN` ratio **4.25×**.
+
+Practical ceilings (unchanged): proximity-grid memory `(L/h_min)³` (coarsens
+past 134M cells); `BoundaryLayerSpacing` is a fixed-shape sigmoid (smooth,
+bounded, but *not* geometric BL growth — can't express "wall 1e-5, grow 1.1×/
+layer"); `LogLike` →0 at the wall (needs a floor).
+
+**Landed fix — gradient-limited spacing (`Octree(...; max_growth=g)`).** Replaces
+the prescribed `h₀(x)` with its `g`-Lipschitz envelope
+`h(x) = minᵧ(h₀(y) + g·‖x−y‖)` — the steepest field ≤ `h₀` that grows no faster
+than `g` (CFD growth ratios 1.1–1.2 ⇒ `g ≈ 0.1–0.2`). Implementation
+(`src/discretization/algorithms/octree.jl`):
+- `_gradient_limit_field` — multi-source min-plus (Bellman/Jacobi) relaxation
+  over a k-NN graph of leaf centres, swept to a fixpoint, parallel `tmap`.
+- `_apply_gradient_limit` — because limiting can make the field *finer* than
+  `h₀` in a transition band, it **refines** any leaf the new field out-resolves
+  (`box_size > alpha·h`) and re-limits, to a fixpoint. This is the
+  "node-refinement-for-steep-but-smooth" mechanism.
+- `_LeafSpacing` — serves the limited field to the sampler, grid sizing, and
+  point-count estimate via `find_leaf` lookup, so the whole pipeline is
+  consistent.
+- No-op (no refinement, no cost) when `h₀` is already `g`-smooth — which the
+  current gentle bunny BL configs (`g≈0.1`) already are.
+
+**Measured (cavity, steep BL at_wall 0.03 / bulk 0.18 / layer 0.12, `g=0.15`):**
+
+| metric | `max_growth=0` | `max_growth=0.15` |
+|---|---|---|
+| worst adjacent `d_NN` ratio | **4.25×** | **1.67×** |
+| mean adjacent `d_NN` ratio | 1.16 | 1.055 |
+| node-octree leaves | 36,989 | 100,878 (auto-refined) |
+| volume points | 3,961 | 21,591 (finer band) |
+
+Tested (`test/octree.jl`: "max_growth smooths steep spacing gradients",
+"invalid max_growth throws").
+
+**Known limitations / next levers (honest):**
+- The limited field is **piecewise-constant per leaf** (a `find_leaf` lookup),
+  so a point near a leaf face sees a stepped `h` — the residual source of the
+  1.67× worst-case vs the ideal ~1.15×. Sub-leaf interpolation (store the
+  source gradient, evaluate `h_leaf + g·dist`) would tighten it; not yet built.
+- **Cost**: the refinement loop re-runs the *full* `classify_node_octree` each
+  round (~10.7s on the cavity at 100k leaves). Incremental classification of
+  only the new leaves is the obvious optimization before production-scale steep
+  runs. Each Jacobi sweep is O(N·k) parallel; #sweeps ≈ band width in leaves.
+- k-NN propagation crosses only the leaf graph; a thin exterior wall between two
+  interior regions is bridged if centres are k-NN close (a geodesic limiter
+  would be exact — not needed yet).
+- Still missing the *modeling* side: a **geometric `BoundaryLayerSpacing`** mode
+  (`first_height` + `growth_ratio` + `n_layers`) to *prescribe* true CFD layers,
+  which the limiter then guarantees smooth into the bulk. Natural follow-up.
 
 ---
 

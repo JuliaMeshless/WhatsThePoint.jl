@@ -113,7 +113,7 @@ function spacing_fidelity_metrics(
 
     μ = mean(dnn_h)
     cv = std(dnn_h) / μ
-    qs = quantile(dnn_h, [0.05, 0.50, 0.95])
+    qs = quantile(dnn_h, [0.05, 0.5, 0.95])
 
     return (;
         mean_dnn_h = μ,

@@ -151,7 +151,7 @@ end
         collect(Meshes.vertices(mesh)),
         [
             connect(reverse(Meshes.indices(c)), Meshes.Triangle)
-            for c in Meshes.topology(mesh)
+                for c in Meshes.topology(mesh)
         ],
     )
     @test _signed_volume(Float64, inverted) ≈ -1.0

@@ -1,6 +1,6 @@
 @testitem "sample_surface Poisson-disk guarantees on cube" setup = [
-        CommonImports, OctreeTestData,
-    ] begin
+    CommonImports, OctreeTestData,
+] begin
     Random.seed!(2024)
 
     mesh = OctreeTestData.unit_cube_mesh()
@@ -40,8 +40,8 @@
 end
 
 @testitem "PointBoundary(mesh, spacing) Poisson-disk constructor" setup = [
-        CommonImports, OctreeTestData,
-    ] begin
+    CommonImports, OctreeTestData,
+] begin
     Random.seed!(99)
 
     mesh = OctreeTestData.unit_cube_mesh()

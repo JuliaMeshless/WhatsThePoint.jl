@@ -83,7 +83,7 @@ export AbstractSpacing, ConstantSpacing, LogLike, BoundaryLayerSpacing
 
 include("discretization/discretization.jl")
 export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, Octree
-export discretize
+export discretize, suggest_spacing
 
 include("surface_sampling.jl")
 export sample_surface
@@ -98,7 +98,7 @@ export repel
 include("metrics.jl")
 
 include("io.jl")
-export import_surface, visualize, save
+export import_surface, visualize, save, export_vtk
 
 # visualize function is defined in WhatsThePointMakieExt when Makie is loaded
 function visualize end

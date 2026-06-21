@@ -344,5 +344,5 @@ end
     # assigning to an imported name is an error.
     culled_metrics = metrics(culled; k = 2)
     smin = minimum(ustrip.(spacing.(points(culled))))
-    @test ustrip(culled_metrics.separation) >= 0.5 * smin * (1 - 1e-6)
+    @test ustrip(culled_metrics.separation) >= 0.5 * smin * (1 - 1.0e-6)
 end
