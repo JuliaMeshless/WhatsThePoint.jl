@@ -942,4 +942,3 @@ function _discretize_volume(
     # Convert to Point objects
     return PointVolume([Point(pt...) for pt in raw_points])
 end
-
