@@ -366,18 +366,26 @@ end
 end
 
 @testitem "Octree discretization promotes Float32 STL boundaries" setup = [TestData, CommonImports] begin
-    # Binary STL stores Float32 by spec; the Octree algorithm emits Float64
-    # volume points. discretize must promote the boundary itself instead of
-    # failing to assemble a single-CRS PointCloud (callers previously had to
-    # promote the mesh by hand — the workaround in the validate scripts).
+    # The Octree algorithm emits Float64 volume points. A boundary with a
+    # different mactype (e.g. Float32 from binary STL) must still assemble into
+    # a single-CRS PointCloud — the PointCloud constructor promotes boundary
+    # and volume to their common type automatically.
+    #
+    # GeoIO's output mactype is version-dependent (newer Meshes/CoordRefSystems
+    # promote binary STL to Float64 on load), so we explicitly rebuild the mesh
+    # with Float32 coordinates to guarantee the mixed-mactype path is
+    # exercised regardless of the resolved dependency versions.
     mesh_raw = GeoIO.load(TestData.BOX_PATH).geometry
-    bnd = PointBoundary(mesh_raw)
+    to_f32(p) = (c = Meshes.coords(p); Meshes.Point(Float32(ustrip(c.x)), Float32(ustrip(c.y)), Float32(ustrip(c.z))))
+    mesh_f32 = Meshes.SimpleMesh(to_f32.(Meshes.vertices(mesh_raw)), Meshes.topology(mesh_raw))
+    bnd = PointBoundary(mesh_f32)
     @test CoordRefSystems.mactype(Meshes.crs(first(points(bnd)))) === Float32
 
-    alg = Octree(mesh_raw)
+    alg = Octree(mesh_f32)
     cloud = discretize(bnd, ConstantSpacing(3.0m); alg, max_points = 50)
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
+    # Cloud mactype is the promoted common type (Float32 + Float64 -> Float64)
     @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
 
     # Promotion preserves surface names (and the boundary point count).

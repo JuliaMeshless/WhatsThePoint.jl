@@ -943,25 +943,3 @@ function _discretize_volume(
     return PointVolume([Point(pt...) for pt in raw_points])
 end
 
-"""
-    _ensure_float64_boundary(bnd::PointBoundary) -> PointBoundary
-
-Promote a boundary with a non-Float64 machine type to Float64, preserving
-surface names, normals, and areas. Binary STL stores Float32 by spec, while
-the Octree algorithm generates Float64 volume points and `PointCloud`
-requires one CRS across boundary and volume — without promotion the cloud
-assembly fails. Returns `bnd` unchanged when already Float64.
-"""
-function _ensure_float64_boundary(bnd::PointBoundary{M, C}) where {M, C}
-    CoordRefSystems.mactype(C) === Float64 && return bnd
-    promoted = [
-        name => PointSurface(
-                [Point((1.0 .* to(p))...) for p in points(surf)],
-                collect(normal(surf)),
-                [1.0 * a for a in area(surf)],
-            ) for (name, surf) in namedsurfaces(bnd)
-    ]
-    isempty(promoted) && return bnd
-    surfaces = LittleDict{Symbol, typeof(last(first(promoted)))}(promoted...)
-    return PointBoundary(surfaces)
-end

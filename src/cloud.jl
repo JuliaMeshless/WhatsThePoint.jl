@@ -25,6 +25,51 @@ end
 
 PointCloud(filepath::String) = PointCloud(PointBoundary(filepath))
 
+"""
+    PointCloud(boundary::PointBoundary{M,C1}, volume::PointVolume{M,C2}, topo)
+
+When boundary and volume carry different machine types (e.g. a Float32 boundary
+from binary STL combined with Float64 volume points from the Octree algorithm),
+promote both to their common promoted type so a single-CRS `PointCloud` can be
+assembled. This makes the cloud construction robust to any `Real` mactype
+combination rather than failing on a CRS mismatch.
+"""
+function PointCloud(
+        boundary::PointBoundary{M, C1},
+        volume::PointVolume{M, C2},
+        topo::T = NoTopology(),
+    ) where {M, C1, C2, T <: AbstractTopology}
+    TC = promote_type(CoordRefSystems.mactype(C1), CoordRefSystems.mactype(C2))
+    bnd = _promote_mactype(boundary, TC)
+    vol = _promote_mactype(volume, TC)
+    return PointCloud(bnd, vol, topo)
+end
+
+# --- mactype promotion helpers ---
+
+@inline _promote_mactype_point(p::Point, ::Type{T}) where {T} = Point((T.(to(p)))...)
+
+function _promote_mactype(surf::PointSurface{M, C}, ::Type{T}) where {M, C, T}
+    CoordRefSystems.mactype(C) === T && return surf
+    pts = [_promote_mactype_point(p, T) for p in points(surf)]
+    nrm = [T.(n) for n in normal(surf)]
+    ar = [one(T) * a for a in area(surf)]
+    return PointSurface(pts, nrm, ar)
+end
+
+function _promote_mactype(bnd::PointBoundary{M, C}, ::Type{T}) where {M, C, T}
+    CoordRefSystems.mactype(C) === T && return bnd
+    promoted = [name => _promote_mactype(surf, T) for (name, surf) in namedsurfaces(bnd)]
+    surfaces = LittleDict{Symbol, typeof(last(first(promoted)))}(promoted...)
+    return PointBoundary(surfaces)
+end
+
+function _promote_mactype(vol::PointVolume{M, C}, ::Type{T}) where {M, C, T}
+    CoordRefSystems.mactype(C) === T && return vol
+    pts = [_promote_mactype_point(p, T) for p in points(vol)]
+    return PointVolume(pts, topology(vol))
+end
+
 Base.length(cloud::PointCloud) = length(boundary(cloud)) + length(volume(cloud))
 Base.size(cloud::PointCloud) = (length(cloud),)
 Base.getindex(cloud::PointCloud, name::Symbol) = boundary(cloud)[name]
