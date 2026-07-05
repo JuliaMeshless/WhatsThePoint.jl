@@ -14,16 +14,17 @@ concrete implementations.
 abstract type AbstractSpacing end
 abstract type VariableSpacing <: AbstractSpacing end
 
-# O(log n) nearest-neighbor query via KDTree. Distances come back in the
-# tree's (= boundary data's) machine type regardless of the query point's.
+# O(log n) nearest-neighbor query via KDTree. The tree is built in the
+# boundary's length unit, so the query point converts to that unit too.
 function _min_distance(p, boundary, tree::KDTree)
-    q = ustrip.(to(p))
-    idxs, dists = knn(tree, q, 1)
-    return dists[1] * unit(eltype(to(first(boundary))))
+    lu = length_unit(first(boundary))
+    idxs, dists = knn(tree, to_numerical(p, lu), 1)
+    return dists[1] * lu
 end
 
 function _build_boundary_tree(boundary_points)
-    coords = [ustrip.(to(p)) for p in boundary_points]
+    lu = length_unit(first(boundary_points))
+    coords = [to_numerical(p, lu) for p in boundary_points]
     return KDTree(coords)
 end
 
@@ -37,6 +38,12 @@ struct ConstantSpacing{L <: Unitful.Length} <: AbstractSpacing
 end
 (s::ConstantSpacing)() = s.Δx
 (s::ConstantSpacing)(_) = s.Δx
+
+# Constant spacing needs no Point round-trip per evaluation.
+function numerical_spacing(s::ConstantSpacing, len_unit)
+    h = Float64(ustrip(len_unit, s.Δx))
+    return _ -> h
+end
 
 """
     LogLike <: VariableSpacing
@@ -123,8 +130,9 @@ function (s::BoundaryLayerSpacing)(p::Union{Point, Vec})
     x = _min_distance(p, s.boundary, s.tree)
     d = ustrip(x)
 
-    # Sigmoid transition: center at δ/2, width ≈ δ/6 (smooth S-curve over boundary layer)
-    δ = ustrip(s.layer_thickness)
+    # Sigmoid transition: center at δ/2, width ≈ δ/6 (smooth S-curve over
+    # boundary layer). δ converts to the distance's unit so the ratio is real.
+    δ = Float64(ustrip(unit(x), s.layer_thickness))
     center = δ / 2
     width = δ / 6
 

@@ -14,7 +14,7 @@ function _discretize_volume(
         ::FornbergFlyer;
         max_points::Union{Int, Nothing} = nothing,
     ) where {C}
-    max_points = @something(max_points, 10_000_000)
+    max_points = _resolve_max_points(max_points)
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
     xmin, _ = to(bbox.min)
@@ -35,15 +35,16 @@ function _discretize_volume(
     new_points[dotnr] = Point(p.coords.x, heights[current_id])
 
     # Build BallTree using NearestNeighbors.jl
-    pdp_matrix = reduce(hcat, [SVector(ustrip.(to(pt))...) for pt in pdp])
+    lu = length_unit(C)
+    pdp_matrix = reduce(hcat, [to_numerical(pt, lu) for pt in pdp])
     tree = BallTree(pdp_matrix)
-    r_val = ustrip(r)
+    r_val = ustrip(lu, r)
 
     prog = ProgressUnknown(; desc = "generating nodes", spinner = true)
     while new_points[dotnr].coords.y < bbox.max.coords.y && dotnr < max_points
         ProgressMeter.next!(prog; spinner = spinner_icons)
 
-        p_vec = SVector(ustrip.(to(p))...)
+        p_vec = to_numerical(p, lu)
         inside_ids = NearestNeighbors.inrange(tree, p_vec, r_val)
 
         dist = p .- pdp[inside_ids]
@@ -60,7 +61,7 @@ function _discretize_volume(
     end
 
     if dotnr == max_points && new_points[dotnr].coords.y < bbox.max.coords.y
-        @warn "discretization stopping early, reached max points ($max_points)"
+        _warn_max_points_reached(max_points)
     end
 
     new_points = filter(x -> isinside(x, cloud), new_points[1:dotnr])

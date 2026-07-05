@@ -34,6 +34,8 @@ const Angle{T} = Union{Quantity{T, NoDims, typeof(u"rad")}, Quantity{T, NoDims, 
 include("utils.jl")
 export metrics, spacing_metrics, spacing_fidelity_metrics
 
+include("numerical.jl")
+
 include("geometry.jl")
 
 # Octree spatial indexing

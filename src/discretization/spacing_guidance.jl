@@ -58,7 +58,7 @@ function suggest_spacing(
     bmin, bmax = _compute_bbox(T, mesh)
     ext = bmax - bmin
     V = abs(_signed_volume(T, mesh))
-    lu = unit(Meshes.to(first(Meshes.vertices(mesh)))[1])
+    lu = length_unit(crs(mesh))
     return _spacing_guidance(
         ext, V, Meshes.nelements(mesh), lu;
         n_points, bridson_factor = T(bridson_factor), verbose, name,
@@ -76,8 +76,8 @@ function suggest_spacing(
     T = CoordRefSystems.mactype(C)
     pts = points(bnd)
     isempty(pts) && throw(ArgumentError("boundary has no points"))
-    lu = unit(Meshes.to(first(pts))[1])
-    coords = [SVector{3, T}(ustrip.(Meshes.to(p))...) for p in pts]
+    lu = length_unit(first(pts))
+    coords = [to_numerical(p, lu) for p in pts]
     bmin = reduce((a, b) -> min.(a, b), coords)
     bmax = reduce((a, b) -> max.(a, b), coords)
     ext = bmax - bmin
@@ -174,9 +174,9 @@ function (s::_ClampedSpacing)(p::Union{Point, Vec})
     return h < s.hmax ? h : s.hmax
 end
 
-function _extract_min_spacing(s::_ClampedSpacing)
-    im = _extract_min_spacing(s.inner)
-    hm = float(ustrip(s.hmax))
+function _extract_min_spacing(s::_ClampedSpacing, len_unit)
+    im = _extract_min_spacing(s.inner, len_unit)
+    hm = Float64(ustrip(len_unit, s.hmax))
     return isnothing(im) ? hm : min(im, hm)
 end
 
@@ -187,19 +187,19 @@ end
 # own, so the boundary minimum is misleadingly optimistic. The interior grid
 # reflects what the bulk of the volume actually demands; if even its finest
 # sample is too coarse, the interior is unfillable and we clamp.
-function _probe_min_spacing(spacing, bmin::SVector{3, T}, bmax::SVector{3, T}; n::Int = 5) where {T}
+function _probe_min_spacing(h, bmin::SVector{3, T}, bmax::SVector{3, T}; n::Int = 5) where {T}
     ext = bmax - bmin
     hmin = typemax(T)
     for i in 0:(n - 1), j in 0:(n - 1), k in 0:(n - 1)
         t = SVector{3, T}(2i + 1, 2j + 1, 2k + 1) / (2n)
-        h = _spacing_value(T, spacing, bmin + t .* ext)
-        h < hmin && (hmin = h)
+        h_local = h(bmin + t .* ext)
+        h_local < hmin && (hmin = h_local)
     end
     return hmin
 end
 
 """
-    _guard_coarse_spacing(spacing, tri_octree, bridson_factor) -> spacing
+    _guard_coarse_spacing(spacing, tri_octree, bridson_factor, len_unit) -> spacing
 
 Bridson safety net. When the finest prescribed spacing over the domain is at or
 above the Poisson-disk ceiling `L_min/(2·bridson_factor)` — i.e. a saturated
@@ -208,16 +208,16 @@ front would leave the interior empty — emit a loud `@warn` and return a
 still yields a cloud. Otherwise returns `spacing` unchanged (the request is
 viable and is respected).
 """
-function _guard_coarse_spacing(spacing, tri_octree, bridson_factor)
+function _guard_coarse_spacing(spacing, tri_octree, bridson_factor, len_unit)
     bmin = tri_octree.mesh_bbox_min
     bmax = tri_octree.mesh_bbox_max
     Lmin = minimum(bmax - bmin)
     h_ceiling = Lmin / (2 * bridson_factor)
-    hmin_domain = _probe_min_spacing(spacing, bmin, bmax)
+    hmin_domain = _probe_min_spacing(numerical_spacing(spacing, len_unit), bmin, bmax)
     hmin_domain < h_ceiling && return spacing
 
     h_target = Lmin / 10
-    lu = unit(spacing(Point((0.5 .* (bmin + bmax))...)))
+    lu = len_unit
     @warn(
         "Spacing too coarse for this domain — clamping so generation is not empty. " *
             "The finest prescribed spacing exceeds the Poisson-disk ceiling " *

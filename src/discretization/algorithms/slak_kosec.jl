@@ -75,7 +75,7 @@ function _discretize_volume(
         alg::SlakKosec;
         max_points::Union{Int, Nothing} = nothing,
     ) where {C}
-    max_points = @something(max_points, 10_000_000)
+    max_points = _resolve_max_points(max_points)
     seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
     new_points = Point{𝔼{3}, C}[]
@@ -92,7 +92,7 @@ function _discretize_volume(
                 _, dist = searchdists(c, search_method)
                 if first(dist) > r
                     if i >= max_points
-                        @warn "discretization stopping early, reached max points ($max_points)"
+                        _warn_max_points_reached(max_points)
                         return PointVolume(new_points)
                     end
                     push!(seeds, c)

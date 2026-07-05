@@ -44,6 +44,8 @@ function sample_surface(
     n_tri = nelements(mesh)
     n_tri > 0 || throw(ArgumentError("mesh has no elements"))
     f = T(factor)
+    len_unit = length_unit(crs(mesh))
+    h = numerical_spacing(spacing, len_unit)
 
     # Triangle areas (for area-weighted sampling) and domain bounds.
     tri_areas = Vector{T}(undef, n_tri)
@@ -55,7 +57,7 @@ function sample_surface(
         tri_areas[i] = norm(cross(v2 - v1, v3 - v1)) / 2
         gmin = min.(gmin, min.(v1, min.(v2, v3)))
         gmax = max.(gmax, max.(v1, max.(v2, v3)))
-        r_min = min(r_min, f * _spacing_value(T, spacing, (v1 + v2 + v3) / 3))
+        r_min = min(r_min, f * h((v1 + v2 + v3) / 3))
     end
     cum_areas = cumsum(tri_areas)
     total_area = cum_areas[end]
@@ -75,7 +77,7 @@ function sample_surface(
         su = sqrt(rand(T))
         v = rand(T)
         c = (1 - su) * v1 + su * (1 - v) * v2 + su * v * v3
-        r_c = f * _spacing_value(T, spacing, c)
+        r_c = f * h(c)
         if _bridson_separated(grid, pts, rs, c, r_c)
             push!(pts, c)
             push!(rs, r_c)
@@ -90,8 +92,7 @@ function sample_surface(
     length(pts) >= max_points &&
         @warn "Surface sampling truncated by max_points before saturation — the surface is under-sampled" max_points
 
-    len_unit = Unitful.unit(Meshes.to(first(Meshes.vertices(mesh)))[1])
-    sample_points = [Point((c .* len_unit)...) for c in pts]
+    sample_points = from_numerical(pts, len_unit)
     sample_normals = [_get_triangle_normal(T, mesh, t) for t in tri_of]
     # Total-area-preserving shares, proportional to the local disk area.
     w = rs .^ 2

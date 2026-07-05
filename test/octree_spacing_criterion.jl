@@ -1,13 +1,14 @@
 # Tests for spacing-driven octree subdivision criterion
 
 @testitem "SpacingCriterion construction and should_subdivide" setup = [CommonImports] begin
-    using WhatsThePoint: SpacingCriterion, SpatialOctree, should_subdivide, subdivide!, box_size
+    using WhatsThePoint: SpacingCriterion, SpatialOctree, should_subdivide, subdivide!,
+        box_size, numerical_spacing
 
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
-    spacing = ConstantSpacing(1.0m)
+    h = numerical_spacing(ConstantSpacing(1.0m), m)
 
-    c = SpacingCriterion(spacing, 10.0; alpha = 2.0, min_ratio = 1.0e-6)
+    c = SpacingCriterion(h, 10.0; alpha = 2.0, min_ratio = 1.0e-6)
     @test c.alpha == 2.0
     @test c.absolute_min ≈ 10.0 * 1.0e-6
 
@@ -15,33 +16,35 @@
     @test should_subdivide(c, octree, 1) == true
 
     # With large absolute_min: h_box <= absolute_min → false (early exit)
-    c_large_min = SpacingCriterion(spacing, 100.0; alpha = 2.0, min_ratio = 1.0)
+    c_large_min = SpacingCriterion(h, 100.0; alpha = 2.0, min_ratio = 1.0)
     @test c_large_min.absolute_min ≈ 100.0
     @test should_subdivide(c_large_min, octree, 1) == false
 
     # With very large alpha: h_box <= alpha * h_local → false
-    c_large_alpha = SpacingCriterion(spacing, 10.0; alpha = 20.0, min_ratio = 1.0e-6)
+    c_large_alpha = SpacingCriterion(h, 10.0; alpha = 20.0, min_ratio = 1.0e-6)
     @test should_subdivide(c_large_alpha, octree, 1) == false
 end
 
 @testitem "SpacingCriterion can_subdivide" setup = [CommonImports] begin
-    using WhatsThePoint: SpacingCriterion, SpatialOctree, can_subdivide, box_size
+    using WhatsThePoint: SpacingCriterion, SpatialOctree, can_subdivide, box_size,
+        numerical_spacing
 
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
-    spacing = ConstantSpacing(1.0m)
+    h = numerical_spacing(ConstantSpacing(1.0m), m)
 
     # box_size=10 > absolute_min=1e-5 → true
-    c = SpacingCriterion(spacing, 10.0; alpha = 2.0, min_ratio = 1.0e-6)
+    c = SpacingCriterion(h, 10.0; alpha = 2.0, min_ratio = 1.0e-6)
     @test can_subdivide(c, octree, 1) == true
 
     # box_size=10 <= absolute_min=100 → false
-    c_large = SpacingCriterion(spacing, 100.0; alpha = 2.0, min_ratio = 1.0)
+    c_large = SpacingCriterion(h, 100.0; alpha = 2.0, min_ratio = 1.0)
     @test can_subdivide(c_large, octree, 1) == false
 end
 
 @testitem "SpacingCriterion h_local near-zero early exit" setup = [CommonImports] begin
-    using WhatsThePoint: SpacingCriterion, SpatialOctree, should_subdivide, AbstractSpacing
+    using WhatsThePoint: SpacingCriterion, SpatialOctree, should_subdivide, AbstractSpacing,
+        numerical_spacing
 
     # Spacing that returns near-zero to trigger h_local <= eps(T) path
     struct TinySpacing <: AbstractSpacing end
@@ -50,7 +53,7 @@ end
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
-    c = SpacingCriterion(TinySpacing(), 10.0; alpha = 2.0, min_ratio = 1.0e-6)
+    c = SpacingCriterion(numerical_spacing(TinySpacing(), m), 10.0; alpha = 2.0, min_ratio = 1.0e-6)
     @test should_subdivide(c, octree, 1) == false
 end
 

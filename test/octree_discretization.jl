@@ -11,8 +11,9 @@ end
 @testitem "_extract_min_spacing methods" setup = [CommonImports, OctreeTestData] begin
     using WhatsThePoint: _extract_min_spacing, AbstractSpacing
 
-    # ConstantSpacing
-    @test _extract_min_spacing(ConstantSpacing(2.5m)) ≈ 2.5
+    # ConstantSpacing (values convert to the requested length unit)
+    @test _extract_min_spacing(ConstantSpacing(2.5m), m) ≈ 2.5
+    @test _extract_min_spacing(ConstantSpacing(2.5m), u"mm") ≈ 2500.0
 
     # BoundaryLayerSpacing
     mesh = OctreeTestData.unit_cube_mesh()
@@ -23,11 +24,11 @@ end
         bulk = 3.0m,
         layer_thickness = 1.5m,
     )
-    @test _extract_min_spacing(bls) ≈ 0.3
+    @test _extract_min_spacing(bls, m) ≈ 0.3
 
     # Fallback for unknown spacing type
     struct CustomSpacing <: AbstractSpacing end
-    @test _extract_min_spacing(CustomSpacing()) === nothing
+    @test _extract_min_spacing(CustomSpacing(), m) === nothing
 end
 
 @testitem "_allocate_counts_by_volume edge cases" setup = [CommonImports] begin

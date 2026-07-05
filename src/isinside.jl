@@ -44,13 +44,14 @@ function _validate_polygon_ordering(pts::AbstractVector{<:Point{𝔼{2}, C}}) wh
     # Signed area via shoelace formula — zero area indicates self-intersecting
     # (unordered) vertices or collinear points
     T = CoordRefSystems.mactype(C)
+    lu = length_unit(C)
+    vs = [to_numerical(p, lu) for p in pts]
     sa = zero(T)
-    xmin = xmax = ustrip(to(pts[1])[1])
-    ymin = ymax = ustrip(to(pts[1])[2])
+    xmin = xmax = vs[1][1]
+    ymin = ymax = vs[1][2]
     for i in 1:n
         j = mod1(i + 1, n)
-        xi, yi = ustrip(to(pts[i])[1]), ustrip(to(pts[i])[2])
-        xj, yj = ustrip(to(pts[j])[1]), ustrip(to(pts[j])[2])
+        (xi, yi), (xj, yj) = vs[i], vs[j]
         sa += xi * yj - xj * yi
         xmin = min(xmin, xi)
         xmax = max(xmax, xi)

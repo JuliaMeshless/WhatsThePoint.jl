@@ -4,39 +4,36 @@
 # a prescribed spacing function, enabling spacing-aware point generation.
 
 """
-    SpacingCriterion{T<:Real, S} <: SubdivisionCriterion
+    SpacingCriterion{T<:Real, F} <: SubdivisionCriterion
 
 Octree subdivision criterion based on local spacing requirements.
 
-Subdivides boxes where `h_box > alpha * h_spacing(center)`, ensuring the octree
+Subdivides boxes where `h_box > alpha * h(center)`, ensuring the octree
 resolution is fine enough to properly represent the spacing function.
 
 # Fields
-- `spacing::S`: Spacing function object
+- `h::F`: Numerical spacing function `(SVector{3, Float64}) -> Float64` (wrap
+  an [`AbstractSpacing`](@ref) via [`numerical_spacing`](@ref))
 - `alpha::T`: Subdivision aggressiveness factor
 - `absolute_min::T`: Absolute minimum box size (prevents infinite subdivision)
 
 # Algorithm
 For each octree box:
-1. Query `h_local = spacing(box_center)`
+1. Query `h_local = h(box_center)`
 2. If `h_box > alpha * h_local`, subdivide
 3. Stop if `h_box ≤ absolute_min`
 
 Smaller `alpha` values create finer octrees (more aggressive subdivision).
 """
-struct SpacingCriterion{T <: Real, S} <: SubdivisionCriterion
-    spacing::S
+struct SpacingCriterion{T <: Real, F} <: SubdivisionCriterion
+    h::F
     alpha::T
     absolute_min::T
 end
 
-function SpacingCriterion(spacing, diagonal::Real; alpha = 2, min_ratio = 1.0e-6)
+function SpacingCriterion(h, diagonal::Real; alpha = 2, min_ratio = 1.0e-6)
     T = typeof(float(diagonal))
-    return SpacingCriterion{T, typeof(spacing)}(spacing, T(alpha), T(diagonal) * T(min_ratio))
-end
-
-@inline function _spacing_value(::Type{T}, spacing, p::SVector{3, T}) where {T}
-    return T(ustrip(spacing(Point(p...))))
+    return SpacingCriterion{T, typeof(h)}(h, T(alpha), T(diagonal) * T(min_ratio))
 end
 
 function should_subdivide(c::SpacingCriterion{T}, tree, box_idx) where {T}
@@ -44,7 +41,7 @@ function should_subdivide(c::SpacingCriterion{T}, tree, box_idx) where {T}
     h_box <= c.absolute_min && return false
 
     center = box_center(tree, box_idx)
-    h_local = _spacing_value(T, c.spacing, center)
+    h_local = c.h(center)
     h_local <= eps(T) && return false
 
     return h_box > c.alpha * h_local
@@ -57,7 +54,7 @@ can_subdivide(c::SpacingCriterion, tree, idx) = box_size(tree, idx) > c.absolute
 # ============================================================================
 
 """
-    build_node_octree(triangle_octree, spacing, alpha, node_min_ratio)
+    build_node_octree(triangle_octree, h, alpha, node_min_ratio)
 
 Build a spacing-driven node octree from an existing triangle octree.
 
@@ -69,8 +66,9 @@ enabling spacing-aware point distribution. The node octree is:
 
 # Arguments
 - `triangle_octree`: Base `TriangleOctree` for geometry
-- `spacing`: Spacing function (e.g., `ConstantSpacing`, `BoundaryLayerSpacing`)
-- `alpha`: Subdivision aggressiveness (`h_box ≤ alpha * h_spacing`)
+- `h`: Numerical spacing function `(SVector{3, Float64}) -> Float64` (wrap an
+  `AbstractSpacing` via [`numerical_spacing`](@ref))
+- `alpha`: Subdivision aggressiveness (`h_box ≤ alpha * h`)
 - `node_min_ratio`: Minimum box size ratio relative to domain
 
 # Returns
@@ -81,17 +79,17 @@ triangle octree's coordinate type (the mesh CRS machine type)
 ```julia
 tri_octree = TriangleOctree(mesh; classify_leaves=true)
 spacing = BoundaryLayerSpacing(points; at_wall=0.5m, bulk=5m, layer_thickness=2m)
-node_tree = build_node_octree(tri_octree, spacing, 1.0, 1e-6)
+node_tree = build_node_octree(tri_octree, numerical_spacing(spacing, m), 1.0, 1e-6)
 ```
 """
 function build_node_octree(
-        triangle_octree::TriangleOctree{M, C, T}, spacing, alpha, node_min_ratio
+        triangle_octree::TriangleOctree{M, C, T}, h, alpha, node_min_ratio
     ) where {M, C, T}
     bbox_min, bbox_max = bounding_box(triangle_octree.tree)
     node_tree = SpatialOctree{Int, T}(bbox_min, triangle_octree.tree.root_size; initial_capacity = 1000)
 
     diagonal = norm(bbox_max - bbox_min)
-    criterion = SpacingCriterion(spacing, diagonal; alpha, min_ratio = node_min_ratio)
+    criterion = SpacingCriterion(h, diagonal; alpha, min_ratio = node_min_ratio)
 
     _subdivide_node_octree!(node_tree, 1, criterion, triangle_octree)
     balance_octree!(node_tree, criterion)
@@ -129,37 +127,6 @@ function _box_may_contain_interior(
         leaf_idx -> tri_cls[leaf_idx] != LEAF_EXTERIOR
     end
     return any_leaf_overlapping(triangle_octree.tree, bbox_min, bbox_max, predicate)
-end
-
-@inline function _box_face_centers(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
-    cx = (bbox_min[1] + bbox_max[1]) / 2
-    cy = (bbox_min[2] + bbox_max[2]) / 2
-    cz = (bbox_min[3] + bbox_max[3]) / 2
-    return (
-        SVector{3, T}(bbox_min[1], cy, cz),
-        SVector{3, T}(bbox_max[1], cy, cz),
-        SVector{3, T}(cx, bbox_min[2], cz),
-        SVector{3, T}(cx, bbox_max[2], cz),
-        SVector{3, T}(cx, cy, bbox_min[3]),
-        SVector{3, T}(cx, cy, bbox_max[3]),
-    )
-end
-
-@inline function _box_edge_midpoints(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
-    x0, x1 = bbox_min[1], bbox_max[1]
-    y0, y1 = bbox_min[2], bbox_max[2]
-    z0, z1 = bbox_min[3], bbox_max[3]
-    cx = (x0 + x1) / 2
-    cy = (y0 + y1) / 2
-    cz = (z0 + z1) / 2
-    return (
-        SVector{3, T}(cx, y0, z0), SVector{3, T}(cx, y1, z0),
-        SVector{3, T}(cx, y0, z1), SVector{3, T}(cx, y1, z1),
-        SVector{3, T}(x0, cy, z0), SVector{3, T}(x1, cy, z0),
-        SVector{3, T}(x0, cy, z1), SVector{3, T}(x1, cy, z1),
-        SVector{3, T}(x0, y0, cz), SVector{3, T}(x1, y0, cz),
-        SVector{3, T}(x0, y1, cz), SVector{3, T}(x1, y1, cz),
-    )
 end
 
 function _subdivide_node_octree!(node_tree, box_idx, criterion, triangle_octree)

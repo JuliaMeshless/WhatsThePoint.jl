@@ -163,11 +163,12 @@ end
 
     # The estimator returns a positive Int, and its 1.1× pad keeps the cap
     # above the saturated count (so the front saturates, not truncates).
+    h = WhatsThePoint.numerical_spacing(spacing, m)
     node_tree = WhatsThePoint.build_node_octree(
-        alg.triangle_octree, spacing, alg.alpha, alg.node_min_ratio,
+        alg.triangle_octree, h, alg.alpha, alg.node_min_ratio,
     )
     classification = WhatsThePoint.classify_node_octree(node_tree, alg.triangle_octree)
-    est = WhatsThePoint._estimate_volume_points(node_tree, classification, spacing)
+    est = WhatsThePoint._estimate_volume_points(node_tree, classification, h)
     @test est isa Int
     @test est > length(vol)
 end
@@ -314,21 +315,21 @@ end
     node_min_ratio = 1.0e-6
 
     # Test 1: Fine spacing triggers subdivision
-    fine_spacing = ConstantSpacing(0.2m)
-    node_tree = WhatsThePoint.build_node_octree(tri_octree, fine_spacing, 2.0, node_min_ratio)
+    h_fine = WhatsThePoint.numerical_spacing(ConstantSpacing(0.2m), m)
+    node_tree = WhatsThePoint.build_node_octree(tri_octree, h_fine, 2.0, node_min_ratio)
     num_leaves = length(WhatsThePoint.all_leaves(node_tree))
     @test num_leaves >= 8  # At least one level of subdivision
 
     # Test 2: Alpha parameter affects subdivision aggressiveness
-    spacing = ConstantSpacing(0.3m)
-    node_tree_aggressive = WhatsThePoint.build_node_octree(tri_octree, spacing, 1.0, node_min_ratio)
-    node_tree_conservative = WhatsThePoint.build_node_octree(tri_octree, spacing, 5.0, node_min_ratio)
+    h = WhatsThePoint.numerical_spacing(ConstantSpacing(0.3m), m)
+    node_tree_aggressive = WhatsThePoint.build_node_octree(tri_octree, h, 1.0, node_min_ratio)
+    node_tree_conservative = WhatsThePoint.build_node_octree(tri_octree, h, 5.0, node_min_ratio)
     @test length(WhatsThePoint.all_leaves(node_tree_aggressive)) > length(WhatsThePoint.all_leaves(node_tree_conservative))
 
     # Test 3: Finer spacing produces more leaves than coarse spacing
-    spacing_coarse = ConstantSpacing(0.8m)
-    node_tree_fine = WhatsThePoint.build_node_octree(tri_octree, fine_spacing, 2.0, node_min_ratio)
-    node_tree_coarse = WhatsThePoint.build_node_octree(tri_octree, spacing_coarse, 2.0, node_min_ratio)
+    h_coarse = WhatsThePoint.numerical_spacing(ConstantSpacing(0.8m), m)
+    node_tree_fine = WhatsThePoint.build_node_octree(tri_octree, h_fine, 2.0, node_min_ratio)
+    node_tree_coarse = WhatsThePoint.build_node_octree(tri_octree, h_coarse, 2.0, node_min_ratio)
     @test length(WhatsThePoint.all_leaves(node_tree_fine)) > length(WhatsThePoint.all_leaves(node_tree_coarse))
     @test length(WhatsThePoint.all_leaves(node_tree_coarse)) >= 1
 end
@@ -339,7 +340,8 @@ end
     spacing = ConstantSpacing(0.2m)
 
     # Build and classify node octree
-    node_tree = WhatsThePoint.build_node_octree(tri_octree, spacing, 2.0, 1.0e-6)
+    h = WhatsThePoint.numerical_spacing(spacing, m)
+    node_tree = WhatsThePoint.build_node_octree(tri_octree, h, 2.0, 1.0e-6)
     classifications = WhatsThePoint.classify_node_octree(node_tree, tri_octree)
 
     # classifications is a Vector{Int8} indexed by box indices

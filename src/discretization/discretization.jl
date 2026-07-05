@@ -1,5 +1,17 @@
 abstract type AbstractNodeGenerationAlgorithm end
 
+# Default point-count cap and early-stop warning, shared by the incremental
+# generation algorithms (the Octree algorithm estimates its own cap instead).
+const _DEFAULT_MAX_POINTS = 10_000_000
+
+_resolve_max_points(max_points, default::Int = _DEFAULT_MAX_POINTS) =
+    @something(max_points, default)
+
+function _warn_max_points_reached(max_points)
+    @warn "discretization stopping early, reached max points ($max_points)"
+    return nothing
+end
+
 # Discretization algorithms
 include("algorithms/fornberg_flyer.jl")
 include("algorithms/vandersande_fornberg.jl")

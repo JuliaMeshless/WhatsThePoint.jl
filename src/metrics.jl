@@ -27,7 +27,7 @@ function metrics(cloud::PointCloud; k = 20)
     mn = mean(minimum.(r))
     separation = minimum(nn)
     fill = maximum(nn)
-    mesh_ratio = ustrip(fill / separation)
+    mesh_ratio = fill / separation
     println("Cloud Metrics")
     println("-------------")
     println("avg. distance to $k nearest neighbors: $avg")
@@ -58,8 +58,9 @@ function spacing_metrics(cloud::PointCloud, spacing::AbstractSpacing; k = 20)
     method = KNearestSearch(cloud, k)
     results = searchdists(cloud, method)
 
-    target = ustrip.(spacing.(pts))
-    actual = map(r -> mean(ustrip.(@view r[2][2:end])), results)
+    lu = length_unit(first(pts))
+    target = ustrip.(lu, spacing.(pts))
+    actual = map(r -> mean(ustrip.(lu, @view r[2][2:end])), results)
     errors = @. abs(actual - target) / target
 
     return (;
@@ -95,16 +96,17 @@ function spacing_fidelity_metrics(
     method = KNearestSearch(cloud, k)
     results = searchdists(cloud, method)
 
+    lu = length_unit(first(pts))
     dnn_h = Vector{T}(undef, n)
     coord = Vector{Int}(undef, n)
     for i in 1:n
         ids, dists = results[i]
-        h = ustrip(spacing(pts[i]))
+        h = ustrip(lu, spacing(pts[i]))
         d_min = typemax(T)
         c = 0
         for (j, d) in zip(ids, dists)
             j == i && continue
-            du = ustrip(d)
+            du = ustrip(lu, d)
             d_min = min(d_min, du)
             du <= coord_radius * h && (c += 1)
         end

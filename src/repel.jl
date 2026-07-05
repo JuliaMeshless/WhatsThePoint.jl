@@ -72,6 +72,7 @@ function repel(
         trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
     ) where {N, C <: CRS}
     rebuild_every >= 1 || throw(ArgumentError("rebuild_every must be ≥ 1"))
+    len_unit = length_unit(C)
     bnd_p = points(boundary(cloud))
     n_bnd = length(bnd_p)
     p = copy(volume(cloud).points)
@@ -82,7 +83,7 @@ function repel(
     conv = _relax!(
         p, p_old, snap, spacing, force_model, (id, xi, x_proposed) -> x_proposed;
         n_fixed = n_bnd, n_protected = n_bnd,
-        α_lo = ustrip(α_min), α_max = ustrip(α),
+        α_lo = to_numerical(α_min, len_unit), α_max = to_numerical(α, len_unit),
         k, max_iters, tol, rebuild_every, kick_after, stall_after, cv_target, trace,
     )
     isnothing(convergence) || append!(convergence, conv)
@@ -146,7 +147,7 @@ function repel(
     n_boundary = length(boundary(cloud))
     p, p_old, snap = copy(all_p), copy(all_p), copy(all_p)
 
-    len_unit = Unitful.unit(Meshes.to(first(all_p))[1])
+    len_unit = length_unit(C)
     offset_dist = TO(1.0e-6) * norm(octree.mesh_bbox_max - octree.mesh_bbox_min)
     tri_indices = zeros(Int, npoints)
     # Mutable membership: deposition converts volume points into boundary
@@ -170,7 +171,7 @@ function repel(
     conv = _relax!(
         p, p_old, snap, spacing, force_model, constrain;
         n_fixed = 0, n_protected = n_boundary,
-        α_lo = ustrip(α_min), α_max = ustrip(α),
+        α_lo = to_numerical(α_min, len_unit), α_max = to_numerical(α, len_unit),
         k, max_iters, tol, rebuild_every, kick_after, stall_after, cv_target,
         trace, deposit!,
     )
@@ -206,8 +207,8 @@ function _relax!(
     )
     n_move = length(p)
     kk = min(k, length(snap))
-    spacings = ustrip.(spacing.(snap))
-    len_unit = Unitful.unit(Meshes.to(first(snap))[1])
+    len_unit = length_unit(first(snap))
+    spacings = ustrip.(len_unit, spacing.(snap))
     # Raw-coordinate kd-tree queried via in-place knn! into task-local buffers:
     # the per-query allocations of the generic searchdists path were 66% of the
     # loop's allocations (the tree rebuild itself is only ~3% of its time).
@@ -248,7 +249,7 @@ function _relax!(
             # For variable spacings the CV monitor and kick magnitude must see
             # the local target at each point's current position, not where it
             # started.
-            @views spacings[(n_fixed + 1):end] .= ustrip.(spacing.(p))
+            @views spacings[(n_fixed + 1):end] .= ustrip.(len_unit, spacing.(p))
             tree_ref[] = KDTree(coords)
         end
         # Jacobi-style sweep: every force is evaluated against the same frozen
@@ -280,7 +281,7 @@ function _relax!(
             end
 
             F_norm = norm(repel_force)
-            forces[id] = F_norm * ustrip(s)
+            forces[id] = F_norm * ustrip(len_unit, s)
             # Adaptive per-point step, capped at one local spacing.
             α_i = clamp(inv(F_norm + oftype(F_norm, 1.0e-30)), αT_lo, αT_max)
             disp = Vec(s * α_i * repel_force)
@@ -498,10 +499,10 @@ function _deposit_escaped!(
         tri_idx == 0 && continue
         sitec = Tc.(site)
         site_pt = Point(sitec[1] * len_unit, sitec[2] * len_unit, sitec[3] * len_unit)
-        thr = deposit_ratio * ustrip(spacing(site_pt))
+        thr = deposit_ratio * ustrip(len_unit, spacing(site_pt))
         ids_near, _ = knn(tree, _raw_point(site_pt), kq, true)
         occupied = any(
-            j -> j != id && is_bnd[j] && ustrip(norm(p[j] - site_pt)) < thr,
+            j -> j != id && is_bnd[j] && ustrip(len_unit, norm(p[j] - site_pt)) < thr,
             ids_near,
         )
         occupied && continue
@@ -544,7 +545,8 @@ Near-duplicate keep-mask plus the defect warning: the cull is a safety net, so
 any non-zero removal is surfaced.
 """
 function _cull(pts, spacing, ratio)
-    keep = _near_duplicate_keep_mask(pts, ustrip.(spacing.(pts)), ratio)
+    lu = length_unit(first(pts))
+    keep = _near_duplicate_keep_mask(pts, ustrip.(lu, spacing.(pts)), ratio)
     n_culled = count(!, keep)
     n_culled > 0 &&
         @warn "Cull removed $n_culled near-duplicate point(s) — repel left defects behind" cull_ratio = ratio
@@ -563,14 +565,14 @@ function _near_duplicate_keep_mask(pts, spacings, ratio)
     n = length(pts)
     keep = trues(n)
     (ratio <= 0 || n < 2) && return keep
-    len_unit = Unitful.unit(Meshes.to(first(pts))[1])
+    len_unit = length_unit(first(pts))
     method = BallSearch(pts, MetricBall(ratio * maximum(spacings) * len_unit))
     @inbounds for i in 1:n
         keep[i] || continue
         thr = ratio * spacings[i]
         for j in search(pts[i], method)
             (j == i || !keep[j]) && continue
-            ustrip(norm(pts[j] - pts[i])) < thr && (keep[j] = false)
+            ustrip(len_unit, norm(pts[j] - pts[i])) < thr && (keep[j] = false)
         end
     end
     return keep

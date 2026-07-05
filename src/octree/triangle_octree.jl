@@ -601,7 +601,8 @@ function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {
 end
 
 function isinside(point::Point{𝔼{3}}, octree::TriangleOctree{𝔼{3}, C, T}) where {C, T}
-    sv = _extract_vertex(T, point)
+    # The octree's raw coordinates are in the mesh's length unit.
+    sv = to_numerical(point, length_unit(crs(octree.mesh)))
     return isinside(sv, octree)
 end
 

@@ -748,28 +748,6 @@ function classify_leaves!(
 end
 
 """
-    _box_corners(bbox_min, bbox_max) -> Tuple
-
-Generate 8 corner points of a 3D bounding box.
-"""
-@inline function _box_corners(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
-    x0, x1 = bbox_min[1], bbox_max[1]
-    y0, y1 = bbox_min[2], bbox_max[2]
-    z0, z1 = bbox_min[3], bbox_max[3]
-
-    return (
-        SVector{3, T}(x0, y0, z0),
-        SVector{3, T}(x1, y0, z0),
-        SVector{3, T}(x0, y1, z0),
-        SVector{3, T}(x1, y1, z0),
-        SVector{3, T}(x0, y0, z1),
-        SVector{3, T}(x1, y0, z1),
-        SVector{3, T}(x0, y1, z1),
-        SVector{3, T}(x1, y1, z1),
-    )
-end
-
-"""
     _classify_leaf_conservative(tree, leaf_idx, geometry_query, tol_rel, tol_abs) -> Int8
 
 Conservative 9-point classification (center + 8 corners).

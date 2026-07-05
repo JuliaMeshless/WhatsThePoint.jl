@@ -414,3 +414,70 @@ function triangle_box_intersection(
     # All tests passed - triangle intersects box
     return true
 end
+
+#=============================================================================
+Box sample points (corners, face centers, edge midpoints)
+=============================================================================#
+
+"""
+    _box_corners(bbox_min, bbox_max) -> Tuple
+
+Generate 8 corner points of a 3D bounding box.
+"""
+@inline function _box_corners(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
+    x0, x1 = bbox_min[1], bbox_max[1]
+    y0, y1 = bbox_min[2], bbox_max[2]
+    z0, z1 = bbox_min[3], bbox_max[3]
+
+    return (
+        SVector{3, T}(x0, y0, z0),
+        SVector{3, T}(x1, y0, z0),
+        SVector{3, T}(x0, y1, z0),
+        SVector{3, T}(x1, y1, z0),
+        SVector{3, T}(x0, y0, z1),
+        SVector{3, T}(x1, y0, z1),
+        SVector{3, T}(x0, y1, z1),
+        SVector{3, T}(x1, y1, z1),
+    )
+end
+
+"""
+    _box_face_centers(bbox_min, bbox_max) -> Tuple
+
+Generate the 6 face-center points of a 3D bounding box.
+"""
+@inline function _box_face_centers(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
+    cx = (bbox_min[1] + bbox_max[1]) / 2
+    cy = (bbox_min[2] + bbox_max[2]) / 2
+    cz = (bbox_min[3] + bbox_max[3]) / 2
+    return (
+        SVector{3, T}(bbox_min[1], cy, cz),
+        SVector{3, T}(bbox_max[1], cy, cz),
+        SVector{3, T}(cx, bbox_min[2], cz),
+        SVector{3, T}(cx, bbox_max[2], cz),
+        SVector{3, T}(cx, cy, bbox_min[3]),
+        SVector{3, T}(cx, cy, bbox_max[3]),
+    )
+end
+
+"""
+    _box_edge_midpoints(bbox_min, bbox_max) -> Tuple
+
+Generate the 12 edge-midpoint points of a 3D bounding box.
+"""
+@inline function _box_edge_midpoints(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
+    x0, x1 = bbox_min[1], bbox_max[1]
+    y0, y1 = bbox_min[2], bbox_max[2]
+    z0, z1 = bbox_min[3], bbox_max[3]
+    cx = (x0 + x1) / 2
+    cy = (y0 + y1) / 2
+    cz = (z0 + z1) / 2
+    return (
+        SVector{3, T}(cx, y0, z0), SVector{3, T}(cx, y1, z0),
+        SVector{3, T}(cx, y0, z1), SVector{3, T}(cx, y1, z1),
+        SVector{3, T}(x0, cy, z0), SVector{3, T}(x1, cy, z0),
+        SVector{3, T}(x0, cy, z1), SVector{3, T}(x1, cy, z1),
+        SVector{3, T}(x0, y0, cz), SVector{3, T}(x1, y0, cz),
+        SVector{3, T}(x0, y1, cz), SVector{3, T}(x1, y1, cz),
+    )
+end

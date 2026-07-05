@@ -14,7 +14,7 @@ function _discretize_volume(
         ::VanDerSandeFornberg;
         max_points::Union{Int, Nothing} = nothing,
     ) where {C}
-    max_points = @something(max_points, 10_000_000)
+    max_points = _resolve_max_points(max_points)
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
     xmin, ymin, _ = to(bbox.min)
@@ -40,7 +40,7 @@ function _discretize_volume(
     prog = ProgressUnknown(; desc = "generating nodes", spinner = true)
     while coords(new_points[dotnr]).z < coords(bbox.max).z
         if dotnr > (max_points - 1)
-            @warn "discretization stopping early, reached max points ($max_points)"
+            _warn_max_points_reached(max_points)
             break
         end
 
