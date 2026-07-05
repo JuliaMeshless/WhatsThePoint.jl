@@ -205,6 +205,24 @@ end
     @test ok
 end
 
+@testitem "Octree bridson warns on truncation" setup = [CommonImports, OctreeTestData] begin
+    using Random
+    Random.seed!(999)
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    bnd = PointBoundary(mesh)
+    spacing = ConstantSpacing(0.15m)
+    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
+
+    # A tiny max_points forces truncation: the front has room to grow but is
+    # capped early. The truncation probe should find acceptable candidates and
+    # emit the warning.
+    cloud = @test_logs (:warn, "Bridson front truncated by max_points before saturation — parts of the domain may be unfilled") match_mode = :any discretize(
+        bnd, spacing; alg, max_points = 5,
+    )
+    @test length(WhatsThePoint.volume(cloud)) == 5
+end
+
 @testitem "Octree errors on unclassified octree" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)

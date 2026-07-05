@@ -72,3 +72,34 @@ end
     @test length(WhatsThePoint.volume(cloud)) > 0
     @test length(WhatsThePoint.volume(cloud)) <= 100
 end
+
+@testitem "suggest_spacing verbose prints guidance" setup = [CommonImports, OctreeTestData] begin
+    using Unitful: ustrip
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    old_stdout = stdout
+    rd, wr = redirect_stdout()
+    g = suggest_spacing(mesh; verbose = true, name = "test_cube")
+    redirect_stdout(old_stdout)
+    close(wr)
+    str = read(rd, String)
+    close(rd)
+    # The verbose print must mention the geometry name and the key landmarks
+    @test occursin("test_cube", str)
+    @test occursin("h_ceiling", str)
+    @test occursin("h_baseline", str)
+    @test occursin("h_fine", str)
+    @test occursin("start here", str)
+end
+
+@testitem "suggest_spacing degenerate geometry throws" setup = [CommonImports, OctreeTestData] begin
+    using Unitful: m
+    # A flat boundary (all points in a plane) gives a zero-width bounding box
+    # in one axis, which _spacing_guidance rejects.
+    pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.5, 0.0, 0.0)]
+    normals = [SVector(0.0, 0.0, 1.0) for _ in pts]
+    areas = [0.0 * u"m^2" for _ in pts]
+    surf = PointSurface(pts, normals, areas)
+    bnd = PointBoundary(LittleDict(:s1 => surf))
+    @test_throws ArgumentError suggest_spacing(bnd; verbose = false)
+end

@@ -228,3 +228,15 @@ end
     @test contains(output, "surface1")
     @test contains(output, "surface2")
 end
+
+@testitem "PointCloud mactype promotion no-op for same types" setup = [CommonImports] begin
+    # When boundary and volume already share the same mactype, the promotion
+    # constructor must early-return the inputs unchanged (the inner constructor
+    # handles it). This covers the mactype === T guard in _promote_mactype.
+    pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
+    bnd = PointBoundary(pts)
+    vol = PointVolume([Point(0.5, 0.5, 0.5)])
+    cloud = PointCloud(bnd, vol, NoTopology())
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
+    @test length(cloud) == 4
+end

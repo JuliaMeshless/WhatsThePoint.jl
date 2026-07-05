@@ -64,7 +64,7 @@ per `r³` (measured on this implementation, k = 30 attempts; geometry-dependent 
 ≈ 1.09/h³ on a convex box, ≈ 1.22/h³ on the non-convex Stanford bunny). At the
 0.75 default that is ≈ 1.1–1.2× the prescribed `1/h³` density, i.e. the front
 slightly *over*-fills the nominal budget; the automatic `max_points` estimate
-carries matching headroom (see [`_BRIDSON_CAP_HEADROOM`](@ref)) so the
+carries matching headroom (see `_BRIDSON_CAP_HEADROOM`) so the
 inward-advancing front saturates rather than truncating — a truncated front
 leaves the deep interior (filled last) empty. Use `1.0` for strict `d_NN ≥ h`
 Poisson-disk sampling — ≈ 50% fewer points than `1/h³`, which starts `repel`'s
@@ -526,7 +526,7 @@ Estimate the auto `max_points` cap for the `Octree` algorithm (used when the
 caller leaves `max_points` unset) as `⌈$(_BRIDSON_CAP_HEADROOM) · ∑ box_volume/h(x)³⌉`
 over non-exterior leaves — the discrete spacing integral `∫ 1/h³ dx` with
 headroom for the super-`1/h³` saturated Poisson-disk packing density (see
-[`_BRIDSON_CAP_HEADROOM`](@ref)). It is a non-truncating ceiling, not a target.
+[`_estimate_volume_points`](@ref)). It is a non-truncating ceiling, not a target.
 """
 function _estimate_volume_points(node_tree, classification, spacing)
     T = Float64

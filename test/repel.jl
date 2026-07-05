@@ -148,6 +148,26 @@ end
     @test InverseDistanceForce().β == 0.2
     @test SpacingEquilibriumForce().β == 0.2
     @test ClippedSpacingForce().β == 0.2
+
+    # StrongSpacingForce: zero at u=1, positive for u<1, negative for u>1,
+    # stronger repulsive core than SpacingEquilibriumForce at small u.
+    m5 = StrongSpacingForce(0.2, 3.0)
+    @test m5.γ == 3.0
+    @test compute_force(m5, 1.0) == 0.0
+    @test compute_force(m5, 0.5) > 0
+    @test compute_force(m5, 2.0) < 0
+    for u in (0.0, 0.5, 1.0, 2.0)
+        expected = (1 - u^2) / (u^2 + 0.2)^3
+        @test compute_force(m5, u) ≈ expected
+    end
+    # γ=2 recovers SpacingEquilibriumForce
+    m6 = StrongSpacingForce(0.2, 2.0)
+    for u in (0.0, 0.5, 1.0, 2.0)
+        @test compute_force(m6, u) ≈ compute_force(m2, u)
+    end
+    # Default γ is 3.0
+    @test StrongSpacingForce().γ == 3.0
+    @test StrongSpacingForce(0.5).γ == 3.0
 end
 
 @testitem "repel β kwarg feeds default force_model" setup = [TestData, CommonImports] begin
@@ -345,4 +365,57 @@ end
     culled_metrics = metrics(culled; k = 2)
     smin = minimum(ustrip.(spacing.(points(culled))))
     @test ustrip(culled_metrics.separation) >= 0.5 * smin * (1 - 1.0e-6)
+end
+
+@testitem "repel kick_after breaks frozen standoffs" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
+
+    Random.seed!(42)
+    # kick_after should not crash and should produce a valid cloud
+    kicked = repel(cloud, spacing, octree; max_iters = 30, kick_after = 5)
+    @test kicked isa PointCloud
+    @test length(WhatsThePoint.volume(kicked)) > 0
+
+    # Without kick: same seed, same iterations — both valid
+    Random.seed!(42)
+    nokick = repel(cloud, spacing, octree; max_iters = 30, kick_after = 0)
+    @test nokick isa PointCloud
+end
+
+@testitem "repel trace records closest pair" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
+
+    Random.seed!(1)
+    traces = NamedTuple[]
+    c = repel(cloud, spacing; max_iters = 5, trace = traces)
+    @test length(traces) == 5
+    for t in traces
+        @test hasproperty(t, :idx_a)
+        @test hasproperty(t, :idx_b)
+        @test hasproperty(t, :r_over_s)
+        @test t.r_over_s > 0
+    end
+end
+
+@testitem "repel rebuild_every skips k-NN rebuild" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
+
+    Random.seed!(1)
+    c1 = repel(cloud, spacing; max_iters = 10, rebuild_every = 1)
+    Random.seed!(1)
+    c3 = repel(cloud, spacing; max_iters = 10, rebuild_every = 3)
+    @test c1 isa PointCloud
+    @test c3 isa PointCloud
+    @test length(WhatsThePoint.volume(c3)) > 0
+    # rebuild_every must reject < 1
+    @test_throws ArgumentError repel(cloud, spacing; rebuild_every = 0)
 end
