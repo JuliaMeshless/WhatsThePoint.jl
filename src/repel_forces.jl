@@ -119,7 +119,7 @@ struct StrongSpacingForce{T <: Real} <: RepelForceModel
 end
 
 StrongSpacingForce() = StrongSpacingForce(0.2, 3.0)
-StrongSpacingForce(β::Real) = StrongSpacingForce(β, 3.0)
+StrongSpacingForce(β::Real) = StrongSpacingForce(promote(β, 3.0)...)
 
 @inline function compute_force(m::StrongSpacingForce, u::Real)
     u² = u * u

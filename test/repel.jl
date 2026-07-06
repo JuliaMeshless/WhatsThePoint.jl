@@ -168,6 +168,14 @@ end
     # Default γ is 3.0
     @test StrongSpacingForce().γ == 3.0
     @test StrongSpacingForce(0.5).γ == 3.0
+
+    # One-arg constructor promotes non-Float64 β like ClippedSpacingForce does
+    # (regression: Float32/Int β hit the same-type default constructor and
+    # threw a MethodError).
+    m7 = StrongSpacingForce(0.5f0)
+    @test m7.β == 0.5f0 && m7.γ == 3.0
+    m8 = StrongSpacingForce(1)
+    @test m8.β == 1.0 && m8.γ == 3.0
 end
 
 @testitem "repel β kwarg feeds default force_model" setup = [TestData, CommonImports] begin
