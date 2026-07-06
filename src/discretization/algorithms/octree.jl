@@ -675,7 +675,7 @@ function _apply_gradient_limit(node_tree, classification, spacing, alg, tri_octr
 
     local h_field
     max_rounds = 12
-    for _ in 1:max_rounds
+    for round in 1:max_rounds
         leaves = _non_exterior_leaves(node_tree, classification)
         h0_field = _leaf_spacing_field(T, node_tree, leaves, spacing)
         h_field = _gradient_limit_field(node_tree, leaves, h0_field, g)
@@ -688,6 +688,14 @@ function _apply_gradient_limit(node_tree, classification, spacing, alg, tri_octr
             end
         end
         isempty(violators) && break
+
+        # Never subdivide on the last round: h_field is sized for the current
+        # tree, and leaves created after it was computed would fall through
+        # _LeafSpacing's lookup to the raw (unsmoothed) spacing.
+        if round == max_rounds
+            @warn "Gradient limiter refinement did not reach a fixpoint — the delivered field is g-Lipschitz but some leaves stay coarser than alpha·h" max_rounds n_violators = length(violators)
+            break
+        end
 
         for idx in violators
             subdivide!(node_tree, idx)
