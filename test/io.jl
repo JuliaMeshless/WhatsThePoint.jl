@@ -57,6 +57,24 @@ end
         @test_throws DimensionMismatch export_vtk(
             joinpath(tmpdir, "bad"), cloud; fields = ("bad" => [1.0, 2.0, 3.0],),
         )
+
+        # the surface-id legend is opt-in: silent by default, printed with
+        # verbose = true
+        function capture_stdout(f)
+            old_stdout = stdout
+            rd, wr = redirect_stdout()
+            f()
+            redirect_stdout(old_stdout)
+            close(wr)
+            out = read(rd, String)
+            close(rd)
+            return out
+        end
+        @test capture_stdout(() -> export_vtk(joinpath(tmpdir, "quiet"), cloud)) == ""
+        loud = capture_stdout(
+            () -> export_vtk(joinpath(tmpdir, "loud"), cloud; verbose = true)
+        )
+        @test occursin("surface_id 1", loud)
     end
 end
 

@@ -40,7 +40,7 @@ function FileIO.save(filename::String, cloud::PointCloud; format::Symbol = :jld2
 end
 
 """
-    export_vtk(filename, cloud::PointCloud; fields=())
+    export_vtk(filename, cloud::PointCloud; fields=(), verbose=false)
 
 Write `cloud` to a ParaView-ready `.vtu` (one `VTK_VERTEX` cell per point). Open
 it in ParaView and set *Representation* to *Point Gaussian* (or *Points*).
@@ -48,7 +48,7 @@ it in ParaView and set *Representation* to *Point Gaussian* (or *Points*).
 Always-attached point data:
 - `point_type` — `1` = boundary, `2` = volume (colour to separate wall from bulk).
 - `surface_id` — `1..N` in `names(cloud)` order, `0` for volume (colour by named
-  surface). The integer→name legend is printed when called.
+  surface). Pass `verbose=true` to print the integer→name legend.
 - `normals` — boundary normals (zero on volume points).
 
 `fields` attaches solution data, so a `.vtu` can be re-exported after solving and
@@ -63,7 +63,7 @@ export_vtk("cloud", cloud)                                 # geometry only
 export_vtk("sol", cloud; fields = ("T" => temp, "U" => velocity))
 ```
 """
-function export_vtk(filename::String, cloud::PointCloud; fields = ())
+function export_vtk(filename::String, cloud::PointCloud; fields = (), verbose::Bool = false)
     bnd_pts = to(boundary(cloud))
     vol_pts = length(volume(cloud)) > 0 ? to(volume(cloud)) : eltype(bnd_pts)[]
     all_pts = vcat(bnd_pts, vol_pts)
@@ -83,7 +83,7 @@ function export_vtk(filename::String, cloud::PointCloud; fields = ())
         ns = length(surf)
         surface_id[(offset + 1):(offset + ns)] .= i
         offset += ns
-        println("surface_id $i -> $name")
+        verbose && println("surface_id $i -> $name")
     end
 
     # normals: boundary has normals, volume gets zeros
@@ -91,8 +91,6 @@ function export_vtk(filename::String, cloud::PointCloud; fields = ())
     zero_normal = zero(first(bnd_normals))
     all_normals = vcat(bnd_normals, fill(zero_normal, nvol))
 
-    data = Any[all_normals, point_type, surface_id]
-    names = String["normals", "point_type", "surface_id"]
     # Accept a single bare `name => values` pair as well as an iterable of pairs.
     field_pairs = fields isa Pair ? (fields,) : fields
     for (name, vals) in field_pairs
@@ -102,9 +100,9 @@ function export_vtk(filename::String, cloud::PointCloud; fields = ())
                     "$npts points; fields must be ordered like points(cloud) (boundary then volume)",
             ),
         )
-        push!(data, _strip_field(vals))
-        push!(names, String(name))
     end
+    data = [all_normals, point_type, surface_id, (_strip_field(vals) for (_, vals) in field_pairs)...]
+    names = ["normals", "point_type", "surface_id", (String(name) for (name, _) in field_pairs)...]
 
     exportvtk(filename, all_pts, data, names)
     return nothing
