@@ -47,9 +47,9 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 | `α` | `0.05 × min(spacing)` | Step size — distance points move per iteration |
 | `k` | `21` | Number of nearest neighbors used in repulsion stencil |
 | `max_iters` | `1000` | Maximum number of repulsion iterations |
-| `tol` | `1e-6` | Convergence tolerance on the force norm |
+| `tol` | `1e-6` | Convergence tolerance on the force norm (the default force's residual plateaus above it — the quality stops below are the practical criteria) |
 | `cv_target` | `0` (off) | Stop once the d_NN/spacing CV reaches this quality (`≈ 0.07` matches direct generation) |
-| `stall_after` | `0` (off) | Stop after this many iterations without CV improvement |
+| `stall_after` | `50` | Stop after this many iterations without CV improvement (`0` disables) |
 | `kick_after` | `0` (off) | Break balanced standoffs by kicking the frozen closest pair |
 
 ## Force Models

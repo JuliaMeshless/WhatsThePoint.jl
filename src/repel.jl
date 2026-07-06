@@ -31,12 +31,14 @@ vanishes at equilibrium.
   relaxing past the quality a re-seed would give is wasted budget. The stop
   returns the configuration the measurement describes (the pre-sweep
   snapshot), so a cloud already at target comes back unchanged. Off when `0`.
-- `stall_after = 0`: stop when that same CV has not improved by ≥0.1 % for
+- `stall_after = 50`: stop when that same CV has not improved by ≥0.1 % for
   this many consecutive iterations. The force residual of a saturated
   repulsion-only packing plateaus at a nonzero value instead of reaching
   `tol`, so `cv_target`/`stall_after` are the practical stops for the default
   force; CV keeps creeping down for hundreds of iterations, making
-  `stall_after` the backstop and `cv_target` the primary. Off when `0`.
+  `stall_after` the backstop (on by default so default runs terminate instead
+  of burning `max_iters`) and `cv_target` the primary. Pass `0` to disable
+  and rely on `tol`/`max_iters` alone.
 - `rebuild_every = 1`: iterations between k-NN graph rebuilds (larger = cheaper,
   staler).
 - `kick_after = 0`: if the closest pair freezes at the same `r/s` for this many
@@ -62,7 +64,7 @@ function repel(
         rebuild_every::Int = 1,
         cull_ratio::Real = 0.0,
         kick_after::Int = 0,
-        stall_after::Int = 0,
+        stall_after::Int = 50,
         cv_target::Real = 0.0,
         convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
         trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
@@ -129,7 +131,7 @@ function repel(
         rebuild_every::Int = 1,
         cull_ratio::Real = 0.0,
         kick_after::Int = 0,
-        stall_after::Int = 0,
+        stall_after::Int = 50,
         cv_target::Real = 0.0,
         deposit_ratio::Real = 0.0,
         convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,

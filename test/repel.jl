@@ -277,9 +277,12 @@ end
         @test a ≈ b
     end
 
-    # Off by default: same configuration runs to max_iters.
+    # stall_after = 0 disables the quality stop: the run burns the whole budget.
     conv_off = Float64[]
-    repel(cloud, spacing, octree; max_iters = 30, tol = 1.0e-12, convergence = conv_off)
+    repel(
+        cloud, spacing, octree;
+        max_iters = 30, tol = 1.0e-12, stall_after = 0, convergence = conv_off,
+    )
     @test length(conv_off) == 30
 end
 

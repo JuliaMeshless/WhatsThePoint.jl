@@ -215,10 +215,11 @@ Key keywords (see the `repel` docstrings for the full list):
   criterion is preserved or improved (never re-packed). The previous default
   `SpacingEquilibriumForce` is still available but its attractive branch
   slowly condenses good clouds (clusters + voids) over long relaxations.
-- `cv_target` / `stall_after` — quality-based stopping (off by default). The
-  force residual of a saturated repulsion-only packing plateaus instead of
-  reaching `tol`, so use `cv_target ≈ 0.07` (direct-pipeline raw quality) as
-  the primary stop and `stall_after` as the backstop.
+- `cv_target` / `stall_after` — quality-based stopping. The force residual of
+  a saturated repulsion-only packing plateaus instead of reaching `tol`, so
+  use `cv_target ≈ 0.07` (direct-pipeline raw quality) as the primary stop;
+  `stall_after = 50` is the backstop, on by default so default runs terminate
+  (`0` disables). `cv_target` is off by default.
 - `kick_after` — breaks balanced standoffs (a frozen closest pair) with a
   small random kick; `10`–`20` is reasonable.
 - `cull_ratio` — near-duplicate safety net that should NEVER remove anything
