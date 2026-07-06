@@ -32,7 +32,8 @@ When boundary and volume carry different machine types (e.g. a Float32 boundary
 from binary STL combined with Float64 volume points from the Octree algorithm),
 promote both to their common promoted type so a single-CRS `PointCloud` can be
 assembled. This makes the cloud construction robust to any `Real` mactype
-combination rather than failing on a CRS mismatch.
+combination rather than failing on a CRS mismatch. CRS that differ in more
+than machine type (units, CRS kind) are rejected with an `ArgumentError`.
 """
 function PointCloud(
         boundary::PointBoundary{M, C1},
@@ -42,6 +43,15 @@ function PointCloud(
     TC = promote_type(CoordRefSystems.mactype(C1), CoordRefSystems.mactype(C2))
     bnd = _promote_mactype(boundary, TC)
     vol = _promote_mactype(volume, TC)
+    # Guard against re-dispatching into this same method forever: only the
+    # machine type is promoted, so any other CRS difference must throw.
+    crs(bnd) === crs(vol) || throw(
+        ArgumentError(
+            "boundary and volume CRS still differ after machine-type promotion " *
+                "($(crs(bnd)) vs $(crs(vol))): mixed units or CRS kinds cannot be " *
+                "combined into one PointCloud — convert one side first",
+        ),
+    )
     return PointCloud(bnd, vol, topo)
 end
 

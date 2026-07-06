@@ -240,3 +240,18 @@ end
     @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
     @test length(cloud) == 4
 end
+
+@testitem "PointCloud rejects CRS differing beyond machine type" setup = [CommonImports] begin
+    # Promotion reconciles only the mactype. A boundary in mm and a volume in
+    # m share Float64, so promotion is a no-op and the CRS still differ — the
+    # constructor must throw instead of re-dispatching into itself forever
+    # (regression: StackOverflowError).
+    pts_mm = [
+        Point(0.0u"mm", 0.0u"mm", 0.0u"mm"),
+        Point(1.0u"mm", 0.0u"mm", 0.0u"mm"),
+        Point(0.0u"mm", 1.0u"mm", 0.0u"mm"),
+    ]
+    bnd = PointBoundary(pts_mm)
+    vol = PointVolume([Point(0.5, 0.5, 0.5)])
+    @test_throws ArgumentError PointCloud(bnd, vol, NoTopology())
+end
