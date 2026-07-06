@@ -169,13 +169,17 @@ end
     @test StrongSpacingForce().γ == 3.0
     @test StrongSpacingForce(0.5).γ == 3.0
 
-    # One-arg constructor promotes non-Float64 β like ClippedSpacingForce does
-    # (regression: Float32/Int β hit the same-type default constructor and
-    # threw a MethodError).
+    # One-arg constructor preserves β's machine type instead of promoting to
+    # Float64 (regression: `promote(β, 3.0)` silently stored Float32 β as
+    # Float64 — the old `m7.β == 0.5f0` check passed numerically anyway).
     m7 = StrongSpacingForce(0.5f0)
-    @test m7.β == 0.5f0 && m7.γ == 3.0
+    @test m7 isa StrongSpacingForce{Float32}
+    @test m7.β == 0.5f0 && m7.γ == 3.0f0
     m8 = StrongSpacingForce(1)
-    @test m8.β == 1.0 && m8.γ == 3.0
+    @test m8 isa StrongSpacingForce{Int}
+    @test m8.β == 1 && m8.γ == 3
+    @test ClippedSpacingForce(0.5f0) isa ClippedSpacingForce{Float32}
+    @test ClippedSpacingForce(0.5f0).u0 == 1.0f0
 end
 
 @testitem "repel β kwarg feeds default force_model" setup = [TestData, CommonImports] begin

@@ -275,6 +275,7 @@ test/
 ├── topology.jl                  # Topology tests (KNNTopology, RadiusTopology)
 ├── isinside.jl                  # Point-in-volume tests
 ├── discretization.jl            # Discretization algorithm tests
+├── float32_pipeline.jl          # End-to-end Float32 machine-type preservation tests
 ├── spacing_guidance.jl          # suggest_spacing and coarse-spacing clamp tests
 ├── surface_sampling.jl          # Poisson-disk surface sampling tests
 ├── repel.jl                     # Node repulsion tests

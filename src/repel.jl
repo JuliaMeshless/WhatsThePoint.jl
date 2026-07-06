@@ -47,7 +47,9 @@ vanishes at equilibrium.
 - `cull_ratio = 0.0`: after relaxation, drop near-duplicates closer than
   `cull_ratio·spacing` to a kept point. A safety net — a healthy relaxation
   leaves nothing to cull, so a `@warn` is emitted whenever it fires.
-- `convergence`: pass a `Float64[]` to collect the per-iteration force norm.
+- `convergence`: pass an empty float vector (e.g. `Float64[]`) to collect the
+  per-iteration force norm; entries are computed in the cloud's machine type
+  and convert on insertion.
 - `trace`: pass a `NamedTuple[]` to record the closest pair each iteration
   (global boundary-then-volume indices, measured on that iteration's snapshot).
 """
@@ -56,7 +58,7 @@ function repel(
         spacing;
         β = 0.2,
         force_model::RepelForceModel = ClippedSpacingForce(β),
-        α = minimum(spacing.(to(cloud))) * 0.05,
+        α = minimum(spacing.(to(cloud))) / 20,
         α_min = α / 100,
         k = 21,
         max_iters = 1000,
@@ -120,10 +122,10 @@ The returned boundary is a single surface named `:boundary` (use
 function repel(
         cloud::PointCloud{𝔼{3}, C},
         spacing,
-        octree::TriangleOctree;
+        octree::TriangleOctree{<:Manifold, <:CRS, TO};
         β = 0.2,
         force_model::RepelForceModel = ClippedSpacingForce(β),
-        α = minimum(spacing.(to(cloud))) * 0.05,
+        α = minimum(spacing.(to(cloud))) / 20,
         α_min = α / 100,
         k = 21,
         max_iters = 1000,
@@ -136,7 +138,7 @@ function repel(
         deposit_ratio::Real = 0.0,
         convergence::Union{Nothing, AbstractVector{<:AbstractFloat}} = nothing,
         trace::Union{Nothing, AbstractVector{<:NamedTuple}} = nothing,
-    ) where {C <: CRS}
+    ) where {C <: CRS, TO}
     rebuild_every >= 1 || throw(ArgumentError("rebuild_every must be ≥ 1"))
     deposit_ratio >= 0 || throw(ArgumentError("deposit_ratio must be ≥ 0"))
     all_p = points(cloud)
@@ -145,7 +147,7 @@ function repel(
     p, p_old, snap = copy(all_p), copy(all_p), copy(all_p)
 
     len_unit = Unitful.unit(Meshes.to(first(all_p))[1])
-    offset_dist = 1.0e-6 * norm(octree.mesh_bbox_max - octree.mesh_bbox_min)
+    offset_dist = TO(1.0e-6) * norm(octree.mesh_bbox_max - octree.mesh_bbox_min)
     tri_indices = zeros(Int, npoints)
     # Mutable membership: deposition converts volume points into boundary
     # points. Vector{Bool} (not BitVector) — per-slot writes from tmap! tasks
@@ -183,7 +185,7 @@ end
 # ======================================================================
 
 """
-    _relax!(p, p_old, snap, spacing, force_model, constrain; kwargs...) -> Vector{Float64}
+    _relax!(p, p_old, snap, spacing, force_model, constrain; kwargs...) -> Vector{T}
 
 Shared relaxation loop behind both `repel` methods. `p` holds the movable
 points (updated in place); `snap` is the search snapshot whose first `n_fixed`
@@ -195,7 +197,7 @@ given, runs serially after each sweep. Kick targets prefer indices past
 quality-based stops: end when the movable points' d_NN/s CV (read off the
 sweep's nearest-neighbor data, no extra search) reaches the target, or has
 not improved for that many iterations. Returns the force-norm convergence
-history `max_i(|F_i|·s_i)`.
+history `max_i(|F_i|·s_i)` in the points' machine type `T`.
 """
 function _relax!(
         p, p_old, snap, spacing, force_model, constrain;
@@ -206,28 +208,37 @@ function _relax!(
     kk = min(k, length(snap))
     spacings = ustrip.(spacing.(snap))
     len_unit = Unitful.unit(Meshes.to(first(snap))[1])
-    # Force-norm convergence data: at equilibrium forces vanish, so this detects
-    # convergence earlier than displacement (which can be small mid-oscillation).
-    forces = zeros(n_move)
-    # Per-point nearest neighbor, recorded during the sweep — gives the closest
-    # pair for trace/kick without an extra search.
-    nn_dist = fill(Inf, n_move)
-    nn_id = zeros(Int, n_move)
     # Raw-coordinate kd-tree queried via in-place knn! into task-local buffers:
     # the per-query allocations of the generic searchdists path were 66% of the
     # loop's allocations (the tree rebuild itself is only ~3% of its time).
     # Ref so the per-iteration rebuild does not rebind a captured variable
     # (OhMyThreads' tmap! rejects boxed closure captures).
     coords = _raw_point.(snap)
+    T = eltype(eltype(coords))
     tree_ref = Ref(KDTree(coords))
-    buffers = TaskLocalValue{Tuple{Vector{Int}, Vector{Float64}}}(
-        () -> (Vector{Int}(undef, kk), Vector{Float64}(undef, kk))
+    # knn! requires the distance buffer eltype to match the tree's own float
+    # type, so the buffers must carry the cloud's machine type.
+    buffers = TaskLocalValue{Tuple{Vector{Int}, Vector{T}}}(
+        () -> (Vector{Int}(undef, kk), Vector{T}(undef, kk))
     )
-    kick_state = (; pair = (0, 0), rs = Inf, count = 0)
-    best_cv = Inf
+    # Geometry type is authoritative for the step bounds. Fresh names: a rebind
+    # of the captured kwargs would box them inside the sweep closure.
+    αT_lo, αT_max = T(α_lo), T(α_max)
+    # Force-norm convergence data: at equilibrium forces vanish, so this detects
+    # convergence earlier than displacement (which can be small mid-oscillation).
+    forces = zeros(T, n_move)
+    # Per-point nearest neighbor, recorded during the sweep — gives the closest
+    # pair for trace/kick without an extra search.
+    nn_dist = fill(typemax(T), n_move)
+    nn_id = zeros(Int, n_move)
+    # d_NN/s state carries the promoted distance/spacing type so the NamedTuple
+    # and CV comparisons stay type-stable across rebinds.
+    U = typeof(one(T) / one(eltype(spacings)))
+    kick_state = (; pair = (0, 0), rs = typemax(U), count = 0)
+    best_cv = typemax(U)
     last_cv_improvement = 0
 
-    conv = Float64[]
+    conv = T[]
     i = 1
     while i <= max_iters
         p_old .= p
@@ -254,7 +265,7 @@ function _relax!(
             # would drop a genuine nearest neighbor and repel off a self-ghost.
             self = id + n_fixed
             nn_id[id] = 0
-            nn_dist[id] = Inf
+            nn_dist[id] = typemax(T)
             repel_force = zero(_raw_point(xi))
             @inbounds for j in 1:kk
                 ids[j] == self && continue
@@ -271,7 +282,7 @@ function _relax!(
             F_norm = norm(repel_force)
             forces[id] = F_norm * ustrip(s)
             # Adaptive per-point step, capped at one local spacing.
-            α_i = clamp(inv(F_norm + 1.0e-30), α_lo, α_max)
+            α_i = clamp(inv(F_norm + oftype(F_norm, 1.0e-30)), αT_lo, αT_max)
             disp = Vec(s * α_i * repel_force)
             d_norm = norm(disp)
             if d_norm > s
@@ -279,7 +290,7 @@ function _relax!(
             end
             return constrain(id, xi, xi + disp)
         end
-        push!(conv, maximum(forces; init = 0.0))
+        push!(conv, maximum(forces; init = zero(T)))
         if n_move > 0 && (!isnothing(trace) || kick_after > 0)
             pair = _closest_pair(nn_dist, nn_id, spacings, n_fixed)
             isnothing(trace) || push!(trace, (; iteration = i, pair...))
@@ -334,10 +345,9 @@ end
 """
     _raw_point(pt) -> SVector
 
-Unitless Float64 coordinates of a point (dimension-generic). Float32 CRS
-coordinates are promoted so the search tree has a uniform eltype.
+Unitless coordinates of a point in its native machine type (dimension-generic).
 """
-@inline _raw_point(pt) = Float64.(ustrip.(Meshes.to(pt)))
+@inline _raw_point(pt) = ustrip.(Meshes.to(pt))
 
 """
     _safe_direction(xi, xj, r) -> Vec
@@ -354,23 +364,25 @@ function _safe_direction(xi, xj, r)
 end
 
 """
-    _dnn_cv(nn_dist, spacings, n_fixed) -> Float64
+    _dnn_cv(nn_dist, spacings, n_fixed) -> Real
 
 Coefficient of variation of `d_NN/s` over the movable points, read off the
 sweep's per-point nearest-neighbor data. The quality monitor behind
 `stall_after`: it tracks the gate's binding spacing-CV metric for free.
+Computed in the promoted distance/spacing type.
 """
 function _dnn_cv(nn_dist, spacings, n_fixed)
     n = length(nn_dist)
-    s1 = 0.0
-    s2 = 0.0
+    U = typeof(one(eltype(nn_dist)) / one(eltype(spacings)))
+    s1 = zero(U)
+    s2 = zero(U)
     @inbounds for i in 1:n
         u = nn_dist[i] / spacings[i + n_fixed]
         s1 += u
         s2 += u * u
     end
     μ = s1 / n
-    return sqrt(max(s2 / n - μ * μ, 0.0)) / μ
+    return sqrt(max(s2 / n - μ * μ, zero(μ))) / μ
 end
 
 """
@@ -416,7 +428,7 @@ function _maybe_kick!(
     target = a > n_protected ? a : (b > n_protected ? b : (a > n_fixed ? a : b))
     s = spacings[target]
     d = randn(typeof(_raw_point(p[target - n_fixed])))
-    p[target - n_fixed] += Vec(0.1 * s * (d / norm(d)) * len_unit)
+    p[target - n_fixed] += Vec((s / 10) * (d / norm(d)) * len_unit)
     return (; pair = (a, b), rs = pair.r_over_s, count = 0), true
 end
 
@@ -435,18 +447,21 @@ proposed position while it stays inside, and escapees revert — flagged in
 """
 function _constrain_octree(
         id, xi, x_proposed, is_bnd, escaped, tri_indices,
-        octree, offset_dist, len_unit,
-    )
-    sv_proposed = _extract_vertex(Float64, x_proposed)
+        octree::TriangleOctree{<:Manifold, <:CRS, T}, offset_dist, len_unit,
+    ) where {T}
+    # Geometry queries run at the octree's machine type; results convert back
+    # to the point's own machine type before a stored Point is built.
+    sv_proposed = _extract_vertex(T, x_proposed)
     if is_bnd[id]
         sv, tri_idx = _project_to_boundary(sv_proposed, octree, offset_dist)
         if tri_idx == 0
             sv, tri_idx = _project_to_boundary(
-                _extract_vertex(Float64, xi), octree, offset_dist
+                _extract_vertex(T, xi), octree, offset_dist
             )
         end
         tri_indices[id] = tri_idx
-        return Point(sv[1] * len_unit, sv[2] * len_unit, sv[3] * len_unit)
+        svc = CoordRefSystems.mactype(crs(xi)).(sv)
+        return Point(svc[1] * len_unit, svc[2] * len_unit, svc[3] * len_unit)
     end
     isinside(sv_proposed, octree) && return x_proposed
     escaped[id] = true
@@ -466,19 +481,23 @@ conversion is one-way and a parallel pass would over-deposit when a whole
 layer escapes in one iteration.
 """
 function _deposit_escaped!(
-        p, tree, kq, escaped, is_bnd, tri_indices, octree,
+        p, tree, kq, escaped, is_bnd, tri_indices,
+        octree::TriangleOctree{<:Manifold, <:CRS, T},
         spacing, deposit_ratio, offset_dist, len_unit,
-    )
+    ) where {T}
     n_dep = 0
+    isempty(p) && return n_dep
+    Tc = CoordRefSystems.mactype(crs(first(p)))
     for id in eachindex(p)
         escaped[id] || continue
         escaped[id] = false
         is_bnd[id] && continue
         site, tri_idx = _project_to_boundary(
-            _extract_vertex(Float64, p[id]), octree, offset_dist
+            _extract_vertex(T, p[id]), octree, offset_dist
         )
         tri_idx == 0 && continue
-        site_pt = Point(site[1] * len_unit, site[2] * len_unit, site[3] * len_unit)
+        sitec = Tc.(site)
+        site_pt = Point(sitec[1] * len_unit, sitec[2] * len_unit, sitec[3] * len_unit)
         thr = deposit_ratio * ustrip(spacing(site_pt))
         ids_near, _ = knn(tree, _raw_point(site_pt), kq, true)
         occupied = any(
@@ -577,9 +596,10 @@ function _reconstruct_cloud(
     ) where {C <: CRS}
     orig_normals = normal(boundary(cloud))
     orig_areas = area(boundary(cloud))
+    Tc = CoordRefSystems.mactype(C)
 
     new_bnd_pts = Point{𝔼{3}, C}[]
-    new_bnd_normals = SVector{3, Float64}[]
+    new_bnd_normals = eltype(orig_normals)[]
     new_bnd_areas = eltype(orig_areas)[]
     new_vol_pts = Point{𝔼{3}, C}[]
 
@@ -588,7 +608,7 @@ function _reconstruct_cloud(
         if is_bnd[id]
             push!(new_bnd_pts, p[id])
             if tri_indices[id] > 0
-                push!(new_bnd_normals, _get_triangle_normal(Float64, octree.mesh, tri_indices[id]))
+                push!(new_bnd_normals, _get_triangle_normal(Tc, octree.mesh, tri_indices[id]))
             else
                 push!(new_bnd_normals, orig_normals[id])
             end

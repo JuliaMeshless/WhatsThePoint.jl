@@ -91,7 +91,7 @@ struct ClippedSpacingForce{T <: Real} <: RepelForceModel
 end
 
 ClippedSpacingForce() = ClippedSpacingForce(0.2, 1.0)
-ClippedSpacingForce(β::Real) = ClippedSpacingForce(promote(β, 1.0)...)
+ClippedSpacingForce(β::Real) = ClippedSpacingForce(promote(β, 1)...)
 
 @inline function compute_force(m::ClippedSpacingForce, u::Real)
     u² = u * u
@@ -119,7 +119,7 @@ struct StrongSpacingForce{T <: Real} <: RepelForceModel
 end
 
 StrongSpacingForce() = StrongSpacingForce(0.2, 3.0)
-StrongSpacingForce(β::Real) = StrongSpacingForce(promote(β, 3.0)...)
+StrongSpacingForce(β::Real) = StrongSpacingForce(promote(β, 3)...)
 
 @inline function compute_force(m::StrongSpacingForce, u::Real)
     u² = u * u

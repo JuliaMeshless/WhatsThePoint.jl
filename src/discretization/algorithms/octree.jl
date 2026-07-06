@@ -83,12 +83,12 @@ alg = Octree(mesh; min_ratio=1e-3, spacing, alpha=1.0)
 """
 struct Octree{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
     triangle_octree::TriangleOctree{M, C, T}
-    boundary_oversampling::Float64
+    boundary_oversampling::T
     placement::Symbol
-    alpha::Float64  # Subdivision aggressiveness: boxes are at most alpha*h_local
+    alpha::T  # Subdivision aggressiveness: boxes are at most alpha*h_local
     node_min_ratio::T  # Node octree minimum box size ratio (can be much finer than triangle octree)
-    bridson_factor::Float64  # Poisson-disk radius relative to h(x) (placement = :bridson only)
-    max_growth::Float64  # Lipschitz cap on |∇h| (0 = off); steep-but-smooth grading
+    bridson_factor::T  # Poisson-disk radius relative to h(x) (placement = :bridson only)
+    max_growth::T  # Lipschitz cap on |∇h| (0 = off); steep-but-smooth grading
 end
 
 # Constructors
@@ -108,17 +108,18 @@ function Octree(
     bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
     max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
 
-    # Default: use triangle octree's min_ratio
-    node_ratio = isnothing(node_min_ratio) ? triangle_octree.tree.min_ratio : T(node_min_ratio)
+    # Default: recompute the geometry-based ratio from the octree's mesh
+    node_ratio = isnothing(node_min_ratio) ?
+        _auto_min_ratio(T, triangle_octree.mesh) : T(node_min_ratio)
 
     return Octree{M, C, T}(
         triangle_octree,
-        Float64(boundary_oversampling),
+        T(boundary_oversampling),
         placement,
-        Float64(alpha),
+        T(alpha),
         node_ratio,
-        Float64(bridson_factor),
-        Float64(max_growth),
+        T(bridson_factor),
+        T(max_growth),
     )
 end
 
@@ -139,7 +140,7 @@ function Octree(
         throw(ArgumentError("placement must be :random, :jittered, :lattice, or :bridson"))
     bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
     max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
-    T = Float64
+    T = CoordRefSystems.mactype(C)
 
     # Triangle octree: geometry-based or user override
     geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, mesh) : T(min_ratio)
@@ -159,7 +160,7 @@ function Octree(
         # Compute from spacing
         h_min = _extract_min_spacing(spacing)
         if !isnothing(h_min)
-            # Compute domain size (strip units to get Float64)
+            # Compute domain size (strip units to the mesh machine type)
             bbox = Meshes.boundingbox(mesh)
             extents = bbox.max - bbox.min
             # Get maximum extent value, stripping units
@@ -181,12 +182,12 @@ function Octree(
 
     return Octree{M, C, T}(
         triangle_octree,
-        Float64(boundary_oversampling),
+        T(boundary_oversampling),
         placement,
-        Float64(alpha),
+        T(alpha),
         node_ratio,
-        Float64(bridson_factor),
-        Float64(max_growth),
+        T(bridson_factor),
+        T(max_growth),
     )
 end
 
@@ -217,11 +218,11 @@ end
 Extract minimum spacing value from spacing object (field access, no sampling).
 """
 function _extract_min_spacing(spacing::ConstantSpacing)
-    return Float64(ustrip(spacing.Δx))
+    return float(ustrip(spacing.Δx))
 end
 
 function _extract_min_spacing(spacing::BoundaryLayerSpacing)
-    return Float64(ustrip(spacing.at_wall))
+    return float(ustrip(spacing.at_wall))
 end
 
 # Fallback for other spacing types: return nothing to indicate unknown
@@ -330,8 +331,9 @@ struct LeafGroup{T <: Real}
     weights::Vector{T}
 end
 
-function _collect_weighted_leaves(node_tree, classification, spacing)
-    T = Float64
+function _collect_weighted_leaves(
+        node_tree::SpatialOctree{<:Any, T}, classification, spacing
+    ) where {T}
     interior, near_surface = LeafGroup(Int[], T[]), LeafGroup(Int[], T[])
 
     for leaf_idx in all_leaves(node_tree)
@@ -339,7 +341,7 @@ function _collect_weighted_leaves(node_tree, classification, spacing)
         if cls == LEAF_INTERIOR || cls == LEAF_BOUNDARY
             # Get spacing at box center (imported from spacing_criterion.jl)
             center = box_center(node_tree, leaf_idx)
-            h_local_raw = T(ustrip(spacing(Point(center...))))
+            h_local_raw = _spacing_value(T, spacing, center)
             h_local = max(h_local_raw, sqrt(eps(T)))
 
             # Weight by volume-to-spacing ratio: larger boxes or finer spacing get more points
@@ -356,8 +358,7 @@ function _collect_weighted_leaves(node_tree, classification, spacing)
     return interior, near_surface
 end
 
-function _generate_from_leaves(leaves::LeafGroup, tree, n_points, placement)
-    T = Float64
+function _generate_from_leaves(leaves::LeafGroup{T}, tree, n_points, placement) where {T}
     counts = _allocate_counts_by_volume(leaves.weights, n_points)
 
     points = SVector{3, T}[]
@@ -493,13 +494,14 @@ function _non_exterior_leaves(node_tree, classification)
 end
 
 """
-    _bridson_h_min(node_tree, classification, spacing) -> Float64
+    _bridson_h_min(node_tree, classification, spacing) -> T
 
 Minimum spacing over non-exterior leaf centers — sets the background grid
-resolution for graded spacing.
+resolution for graded spacing. `T` is the node tree's coordinate type.
 """
-function _bridson_h_min(node_tree, classification, spacing)
-    T = Float64
+function _bridson_h_min(
+        node_tree::SpatialOctree{<:Any, T}, classification, spacing
+    ) where {T}
     leaves = _non_exterior_leaves(node_tree, classification)
     isempty(leaves) && throw(ArgumentError("no non-exterior leaves: cannot run Bridson sampling"))
     h_min = tmapreduce(min, leaves) do idx
@@ -528,8 +530,9 @@ over non-exterior leaves — the discrete spacing integral `∫ 1/h³ dx` with
 headroom for the super-`1/h³` saturated Poisson-disk packing density (see
 [`_estimate_volume_points`](@ref)). It is a non-truncating ceiling, not a target.
 """
-function _estimate_volume_points(node_tree, classification, spacing)
-    T = Float64
+function _estimate_volume_points(
+        node_tree::SpatialOctree{<:Any, T}, classification, spacing
+    ) where {T}
     leaves = _non_exterior_leaves(node_tree, classification)
     isempty(leaves) && return 0
     integral = tmapreduce(+, leaves) do idx
@@ -648,9 +651,9 @@ end
     return _spacing_value(T, s.fallback, c)
 end
 
-function (s::_LeafSpacing)(p::Point)
-    c = SVector{3, Float64}(Float64.(ustrip.(Meshes.to(p)))...)
-    return _spacing_value(Float64, s, c) * s.len_unit
+function (s::_LeafSpacing{T})(p::Point) where {T}
+    c = SVector{3, T}(ustrip.(Meshes.to(p))...)
+    return _spacing_value(T, s, c) * s.len_unit
 end
 
 """
@@ -663,8 +666,9 @@ re-limiting to a fixpoint. Returns the (possibly further-subdivided) tree, the
 refreshed classification, and a `_LeafSpacing` that serves the limited field.
 A no-op tree-wise when `h₀` is already `g`-smooth.
 """
-function _apply_gradient_limit(node_tree, classification, spacing, alg, tri_octree)
-    T = Float64
+function _apply_gradient_limit(
+        node_tree::SpatialOctree{<:Any, T}, classification, spacing, alg, tri_octree
+    ) where {T}
     g = T(alg.max_growth)
     leaves0 = _non_exterior_leaves(node_tree, classification)
     isempty(leaves0) && return node_tree, classification, spacing
@@ -710,7 +714,7 @@ end
 """
     _generate_bridson(node_tree, classification, tri_octree, spacing, seeds,
                       max_points; factor=0.75, k_attempts=30)
-        -> Vector{SVector{3,Float64}}
+        -> Vector{SVector{3,T}}
 
 Graded Bridson Poisson-disk sampling of the domain volume with disk radius
 `factor · h(x)` (see the `Octree` docstring for the choice of `factor`).
@@ -814,9 +818,9 @@ end
 function _discretize_volume(
         _cloud::PointCloud{𝔼{3}, C},
         spacing::AbstractSpacing,
-        alg::Octree;
+        alg::Octree{<:Manifold, <:CRS, T};
         max_points::Union{Int, Nothing} = nothing,
-    ) where {C}
+    ) where {C, T}
     isnothing(alg.triangle_octree.leaf_classification) &&
         throw(
         ArgumentError(
@@ -824,8 +828,6 @@ function _discretize_volume(
                 "Rebuild with: TriangleOctree(mesh; classify_leaves=true)"
         )
     )
-
-    T = Float64
 
     # Bridson is empty when the spacing is too coarse for the domain to host an
     # interior. Clamp (loudly) before the node octree is built — its resolution
