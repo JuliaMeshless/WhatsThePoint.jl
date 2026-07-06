@@ -333,6 +333,20 @@ end
     @test length(new_cloud) == length(cloud)
     @test length(WhatsThePoint.boundary(new_cloud)) > n_sparse
 
+    # The cv_target stop is checked before deposition: a run stopping on its
+    # first iteration must return the pre-sweep configuration exactly — same
+    # boundary membership, same positions. A deposit leaking through the stop
+    # would grow the boundary with a point whose reverted position floats in
+    # the interior.
+    stopped = repel(
+        cloud, spacing, octree;
+        max_iters = 30, deposit_ratio = 0.5, cv_target = 10.0,
+    )
+    @test length(WhatsThePoint.boundary(stopped)) == n_sparse
+    for (a, b) in zip(points(stopped), points(cloud))
+        @test a ≈ b
+    end
+
     # Deposited points carry valid triangle normals.
     for n in normal(WhatsThePoint.boundary(new_cloud))
         @test isfinite(norm(n)) && norm(n) > 0.99

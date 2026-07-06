@@ -274,18 +274,15 @@ function _relax!(
                 kicked && @debug "Kicked frozen pair at iteration $i"
             end
         end
-        isnothing(deposit!) || deposit!(p, tree_ref[], i)
-        if conv[end] < tol
-            @info "Node repel finished in $i iterations" convergence = conv[end]
-            break
-        end
         if (stall_after > 0 || cv_target > 0) && n_move > 0
             cv = _dnn_cv(nn_dist, spacings, n_fixed)
             if cv_target > 0 && cv <= cv_target
                 # The monitor reads the sweep's nn data, which measures the
                 # *pre-sweep* snapshot — return that configuration, so a cloud
-                # already at target comes back untouched (also undoes this
-                # iteration's kick/deposit, which postdate the measurement).
+                # already at target comes back untouched. Must run before
+                # deposit!: the sweep and kick mutate only positions (undone
+                # here), while deposition also flips is_bnd/tri_indices state
+                # that a position revert cannot undo.
                 p .= p_old
                 @info "Node repel stopped in $i iterations: spacing CV target reached" cv cv_target
                 break
@@ -299,6 +296,11 @@ function _relax!(
                     break
                 end
             end
+        end
+        isnothing(deposit!) || deposit!(p, tree_ref[], i)
+        if conv[end] < tol
+            @info "Node repel finished in $i iterations" convergence = conv[end]
+            break
         end
         i += 1
     end
