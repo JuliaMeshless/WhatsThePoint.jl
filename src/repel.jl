@@ -334,7 +334,7 @@ function _safe_direction(xi, xj, r)
     if r > zero(r)
         return (xi - xj) / r
     end
-    d = randn(SVector{3, Float64})
+    d = randn(typeof(_raw_point(xi)))
     return d / norm(d)
 end
 
@@ -400,7 +400,7 @@ function _maybe_kick!(
     a, b = pair.idx_a, pair.idx_b
     target = a > n_protected ? a : (b > n_protected ? b : (a > n_fixed ? a : b))
     s = spacings[target]
-    d = randn(SVector{3, Float64})
+    d = randn(typeof(_raw_point(p[target - n_fixed])))
     p[target - n_fixed] += Vec(0.1 * s * (d / norm(d)) * len_unit)
     return (; pair = (a, b), rs = pair.r_over_s, count = 0), true
 end

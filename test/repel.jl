@@ -402,6 +402,23 @@ end
     @test nokick isa PointCloud
 end
 
+@testitem "repel supports 2D clouds" setup = [CommonImports] begin
+    # The volume-only method dispatches on 𝔼{N}; the random directions in
+    # _maybe_kick! and _safe_direction must match the cloud's dimension
+    # (regression: both built 3D vectors and crashed any 2D repel that kicked
+    # or hit a coincident pair).
+    corners = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+    boundary = PointBoundary(corners)
+    spacing = ConstantSpacing(0.2m)
+    cloud = discretize(boundary, spacing; alg = FornbergFlyer(), max_points = 40)
+
+    # kick_after = 1 forces a kick on the first iteration.
+    Random.seed!(7)
+    relaxed = repel(cloud, spacing; max_iters = 3, kick_after = 1)
+    @test relaxed isa PointCloud
+    @test Meshes.embeddim(first(points(relaxed))) == 2
+end
+
 @testitem "repel trace records closest pair" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
