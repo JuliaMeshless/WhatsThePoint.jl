@@ -242,15 +242,26 @@ function _relax!(
             xi = p_old[id]
             ids, dists = buffers[]
             knn!(ids, dists, tree_ref[], _raw_point(xi), kk, true)
-            # first hit is the query point itself (distance 0 in a live graph)
-            nn_id[id] = ids[2]
-            nn_dist[id] = dists[2]
             s = spacing(xi)
 
-            repel_force = sum(2:kk) do j
-                @inbounds xj = snap[ids[j]]
-                @inbounds r = dists[j] * len_unit
-                compute_force(force_model, r / s) * _safe_direction(xi, xj, r)
+            # Skip the point's own snapshot entry by index, not by position:
+            # on a stale tree (rebuild_every > 1) the moved point is no longer
+            # guaranteed to be its own first, zero-distance hit — assuming so
+            # would drop a genuine nearest neighbor and repel off a self-ghost.
+            self = id + n_fixed
+            nn_id[id] = 0
+            nn_dist[id] = Inf
+            repel_force = zero(_raw_point(xi))
+            @inbounds for j in 1:kk
+                ids[j] == self && continue
+                if nn_id[id] == 0
+                    nn_id[id] = ids[j]
+                    nn_dist[id] = dists[j]
+                end
+                xj = snap[ids[j]]
+                r = dists[j] * len_unit
+                repel_force += compute_force(force_model, r / s) *
+                    _safe_direction(xi, xj, r)
             end
 
             F_norm = norm(repel_force)
