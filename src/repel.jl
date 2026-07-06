@@ -234,6 +234,10 @@ function _relax!(
         if (i - 1) % rebuild_every == 0
             @views snap[(n_fixed + 1):end] .= p
             @views coords[(n_fixed + 1):end] .= _raw_point.(p)
+            # For variable spacings the CV monitor and kick magnitude must see
+            # the local target at each point's current position, not where it
+            # started.
+            @views spacings[(n_fixed + 1):end] .= ustrip.(spacing.(p))
             tree_ref[] = KDTree(coords)
         end
         # Jacobi-style sweep: every force is evaluated against the same frozen
