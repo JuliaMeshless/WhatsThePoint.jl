@@ -14,7 +14,7 @@ function _discretize_volume(
         ::FornbergFlyer;
         max_points::Union{Int, Nothing} = nothing,
     ) where {C}
-    max_points = @something(max_points, 10_000)
+    max_points = @something(max_points, 10_000_000)
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
     xmin, _ = to(bbox.min)
@@ -57,6 +57,10 @@ function _discretize_volume(
         p = pdp[current_id]
         dotnr += 1
         new_points[dotnr] = Point(p.coords.x, heights[current_id])
+    end
+
+    if dotnr == max_points && new_points[dotnr].coords.y < bbox.max.coords.y
+        @warn "discretization stopping early, reached max points ($max_points)"
     end
 
     new_points = filter(x -> isinside(x, cloud), new_points[1:dotnr])

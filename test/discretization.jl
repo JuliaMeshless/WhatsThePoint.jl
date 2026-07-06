@@ -57,6 +57,20 @@ end
     @test length(volume(cloud)) <= 50
 end
 
+@testitem "FornbergFlyer warns on max_points truncation" setup = [CommonImports] begin
+    points = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+    boundary = PointBoundary(points)
+    spacing = ConstantSpacing(0.1m)
+
+    # A cap far below what 0.1 m spacing implies on the unit square forces
+    # truncation, which must be loud (regression: 2D truncated silently while
+    # the 3D algorithms warned, and the effective 2D default had fallen from
+    # 10M to 10k).
+    @test_logs (:warn, r"stopping early") match_mode = :any discretize(
+        boundary, spacing; alg = FornbergFlyer(), max_points = 5,
+    )
+end
+
 @testitem "max_points cap" setup = [TestData, CommonImports] begin
     bnd = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
