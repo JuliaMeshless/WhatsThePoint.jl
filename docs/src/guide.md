@@ -19,6 +19,15 @@ boundary = PointBoundary("model.stl")
 !!! note "Face centers, not vertices"
     When importing a mesh, WhatsThePoint uses **face centers** as boundary points rather than mesh vertices. Each face becomes a [`SurfaceElement`](@ref) storing its center point, outward normal, and area. This gives a more uniform boundary representation than raw vertices.
 
+To place boundary points at a spacing *you* choose instead of the one the tessellation dictates, Poisson-disk sample the surface:
+
+```julia
+mesh = GeoIO.load("model.stl").geometry
+boundary = PointBoundary(mesh, spacing)   # blue-noise samples at spacing(x)
+```
+
+This throws darts on the continuous triangle surface (see [`sample_surface`](@ref)), producing evenly spaced wall points that also remove tessellation artifacts like near-coincident face centers at sphere poles.
+
 ## Inspecting the Boundary
 
 ```julia
@@ -66,6 +75,13 @@ See the [Boundary & Normals](boundary_normals.md) page for more shadow point opt
 
 Generate volume points from a boundary using `discretize`. The algorithm choice depends on the problem dimension.
 
+Before committing to a spacing, probe the geometry:
+
+```julia
+g = suggest_spacing("model.stl")   # extent, volume, h_ceiling / h_baseline / h_fine
+spacing = ConstantSpacing(g.h_baseline)
+```
+
 ### 3D Algorithms
 
 ```julia
@@ -77,9 +93,10 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 # VanDerSandeFornberg — grid projection with sphere packing
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
 
-# Octree — octree-guided adaptive density from spacing function
+# Octree — spacing-driven adaptive fill; the default :bridson placement is a
+# global graded Poisson-disk front, and max_points is auto-estimated when unset
 bl_spacing = BoundaryLayerSpacing(points(boundary); at_wall=0.6m, bulk=4.0m, layer_thickness=8.0m)
-cloud = discretize(boundary, bl_spacing; alg=Octree("model.stl"), max_points=200_000)
+cloud = discretize(boundary, bl_spacing; alg=Octree("model.stl"))
 ```
 
 `SlakKosec` can also accept a `TriangleOctree` for accelerated point-in-volume queries:
@@ -118,9 +135,9 @@ See the [Discretization](discretization.md) page for detailed descriptions of ea
 For a complete runnable example, see
 [examples/octree_boundary_layer.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/octree_boundary_layer.jl).
 
-## Node Repulsion
+## Node Repulsion (Optional)
 
-Discretization gives approximate uniformity; repulsion refines it to minimize interpolation error in the meshless solver.
+The Octree algorithm's default Bridson placement delivers blue-noise quality by construction, so repulsion is optional polish there; for the other algorithms it refines approximate uniformity to minimize interpolation error in the meshless solver.
 
 ```julia
 # Volume-only — boundary points stay fixed, escaped volume points are removed
@@ -138,17 +155,18 @@ cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000, convergence=conv)
 The returned cloud has `NoTopology` since points have moved.
 
 !!! tip "Tuning repulsion"
-    The default parameters (`β=0.2`, `k=21`, `max_iters=1000`) work well for most problems. Check `conv[end]` to verify the distribution has stabilized. See the [Node Repulsion](repel.md) page for detailed parameter guidance.
+    The default parameters (`β=0.2`, `k=21`, `max_iters=1000`) work well for most problems. By default the relaxation stops once the spacing quality stalls (`stall_after=50`); set a `cv_target` to stop at a chosen quality instead. See the [Node Repulsion](repel.md) page for detailed parameter guidance.
 
 ### Verifying Distribution Quality
 
-Use `metrics` to inspect the point distribution before and after repulsion:
+Use `metrics` and `spacing_fidelity_metrics` to inspect the point distribution before and after repulsion:
 
 ```julia
-metrics(cloud)  # prints distance statistics to k nearest neighbors
+metrics(cloud)                            # neighbor distances, separation, fill, mesh ratio
+spacing_fidelity_metrics(cloud, spacing)  # d_NN/h statistics: mean, CV, percentiles, coordination
 ```
 
-This prints the average, standard deviation, maximum, and minimum distances to each point's k nearest neighbors — useful for quantifying how uniform the distribution is.
+`metrics` reports neighbor-distance statistics plus the global separation (smallest nearest-neighbor distance), fill (largest), and their ratio; `spacing_fidelity_metrics` measures how closely the actual local spacing matches the prescribed `h(x)` — the numbers that matter for meshless stencil conditioning.
 
 ## Topology (Point Connectivity)
 
@@ -192,8 +210,11 @@ visualize(boundary; markersize=0.15)
 
 ## Export
 
-Save a point cloud to VTK format for use in external tools:
+Write a ParaView-ready `.vtu` (open it and set *Representation* to *Point Gaussian*). Every point carries `point_type` (boundary vs volume), `surface_id` (colour by named surface), and normals; after solving, attach your result arrays as `fields`:
 
 ```julia
-save("output", cloud; format = :vtk)
+export_vtk("cloud", cloud)                                  # geometry
+export_vtk("sol", cloud; fields = ("T" => temp, "U" => u))  # with solution data
 ```
+
+`save("output", cloud; format = :vtk)` remains as a thin wrapper, and `format = :jld2` (the default) serializes the cloud itself.

@@ -15,17 +15,19 @@ A Julia package for generating and manipulating point clouds for meshless PDE me
 
 ## Features
 
-- **Surface import** from STL and other mesh formats via [GeoIO.jl](https://github.com/JuliaEarth/GeoIO.jl)
+- **Spacing guidance** — `suggest_spacing` probes a geometry and recommends a baseline node spacing before you generate anything
+- **Surface import** from STL and other mesh formats via [GeoIO.jl](https://github.com/JuliaEarth/GeoIO.jl), plus **Poisson-disk surface sampling** (`PointBoundary(mesh, spacing)`) at a prescribed spacing
 - **Volume discretization** with multiple algorithms:
   - `SlakKosec` and `VanDerSandeFornberg` (3D)
   - `FornbergFlyer` (2D)
-  - `Octree` — octree-guided adaptive point generation (3D)
+  - `Octree` — spacing-driven adaptive fill (3D); its default `:bridson` placement runs a global graded Poisson-disk front with automatic point budgeting and optional gradient-limited spacing (`max_growth`)
 - **Octree-accelerated spatial queries** via `TriangleOctree` for fast point-in-volume testing
 - **Normal computation and orientation** using PCA with MST+DFS consistent orientation (Hoppe 1992)
 - **Node repulsion** for optimizing point distributions (Miotti 2023)
+- **Distribution quality metrics** — `metrics`, `spacing_metrics`, `spacing_fidelity_metrics` (separation, fill, mesh ratio, d_NN/h statistics)
 - **Point connectivity** with k-nearest neighbor and radius-based topology
 - **Full unit support** through [Unitful.jl](https://github.com/PainterQubits/Unitful.jl)
-- **Visualization** with [Makie.jl](https://github.com/MakieOrg/Makie.jl)
+- **Visualization** with [Makie.jl](https://github.com/MakieOrg/Makie.jl) and **ParaView export** (`export_vtk`, with solution fields)
 
 ## Installation
 

@@ -56,11 +56,13 @@ Pkg.add(url="https://github.com/JuliaMeshless/WhatsThePoint.jl")
 ## Key Features
 
 **Pipeline**
-- Import surface meshes (STL, OBJ, any GeoIO.jl format)
-- Multiple discretization algorithms: `SlakKosec`, `VanDerSandeFornberg` (3D), `FornbergFlyer` (2D), `Octree`
+- Spacing guidance before generation via `suggest_spacing`
+- Import surface meshes (STL, OBJ, any GeoIO.jl format) or Poisson-disk sample them at a prescribed spacing (`PointBoundary(mesh, spacing)`)
+- Multiple discretization algorithms: `SlakKosec`, `VanDerSandeFornberg` (3D), `FornbergFlyer` (2D), `Octree` (default `:bridson` graded Poisson-disk fill)
 - Node repulsion for distribution optimization (Miotti 2023)
+- Quality metrics: `metrics`, `spacing_metrics`, `spacing_fidelity_metrics`
 - k-nearest neighbor and radius-based topology for meshless stencils
-- Export to VTK
+- ParaView export with solution fields via `export_vtk`
 
 **Performance**
 - `TriangleOctree` for O(1) point-in-volume queries on large meshes

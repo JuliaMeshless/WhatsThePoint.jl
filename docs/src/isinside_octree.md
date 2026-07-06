@@ -46,7 +46,7 @@ Parameters:
 - `tolerance_relative` — Vertex coincidence tolerance as fraction of domain diagonal.
 - `min_ratio` — Minimum box size as fraction of domain diagonal.
 - `classify_leaves` — Whether to classify empty leaves as interior/exterior (default: `true`).
-- `verify_orientation` — Check mesh normal consistency before building (default: `true`). Uses `has_consistent_normals` internally — if normals are inconsistent, the octree classification will be unreliable.
+- `verify_orientation` — Check mesh orientation before building (default: `true`). Uses `has_consistent_normals` internally — if normals are inconsistent, the octree classification will be unreliable. When `classify_leaves=true`, a globally inside-out mesh (consistent winding, but normals pointing into the solid) is also rejected with an `ArgumentError` via a signed-volume check, since it would classify the complement of the domain as interior.
 
 ### Construction Process
 
@@ -76,7 +76,7 @@ result = isinside(point, octree)
 results = isinside(points, octree)
 ```
 
-**Performance:** For interior and exterior leaves, the result is a direct array lookup — O(1). For boundary leaves, a local signed distance is computed using only the triangles in that leaf — O(k) where k is typically 10–50 triangles. This is dramatically faster than the default O(M) Green's function approach for large meshes.
+**Performance:** For interior and exterior leaves, the result is a direct array lookup — O(1). For boundary leaves, the exact signed distance is computed: an octree-pruned nearest-triangle search, with the sign taken from the angle-weighted pseudonormal of the closest feature (face, edge, or vertex — Bærentzen & Aanæs 2005). The sign is provably correct for watertight, consistently outward-oriented meshes. This is dramatically faster than the default O(M) Green's function approach for large meshes.
 
 Both `SVector{3}` and Meshes.jl `Point` types are accepted.
 

@@ -34,7 +34,15 @@ cloud = set_topology(cloud, KNNTopology, 21)
 
 # 6. Ready for your meshless solver
 neighbors(cloud, 1)  # neighbor indices for point 1
+
+# 7. Export for ParaView (Representation → Point Gaussian)
+export_vtk("cloud", cloud)
 ```
+
+!!! tip "Not sure what spacing to use?"
+    Run `suggest_spacing("model.stl")` first — it probes the geometry and
+    recommends a baseline spacing (plus the coarsest spacing the domain can
+    host before the interior comes out empty).
 
 ## 2D Example: Polygon to Point Cloud
 

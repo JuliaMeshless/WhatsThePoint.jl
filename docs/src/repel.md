@@ -8,6 +8,8 @@ CurrentModule = WhatsThePoint
 
 Meshless PDE methods (RBF-FD, generalized finite differences) are sensitive to point distribution quality. Irregular spacing leads to poorly conditioned interpolation matrices and reduced accuracy. Node repulsion iteratively pushes points apart to achieve a more uniform distribution while respecting the domain boundary.
 
+With the [`Octree`](@ref) algorithm's default Bridson placement, the generated cloud already satisfies the Poisson-disk criterion, so repulsion is optional polish rather than a required pass — the default [`ClippedSpacingForce`](@ref) is built to preserve (never re-pack) such a cloud.
+
 ## Usage
 
 There are two methods, selected by dispatch:
@@ -51,6 +53,9 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 | `cv_target` | `0` (off) | Stop once the d_NN/spacing CV reaches this quality (`≈ 0.07` matches direct generation) |
 | `stall_after` | `50` | Stop after this many iterations without CV improvement (`0` disables) |
 | `kick_after` | `0` (off) | Break balanced standoffs by kicking the frozen closest pair |
+| `cull_ratio` | `0` (off) | Post-relaxation near-duplicate safety net; warns whenever it removes anything |
+| `deposit_ratio` | `0` (off) | Octree method only: convert escaped volume points into boundary points (emergent surface sampling) |
+| `rebuild_every` | `1` | Iterations between k-NN graph rebuilds (larger = cheaper, staler) |
 
 ## Force Models
 
@@ -113,31 +118,33 @@ cloud = repel(cloud, spacing, octree;
 
 Each iteration:
 
-1. Build a k-nearest neighbor tree of all points
+1. Rebuild the k-nearest neighbor tree from the current positions (every
+   `rebuild_every` iterations)
 2. For each point, compute a force from its `k` neighbors using the chosen
    [`RepelForceModel`](@ref). See [Force Models](#Force-Models) above for the
    available laws.
-
-3. Move each point by `α` in the direction of the net repulsive force
+3. Move each point by an adaptive step `α_i = clamp(1/|F_i|, α_min, α)` scaled
+   by the local spacing and capped at one spacing unit
 4. Constrain points to the domain:
-   - **Without octree:** filter out points outside via `isinside`
-   - **With octree:** project escaped/boundary points back to the nearest mesh triangle
-5. Record the maximum relative displacement as the convergence metric
+   - **Without octree:** points pushed outside are reverted (and filtered at the end via `isinside`)
+   - **With octree:** boundary points are re-projected onto the mesh; escaped volume points revert, or convert into boundary points when `deposit_ratio > 0`
+5. Record the force norm `max_i(|F_i|·s_i)` as the convergence metric, and
+   check the stopping criteria: `tol` on the force norm, `cv_target` /
+   `stall_after` on the d_NN/spacing coefficient of variation
 
 ## Convergence Monitoring
 
-The convergence vector records the maximum relative point displacement at each iteration:
+The convergence vector records the force norm `max_i(|F_i|·s_i)` at each iteration:
 
 ```julia
 conv = Float64[]
 cloud = repel(cloud, spacing; β=0.2, max_iters=500, convergence=conv)
 
-# Check if converged
-println("Final displacement: ", conv[end])
+println("Final force norm: ", conv[end])
 println("Iterations used: ", length(conv))
 ```
 
-If `conv[end]` is still large (say > 1e-3), the distribution may benefit from more iterations or parameter tuning.
+For the default repulsion-only force, the residual of a saturated packing plateaus at a nonzero value rather than decaying to `tol` — that is expected, and it is why the quality-based stops are the practical criteria: `stall_after` (on by default) ends the run once the d_NN/spacing CV stops improving, and `cv_target` stops at an explicit quality (`≈ 0.07` matches what direct generation delivers). A run that hits `max_iters` warns.
 
 ![Repulsion before and after](assets/repel-comparison.png)
 
@@ -154,7 +161,7 @@ cloud_repelled = repel(cloud, spacing)
 metrics(cloud_repelled)
 ```
 
-`metrics` prints the average, standard deviation, maximum, and minimum distances to each point's k nearest neighbors. A lower standard deviation indicates a more uniform distribution.
+`metrics` prints the average, standard deviation, maximum, and minimum distances to each point's k nearest neighbors, plus the global separation (smallest nearest-neighbor distance), fill (largest), and their ratio — a mesh ratio near 1 means blue-noise-even. [`spacing_fidelity_metrics`](@ref) additionally measures `d_NN/h(x)` against the prescribed spacing (mean, CV, percentiles, coordination number).
 
 ## Reference
 
