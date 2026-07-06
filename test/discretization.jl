@@ -184,4 +184,13 @@ end
         bulk = 5.0m,
         layer_thickness = 0.0m  # Invalid: zero thickness
     )
+
+    # An empty boundary can never yield a meaningful distance-based spacing;
+    # both variable spacings must reject it at construction instead of
+    # failing on the first evaluation.
+    empty_pts = Point{Meshes.𝔼{3}}[]
+    @test_throws ArgumentError BoundaryLayerSpacing(
+        empty_pts; at_wall = 0.5m, bulk = 5.0m, layer_thickness = 1.0m,
+    )
+    @test_throws ArgumentError WhatsThePoint.LogLike(empty_pts, 0.5m, 1.5)
 end

@@ -90,7 +90,6 @@ WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and 
 - `discretize` algorithms - Euclidean point generation
 - `repel` - Euclidean distance-based repulsion
 - `isinside` (Green's function) - Euclidean norms
-- `distance` - Explicitly uses Euclidean metric
 - `generate_shadows` - Euclidean vector arithmetic
 
 **Coordinate Systems:** Any CRS is supported on Euclidean manifolds (Cartesian, Cylindrical, Polar, etc.). The Euclidean requirement is about geometric structure (flat space), not coordinate representation.

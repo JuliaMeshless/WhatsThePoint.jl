@@ -17,7 +17,7 @@ using ProgressMeter
 using GeoIO
 using WriteVTK
 using Graphs, SimpleWeightedGraphs
-using Distances: Distances, Euclidean, evaluate
+using Distances: Euclidean
 
 using Unitful
 
