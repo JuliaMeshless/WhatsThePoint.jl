@@ -47,13 +47,13 @@ cloud = discretize(PointBoundary("bunny.stl"), g.h_baseline; alg=Octree("bunny.s
 ```
 """
 function suggest_spacing(
-        mesh::SimpleMesh;
+        mesh::SimpleMesh{M, C};
         n_points::Union{Nothing, Integer} = nothing,
         bridson_factor::Real = 0.75,
         verbose::Bool = true,
         name::AbstractString = "mesh",
-    )
-    T = Float64
+    ) where {M, C}
+    T = CoordRefSystems.mactype(C)
     bmin, bmax = _compute_bbox(T, mesh)
     ext = bmax - bmin
     V = abs(_signed_volume(T, mesh))
@@ -66,17 +66,17 @@ function suggest_spacing(
 end
 
 function suggest_spacing(
-        bnd::PointBoundary;
+        bnd::PointBoundary{M, C};
         n_points::Union{Nothing, Integer} = nothing,
         bridson_factor::Real = 0.75,
         verbose::Bool = true,
         name::AbstractString = "boundary",
-    )
-    T = Float64
+    ) where {M, C}
+    T = CoordRefSystems.mactype(C)
     pts = points(bnd)
     isempty(pts) && throw(ArgumentError("boundary has no points"))
     lu = unit(Meshes.to(first(pts))[1])
-    coords = [SVector{3, T}(T.(ustrip.(Meshes.to(p)))...) for p in pts]
+    coords = [SVector{3, T}(ustrip.(Meshes.to(p))...) for p in pts]
     bmin = reduce((a, b) -> min.(a, b), coords)
     bmax = reduce((a, b) -> max.(a, b), coords)
     ext = bmax - bmin
@@ -172,7 +172,7 @@ end
 
 function _extract_min_spacing(s::_ClampedSpacing)
     im = _extract_min_spacing(s.inner)
-    hm = Float64(ustrip(s.hmax))
+    hm = float(ustrip(s.hmax))
     return isnothing(im) ? hm : min(im, hm)
 end
 
@@ -185,9 +185,9 @@ end
 # sample is too coarse, the interior is unfillable and we clamp.
 function _probe_min_spacing(spacing, bmin::SVector{3, T}, bmax::SVector{3, T}; n::Int = 5) where {T}
     ext = bmax - bmin
-    hmin = T(Inf)
+    hmin = typemax(T)
     for i in 0:(n - 1), j in 0:(n - 1), k in 0:(n - 1)
-        t = SVector{3, T}((i + 0.5) / n, (j + 0.5) / n, (k + 0.5) / n)
+        t = SVector{3, T}(2i + 1, 2j + 1, 2k + 1) / (2n)
         h = _spacing_value(T, spacing, bmin + t .* ext)
         h < hmin && (hmin = h)
     end

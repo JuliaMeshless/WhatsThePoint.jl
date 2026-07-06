@@ -14,15 +14,16 @@ concrete implementations.
 abstract type AbstractSpacing end
 abstract type VariableSpacing <: AbstractSpacing end
 
-# O(log n) nearest-neighbor query via KDTree
+# O(log n) nearest-neighbor query via KDTree. Distances come back in the
+# tree's (= boundary data's) machine type regardless of the query point's.
 function _min_distance(p, boundary, tree::KDTree)
-    q = Float64.(ustrip.(to(p)))
+    q = ustrip.(to(p))
     idxs, dists = knn(tree, q, 1)
     return dists[1] * unit(eltype(to(first(boundary))))
 end
 
 function _build_boundary_tree(boundary_points)
-    coords = [Float64.(ustrip.(to(p))) for p in boundary_points]
+    coords = [ustrip.(to(p)) for p in boundary_points]
     return KDTree(coords)
 end
 
@@ -100,8 +101,8 @@ end
 function BoundaryLayerSpacing(boundary_points; at_wall, bulk, layer_thickness)
     isempty(boundary_points) &&
         throw(ArgumentError("boundary_points must be non-empty"))
-    δ = Float64(ustrip(layer_thickness))
-    δ > 0 || throw(ArgumentError("layer_thickness must be positive, got $layer_thickness"))
+    ustrip(layer_thickness) > 0 ||
+        throw(ArgumentError("layer_thickness must be positive, got $layer_thickness"))
 
     # Ensure at_wall and bulk have compatible types
     B = promote_type(typeof(at_wall), typeof(bulk))
@@ -120,10 +121,10 @@ end
 function (s::BoundaryLayerSpacing)(p::Union{Point, Vec})
     # Distance to nearest boundary point
     x = _min_distance(p, s.boundary, s.tree)
-    d = Float64(ustrip(x))
+    d = ustrip(x)
 
     # Sigmoid transition: center at δ/2, width ≈ δ/6 (smooth S-curve over boundary layer)
-    δ = Float64(ustrip(s.layer_thickness))
+    δ = ustrip(s.layer_thickness)
     center = δ / 2
     width = δ / 6
 

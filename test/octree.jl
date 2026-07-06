@@ -383,36 +383,51 @@ end
     @test alg2.triangle_octree isa WhatsThePoint.TriangleOctree
 end
 
-@testitem "Octree discretization promotes Float32 STL boundaries" setup = [TestData, CommonImports] begin
-    # The Octree algorithm emits Float64 volume points. A boundary with a
-    # different mactype (e.g. Float32 from binary STL) must still assemble into
-    # a single-CRS PointCloud — the PointCloud constructor promotes boundary
-    # and volume to their common type automatically.
-    #
+@testitem "Octree discretization preserves and promotes mactype" setup = [TestData, CommonImports] begin
     # GeoIO's output mactype is version-dependent (newer Meshes/CoordRefSystems
     # promote binary STL to Float64 on load), so we explicitly rebuild the mesh
-    # with Float32 coordinates to guarantee the mixed-mactype path is
-    # exercised regardless of the resolved dependency versions.
+    # at a known mactype to pin both paths regardless of the resolved
+    # dependency versions.
     mesh_raw = GeoIO.load(TestData.BOX_PATH).geometry
-    to_f32(p) = (c = Meshes.coords(p); Meshes.Point(Float32(ustrip(c.x)), Float32(ustrip(c.y)), Float32(ustrip(c.z))))
-    mesh_f32 = Meshes.SimpleMesh(to_f32.(Meshes.vertices(mesh_raw)), Meshes.topology(mesh_raw))
+    rebuild(T, mesh) = Meshes.SimpleMesh(
+        [
+            (c = Meshes.coords(p); Meshes.Point(T(ustrip(c.x)), T(ustrip(c.y)), T(ustrip(c.z))))
+                for p in Meshes.vertices(mesh)
+        ],
+        Meshes.topology(mesh),
+    )
+    mesh_f32 = rebuild(Float32, mesh_raw)
     bnd = PointBoundary(mesh_f32)
     @test CoordRefSystems.mactype(Meshes.crs(first(points(bnd)))) === Float32
 
-    alg = Octree(mesh_f32)
-    cloud = discretize(bnd, ConstantSpacing(3.0m); alg, max_points = 50)
-    @test cloud isa PointCloud
-    @test length(WhatsThePoint.volume(cloud)) > 0
-    # Cloud mactype is the promoted common type (Float32 + Float64 -> Float64)
-    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
+    # Type-consistent path: a Float32 mesh drives a Float32 algorithm, and the
+    # whole pipeline stays Float32 — no silent promotion to Float64.
+    alg32 = Octree(mesh_f32)
+    @test alg32.alpha isa Float32
+    @test alg32.boundary_oversampling isa Float32
+    @test alg32.bridson_factor isa Float32
+    @test alg32.max_growth isa Float32
+    @test eltype(alg32.triangle_octree.mesh_bbox_min) === Float32
+    cloud32 = discretize(bnd, ConstantSpacing(3.0f0m); alg = alg32, max_points = 50)
+    @test cloud32 isa PointCloud
+    @test length(WhatsThePoint.volume(cloud32)) > 0
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud32)))) === Float32
+
+    # Mixed path: a Float32 boundary combined with a deliberately Float64
+    # algorithm still assembles — the PointCloud constructor promotes boundary
+    # and volume to their common type (Float32 + Float64 -> Float64).
+    mesh_f64 = rebuild(Float64, mesh_raw)
+    cloud_mixed = discretize(bnd, ConstantSpacing(3.0m); alg = Octree(mesh_f64), max_points = 50)
+    @test length(WhatsThePoint.volume(cloud_mixed)) > 0
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud_mixed)))) === Float64
 
     # Promotion preserves surface names (and the boundary point count).
-    @test names(WhatsThePoint.boundary(cloud)) == names(bnd)
-    @test length(WhatsThePoint.boundary(cloud)) == length(bnd)
+    @test names(WhatsThePoint.boundary(cloud_mixed)) == names(bnd)
+    @test length(WhatsThePoint.boundary(cloud_mixed)) == length(bnd)
 
     # Non-Octree algorithms are untouched: same Float32 boundary still works
-    # through SlakKosec without promotion.
+    # through SlakKosec.
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
-    cloud32 = discretize(bnd, ConstantSpacing(3.0f0m); alg = SlakKosec(octree), max_points = 20)
-    @test cloud32 isa PointCloud
+    cloud_sk = discretize(bnd, ConstantSpacing(3.0f0m); alg = SlakKosec(octree), max_points = 20)
+    @test cloud_sk isa PointCloud
 end

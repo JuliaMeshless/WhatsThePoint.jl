@@ -86,20 +86,21 @@ Computes `d_NN(i) / h(x_i)` for every point and returns:
 - `k`, `coord_radius`
 """
 function spacing_fidelity_metrics(
-        cloud::PointCloud, spacing::AbstractSpacing; k = 30, coord_radius = 1.4,
-    )
+        cloud::PointCloud{M, C}, spacing::AbstractSpacing; k = 30, coord_radius = 1.4,
+    ) where {M, C}
+    T = CoordRefSystems.mactype(C)
     pts = points(cloud)
     n = length(pts)
     k = min(n, k)
     method = KNearestSearch(cloud, k)
     results = searchdists(cloud, method)
 
-    dnn_h = Vector{Float64}(undef, n)
+    dnn_h = Vector{T}(undef, n)
     coord = Vector{Int}(undef, n)
     for i in 1:n
         ids, dists = results[i]
         h = ustrip(spacing(pts[i]))
-        d_min = Inf
+        d_min = typemax(T)
         c = 0
         for (j, d) in zip(ids, dists)
             j == i && continue
@@ -113,7 +114,7 @@ function spacing_fidelity_metrics(
 
     μ = mean(dnn_h)
     cv = std(dnn_h) / μ
-    qs = quantile(dnn_h, [0.05, 0.5, 0.95])
+    qs = quantile(dnn_h, T[0.05, 0.5, 0.95])
 
     return (;
         mean_dnn_h = μ,

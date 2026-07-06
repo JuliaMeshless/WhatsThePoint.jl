@@ -49,11 +49,11 @@ struct VertexResolutionCriterion{T <: Real} <: SubdivisionCriterion
 end
 
 function VertexResolutionCriterion(
-        mesh::SimpleMesh;
+        mesh::SimpleMesh{M, C};
         tolerance_relative = 1.0e-6,
         min_ratio = 1.0e-6
-    )
-    T = Float64
+    ) where {M, C}
+    T = CoordRefSystems.mactype(C)
     n_triangles = Meshes.nelements(mesh)
     n_triangles > 0 || throw(ArgumentError("Mesh must contain at least one triangle"))
 
@@ -269,7 +269,9 @@ function has_consistent_normals(::Type{T}, mesh::SimpleMesh) where {T}
     return true
 end
 
-has_consistent_normals(mesh::SimpleMesh) = has_consistent_normals(Float64, mesh)
+function has_consistent_normals(mesh::SimpleMesh{M, C}) where {M, C}
+    return has_consistent_normals(CoordRefSystems.mactype(C), mesh)
+end
 
 """
 Signed volume of a closed triangle mesh (divergence theorem,
@@ -321,7 +323,7 @@ function TriangleOctree(
         classify_leaves::Bool = true,
         verify_orientation::Bool = true,
     ) where {M <: Manifold, C <: CRS}
-    T = Float64
+    T = CoordRefSystems.mactype(C)
     n_triangles = Meshes.nelements(mesh)
 
     if verify_orientation && !has_consistent_normals(T, mesh)

@@ -30,8 +30,8 @@ struct SpacingCriterion{T <: Real, S} <: SubdivisionCriterion
     absolute_min::T
 end
 
-function SpacingCriterion(spacing, diagonal; alpha = 2.0, min_ratio = 1.0e-6)
-    T = Float64
+function SpacingCriterion(spacing, diagonal::Real; alpha = 2, min_ratio = 1.0e-6)
+    T = typeof(float(diagonal))
     return SpacingCriterion{T, typeof(spacing)}(spacing, T(alpha), T(diagonal) * T(min_ratio))
 end
 
@@ -74,7 +74,8 @@ enabling spacing-aware point distribution. The node octree is:
 - `node_min_ratio`: Minimum box size ratio relative to domain
 
 # Returns
-`SpatialOctree{Int, Float64}` with spacing-driven subdivision
+`SpatialOctree{Int, T}` with spacing-driven subdivision, where `T` is the
+triangle octree's coordinate type (the mesh CRS machine type)
 
 # Example
 ```julia
@@ -83,8 +84,9 @@ spacing = BoundaryLayerSpacing(points; at_wall=0.5m, bulk=5m, layer_thickness=2m
 node_tree = build_node_octree(tri_octree, spacing, 1.0, 1e-6)
 ```
 """
-function build_node_octree(triangle_octree, spacing, alpha, node_min_ratio)
-    T = Float64
+function build_node_octree(
+        triangle_octree::TriangleOctree{M, C, T}, spacing, alpha, node_min_ratio
+    ) where {M, C, T}
     bbox_min, bbox_max = bounding_box(triangle_octree.tree)
     node_tree = SpatialOctree{Int, T}(bbox_min, triangle_octree.tree.root_size; initial_capacity = 1000)
 
@@ -101,8 +103,9 @@ end
     return _classify_point_octree(pt, octree; tol = T(tol))
 end
 
-function _box_may_contain_interior(node_tree, box_idx, triangle_octree)
-    T = Float64
+function _box_may_contain_interior(
+        node_tree::SpatialOctree{<:Any, T}, box_idx, triangle_octree
+    ) where {T}
     bbox_min, bbox_max = box_bounds(node_tree, box_idx)
     h = box_size(node_tree, box_idx)
     tol = max(T(_CLASSIFY_TOLERANCE_ABS), h * T(_CLASSIFY_TOLERANCE_REL))

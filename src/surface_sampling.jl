@@ -32,13 +32,13 @@ until `max_points` is reached (with a warning, since a truncated pass leaves the
 surface under-sampled).
 """
 function sample_surface(
-        mesh::SimpleMesh{𝔼{3}},
+        mesh::SimpleMesh{𝔼{3}, C},
         spacing::AbstractSpacing;
         factor::Real = 0.75,
         max_points::Int = 10_000_000,
         stall_limit::Int = 2000,
-    )
-    T = Float64
+    ) where {C}
+    T = CoordRefSystems.mactype(C)
     factor > 0 || throw(ArgumentError("factor must be positive"))
     stall_limit > 0 || throw(ArgumentError("stall_limit must be positive"))
     n_tri = nelements(mesh)
@@ -47,9 +47,9 @@ function sample_surface(
 
     # Triangle areas (for area-weighted sampling) and domain bounds.
     tri_areas = Vector{T}(undef, n_tri)
-    gmin = SVector{3, T}(Inf, Inf, Inf)
-    gmax = SVector{3, T}(-Inf, -Inf, -Inf)
-    r_min = T(Inf)
+    gmin = SVector{3, T}(typemax(T), typemax(T), typemax(T))
+    gmax = SVector{3, T}(typemin(T), typemin(T), typemin(T))
+    r_min = typemax(T)
     for i in 1:n_tri
         v1, v2, v3 = _get_triangle_vertices(T, mesh, i)
         tri_areas[i] = norm(cross(v2 - v1, v3 - v1)) / 2
