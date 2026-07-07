@@ -43,7 +43,7 @@ end
     using Unitful: ustrip
     import GeoIO
 
-    g_path = suggest_spacing(TestData.BOX_PATH; verbose = false)
+    g_path = suggest_spacing(TestData.BOX_PATH, u"m"; verbose = false)
     @test ustrip(g_path.h_ceiling) > 0
     @test g_path.n_triangles > 0
 

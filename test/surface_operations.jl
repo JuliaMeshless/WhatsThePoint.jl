@@ -67,7 +67,7 @@ end
 end
 
 @testitem "split_surface! - single surface" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BIFURCATION_PATH)
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
     @test length(namedsurfaces(boundary)) == 1
 
     split_surface!(boundary, 80°)
@@ -78,7 +78,7 @@ end
 end
 
 @testitem "split_surface! - by target surface name" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BIFURCATION_PATH)
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
 
     split_surface!(boundary, :surface1, 80°)
 
@@ -88,7 +88,7 @@ end
 end
 
 @testitem "split_surface! - by PointSurface object" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BIFURCATION_PATH)
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
     surf = boundary[:surface1]
     original_length = length(boundary)
 
@@ -103,7 +103,7 @@ end
 
 @testitem "split_surface! - with PointCloud" setup = [TestData, CommonImports] begin
     using WhatsThePoint: boundary
-    cloud = PointCloud(TestData.BIFURCATION_PATH)
+    cloud = PointCloud(TestData.BIFURCATION_PATH, u"m")
     @test length(namedsurfaces(cloud)) == 1
 
     split_surface!(cloud, 80°)
@@ -130,8 +130,8 @@ end
 end
 
 @testitem "split_surface! - different angles" setup = [TestData, CommonImports] begin
-    boundary1 = PointBoundary(TestData.BIFURCATION_PATH)
-    boundary2 = PointBoundary(TestData.BIFURCATION_PATH)
+    boundary1 = PointBoundary(TestData.BIFURCATION_PATH, u"m")
+    boundary2 = PointBoundary(TestData.BIFURCATION_PATH, u"m")
 
     split_surface!(boundary1, 45°)
     split_surface!(boundary2, 60°)
@@ -144,14 +144,14 @@ end
 end
 
 @testitem "split_surface! - custom k parameter" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BIFURCATION_PATH)
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
 
     @test_nowarn split_surface!(boundary, 80°; k = 15)
     @test length(namedsurfaces(boundary)) > 1
 end
 
 @testitem "surface operations integration" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BIFURCATION_PATH)
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
     original_length = length(boundary)
 
     split_surface!(boundary, 80°)

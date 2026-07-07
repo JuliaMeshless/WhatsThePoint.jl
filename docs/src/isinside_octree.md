@@ -32,13 +32,10 @@ For large 3D meshes, the Green's function approach becomes expensive. The [`Tria
 
 ```julia
 using WhatsThePoint
+using Unitful: mm
 
-# From a file path
-octree = TriangleOctree("model.stl"; min_ratio=1e-6)
-
-# From a SimpleMesh
-using GeoIO
-mesh = GeoIO.load("model.stl") |> boundary
+# Load the mesh once (unit required — files carry no unit metadata)
+mesh = import_mesh("model.stl", mm)
 octree = TriangleOctree(mesh; min_ratio=1e-6)
 ```
 
@@ -67,7 +64,7 @@ This classification enables O(1) point-in-volume queries for interior and exteri
 ### Octree-Accelerated isinside
 
 ```julia
-octree = TriangleOctree("model.stl"; min_ratio=1e-6)
+octree = TriangleOctree(import_mesh("model.stl", mm); min_ratio=1e-6)
 
 # Single point query
 result = isinside(point, octree)
@@ -87,7 +84,7 @@ Both `SVector{3}` and Meshes.jl `Point` types are accepted.
 Pass a `TriangleOctree` to `SlakKosec` to accelerate the `isinside` checks during volume point generation:
 
 ```julia
-octree = TriangleOctree("model.stl"; min_ratio=1e-6)
+octree = TriangleOctree(import_mesh("model.stl", mm); min_ratio=1e-6)
 spacing = ConstantSpacing(1mm)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
@@ -97,7 +94,8 @@ cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 `Octree` uses the octree directly to generate volume points. See the [Discretization](discretization.md) page for details.
 
 ```julia
-cloud = discretize(boundary, spacing; alg=Octree("model.stl"), max_points=200_000)
+mesh = import_mesh("model.stl", mm)
+cloud = discretize(boundary, spacing; alg=Octree(mesh), max_points=200_000)
 ```
 
 ## Choosing an Approach

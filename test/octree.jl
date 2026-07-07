@@ -377,8 +377,8 @@ end
     @test length(WhatsThePoint.volume(cloud)) > 0
     @test alg.node_min_ratio < 1.0
 
-    # Test string filepath constructor
-    alg2 = Octree(TestData.BOX_PATH)
+    # Test construction from an imported mesh
+    alg2 = Octree(import_mesh(TestData.BOX_PATH, u"m"))
     @test alg2 isa Octree
     @test alg2.triangle_octree isa WhatsThePoint.TriangleOctree
 end
@@ -427,7 +427,7 @@ end
 
     # Non-Octree algorithms are untouched: same Float32 boundary still works
     # through SlakKosec.
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     cloud_sk = discretize(bnd, ConstantSpacing(3.0f0m); alg = SlakKosec(octree), max_points = 20)
     @test cloud_sk isa PointCloud
 end

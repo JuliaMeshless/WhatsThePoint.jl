@@ -15,9 +15,10 @@ Pkg.add(url="https://github.com/JuliaMeshless/WhatsThePoint.jl")
 
 ```julia
 using WhatsThePoint
+using Unitful: mm
 
-# 1. Import a surface mesh
-boundary = PointBoundary("model.stl")
+# 1. Import a surface mesh — the unit says what the file's raw numbers mean
+boundary = PointBoundary("model.stl", mm)
 
 # 2. Split into named surfaces by normal angle
 split_surface!(boundary, 75°)
@@ -40,7 +41,7 @@ export_vtk("cloud", cloud)
 ```
 
 !!! tip "Not sure what spacing to use?"
-    Run `suggest_spacing("model.stl")` first — it probes the geometry and
+    Run `suggest_spacing("model.stl", mm)` first — it probes the geometry and
     recommends a baseline spacing (plus the coarsest spacing the domain can
     host before the interior comes out empty).
 

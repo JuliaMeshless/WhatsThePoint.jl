@@ -59,14 +59,14 @@ end
 end
 
 @testitem "isinside 3D PointBoundary" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
     @test isinside(Point(0.5, 0.5, 0.5), boundary)
     @test !isinside(Point(0.5, 0.5, -0.5), boundary)
     @test !isinside(Point(0.5, 0.5, -0.001), boundary)
 end
 
 @testitem "isinside 3D PointCloud" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
     cloud = PointCloud(boundary)
 
     @test isinside(Point(12.5, 12.5, 12.5), cloud)
@@ -75,14 +75,14 @@ end
 end
 
 @testitem "isinside 3D PointSurface MethodError" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
     surf = boundary[:surface1]
 
     @test_throws MethodError isinside(Point(12.5, 12.5, 12.5), surf)
 end
 
 @testitem "isinside 3D testpoint as AbstractVector" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
     surf = boundary[:surface1]
 
     @test_throws MethodError isinside([0.5, 0.5, 0.5], surf)

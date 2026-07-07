@@ -84,8 +84,8 @@ function PointSurface(points::AbstractVector; k::Int = 5, topology = NoTopology(
     return surf
 end
 
-function PointSurface(filepath::String; topology = NoTopology())
-    points, normals, areas, _ = import_surface(filepath)
+function PointSurface(filepath::AbstractString, unit::Unitful.Units; topology = NoTopology())
+    points, normals, areas, _ = import_surface(filepath, unit)
     return PointSurface(points, normals, areas; topology = topology)
 end
 

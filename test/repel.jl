@@ -1,6 +1,6 @@
 @testitem "repel convergence success" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 20)
 
@@ -13,8 +13,8 @@
 end
 
 @testitem "repel basic behavior" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
@@ -41,8 +41,8 @@ end
 end
 
 @testitem "repel respects max_iters" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
 
     conv1 = Float64[]
@@ -57,8 +57,8 @@ end
 end
 
 @testitem "repel accepts parameter combinations" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
 
@@ -73,8 +73,8 @@ end
 end
 
 @testitem "repel boundary projection preserves points" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
@@ -102,8 +102,8 @@ end
 end
 
 @testitem "repel without octree" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
@@ -185,8 +185,8 @@ end
 @testitem "repel β kwarg feeds default force_model" setup = [TestData, CommonImports] begin
     # The β kwarg must continue to affect the default ClippedSpacingForce so that
     # existing callers that pass `β=...` keep working without passing force_model.
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
 
@@ -208,8 +208,8 @@ end
 end
 
 @testitem "repel accepts SpacingEquilibriumForce" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
@@ -233,8 +233,8 @@ end
 @testitem "repel force models both reduce spacing error" setup = [TestData, CommonImports] begin
     using WhatsThePoint: spacing_metrics
 
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary; divisor = 4)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 80)
 
@@ -260,8 +260,8 @@ end
 end
 
 @testitem "repel stall_after stops on quality plateau" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
@@ -325,8 +325,8 @@ end
 end
 
 @testitem "repel deposit_ratio grows the boundary from escaped points" setup = [TestData, CommonImports] begin
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
-    full = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
+    full = PointBoundary(TestData.BOX_PATH, u"m")
     # Deliberately sparse boundary: deposition must grow the surface population
     # until it can contain the interior at the prescribed density.
     ids = 1:200:length(full)
@@ -373,8 +373,8 @@ end
 end
 
 @testitem "repel cull_ratio enforces the separation guarantee" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     # Spacing must be consistent with the boundary tessellation: box.stl's face
     # centers sit ~0.22 m apart, while bbox/8 ≈ 5.4 m would put the 0.5·h cull
     # radius across ~12 boundary spacings — asking the cull to decimate the
@@ -397,8 +397,8 @@ end
 end
 
 @testitem "repel kick_after breaks frozen standoffs" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
 
@@ -432,8 +432,8 @@ end
 end
 
 @testitem "repel trace records closest pair" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
 
@@ -450,8 +450,8 @@ end
 end
 
 @testitem "repel rebuild_every skips k-NN rebuild" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 30)
 

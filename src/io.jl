@@ -1,12 +1,48 @@
+# Mesh files carry no unit metadata and GeoIO assigns meters by default, so the
+# stored numbers are reinterpreted in the user-supplied unit (46 -> 46 mm, no
+# conversion). Raw coordinates never change — downstream numerics are label-blind.
+function _reinterpret_unit(mesh::SimpleMesh, unit::Unitful.Units)
+    dimension(unit) == u"𝐋" || throw(ArgumentError("unit must be a length unit, got $unit"))
+    C = crs(mesh)
+    C <: Cartesian || throw(ArgumentError("unit reinterpretation requires Cartesian coordinates, got $C"))
+    verts = map(Meshes.vertices(mesh)) do p
+        Point((CoordRefSystems.raw(coords(p)) .* unit)...)
+    end
+    return SimpleMesh(verts, Meshes.topology(mesh))
+end
+
 """
-    import_surface(filepath::String)
+    import_mesh(filepath, unit::Unitful.Units) -> SimpleMesh
+
+Load a surface mesh from a file (STL, OBJ, or any format supported by GeoIO.jl)
+and *reinterpret* its raw coordinates in `unit`: a stored `46` becomes `46 mm`
+with `unit = u"mm"` — no conversion happens, because mesh files carry no unit
+metadata (GeoIO's default of meters is discarded). Topology and coordinate
+machine type (`Float32` stays `Float32`) are preserved.
+
+This is the single gateway for file geometry: the returned mesh feeds
+[`PointBoundary`](@ref), [`TriangleOctree`](@ref), and [`Octree`](@ref).
+Use [`geometry_info`](@ref) to probe the raw extents when unsure of the unit.
+"""
+function import_mesh(filepath::AbstractString, unit::Unitful.Units)
+    geom = GeoIO.load(filepath).geometry
+    geom isa SimpleMesh ||
+        throw(ArgumentError("$filepath did not load as a SimpleMesh, got $(nameof(typeof(geom)))"))
+    return _reinterpret_unit(geom, unit)
+end
+
+"""
+    import_surface(filepath, unit::Unitful.Units)
 
 Load a surface mesh from a file (STL, OBJ, or any format supported by GeoIO.jl). Returns a
-tuple of `(points, normals, areas, mesh)` where points are face centers.
+tuple of `(points, normals, areas, mesh)` where points are face centers. Coordinates are
+reinterpreted in `unit` (see [`import_mesh`](@ref)); areas therefore carry `unit^2`.
 """
-function import_surface(filepath::String)
+function import_surface(filepath::AbstractString, unit::Unitful.Units)
     geo = GeoIO.load(filepath)
-    mesh = geo.geometry
+    geo.geometry isa SimpleMesh ||
+        throw(ArgumentError("$filepath did not load as a SimpleMesh, got $(nameof(typeof(geo.geometry)))"))
+    mesh = _reinterpret_unit(geo.geometry, unit)
     points = map(centroid, elements(mesh))
     n = if hasproperty(geo, :normal)
         geo.normal
@@ -191,4 +227,60 @@ _hcat_data(data::AbstractVector) = reduce(hcat, data)
 
 function savevtk!(vtkfile)
     return vtk_save(vtkfile)
+end
+
+function _print_geometry_entry(name, bmin, bmax, ext)
+    rnd(t) = round.(t; sigdigits = 4)
+    println("─── $name ───")
+    println("  min:    $(rnd(bmin))")
+    println("  max:    $(rnd(bmax))")
+    println("  extent: $(rnd(ext))")
+    return nothing
+end
+
+"""
+    geometry_info(filepath, filepaths...; verbose=true) -> Vector{NamedTuple}
+
+Inspect the raw bounding box of one or more mesh files before constructing
+anything — the "what do these numbers mean?" probe for files without unit
+metadata (STL coordinates are just numbers; GeoIO.jl assigns meters by
+default). Returns one `(file, min, max, extent)` named tuple per file, with
+values as raw (unitless) coordinate tuples. With `verbose=true` prints each
+bounding box and, for multiple files, their union — useful when parts must fit
+together.
+
+Once you know the unit, pass it to [`import_mesh`](@ref) or
+[`PointBoundary`](@ref) — the raw numbers are reinterpreted in that unit.
+
+# Example
+```julia
+geometry_info("intake.stl", "exhaust.stl")
+# ─── intake.stl ───
+#   min:    (0.0, 0.0, 0.0)
+#   max:    (120.5, 87.3, 42.0)
+#   extent: (120.5, 87.3, 42.0)
+# ─── exhaust.stl ───
+#   ...
+# ─── Union ───
+#   ...
+```
+"""
+function geometry_info(filepath::AbstractString, filepaths::AbstractString...; verbose::Bool = true)
+    entries = map((filepath, filepaths...)) do f
+        box = boundingbox(Meshes.vertices(GeoIO.load(f).geometry))
+        bmin = Tuple(ustrip.(to(minimum(box))))
+        bmax = Tuple(ustrip.(to(maximum(box))))
+        (file = f, min = bmin, max = bmax, extent = bmax .- bmin)
+    end
+    if verbose
+        for e in entries
+            _print_geometry_entry(basename(e.file), e.min, e.max, e.extent)
+        end
+        if length(entries) > 1
+            umin = reduce((a, b) -> min.(a, b), (e.min for e in entries))
+            umax = reduce((a, b) -> max.(a, b), (e.max for e in entries))
+            _print_geometry_entry("Union", umin, umax, umax .- umin)
+        end
+    end
+    return collect(entries)
 end

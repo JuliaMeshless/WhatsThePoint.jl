@@ -3,7 +3,7 @@ using Unitful: m
 using GLMakie
 using GeoIO
 
-mesh = GeoIO.load("bunny.stl").geometry
+mesh = import_mesh("bunny.stl", m)
 
 # Step 2: (Optional) Preprocess mesh with Meshes.jl
 # mesh = refine(mesh)

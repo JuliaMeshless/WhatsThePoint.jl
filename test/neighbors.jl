@@ -136,7 +136,7 @@ end
 end
 
 @testitem "KNearestSearch with real geometry" setup = [TestData, CommonImports] begin
-    cloud = PointCloud(TestData.BOX_PATH)
+    cloud = PointCloud(TestData.BOX_PATH, u"m")
 
     @testset "Search on imported geometry" begin
         k = 10

@@ -38,13 +38,29 @@ function PointBoundary(points)
     return PointBoundary(points, normals, areas)
 end
 
-function PointBoundary(filepath::String)
-    points, normals, areas, _ = import_surface(filepath)
+"""
+    PointBoundary(filepath, unit::Unitful.Units)
+
+Load a surface mesh and take its face centers as boundary points. The file's
+raw coordinates are reinterpreted in `unit` (see [`import_mesh`](@ref)); run
+[`geometry_info`](@ref) first when unsure which unit the file was exported in.
+"""
+function PointBoundary(filepath::AbstractString, unit::Unitful.Units)
+    points, normals, areas, _ = import_surface(filepath, unit)
     surf = PointSurface(points, normals, areas)
     M = manifold(surf)
     C = crs(surf)
     surfaces = LittleDict{Symbol, PointSurface{M, C}}(:surface1 => surf)
     return PointBoundary(surfaces)
+end
+
+# Breaking-change guard: a bare path would otherwise fall into the generic
+# PointBoundary(points) method and fail deep inside compute_normals.
+function PointBoundary(::AbstractString)
+    throw(ArgumentError(
+        "PointBoundary(filepath) now requires a unit, e.g. PointBoundary(filepath, u\"mm\"). " *
+            "Mesh files carry no unit metadata — run geometry_info(filepath) to inspect the raw extents.",
+    ))
 end
 
 """

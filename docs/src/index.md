@@ -23,7 +23,8 @@ Load a surface mesh and inspect the boundary structure:
 
 ```@example quickstart
 using WhatsThePoint
-boundary = PointBoundary(joinpath(@__DIR__, "assets/bunny.stl"))
+using Unitful: m
+boundary = PointBoundary(joinpath(@__DIR__, "assets/bunny.stl"), m)
 ```
 
 ```julia
@@ -56,8 +57,8 @@ Pkg.add(url="https://github.com/JuliaMeshless/WhatsThePoint.jl")
 ## Key Features
 
 **Pipeline**
-- Spacing guidance before generation via `suggest_spacing`
-- Import surface meshes (STL, OBJ, any GeoIO.jl format) or Poisson-disk sample them at a prescribed spacing (`PointBoundary(mesh, spacing)`)
+- Spacing guidance before generation via `suggest_spacing`, raw-extent probing via `geometry_info`
+- Import surface meshes (STL, OBJ, any GeoIO.jl format) with explicit units via `import_mesh`, or Poisson-disk sample them at a prescribed spacing (`PointBoundary(mesh, spacing)`)
 - Multiple discretization algorithms: `SlakKosec`, `VanDerSandeFornberg` (3D), `FornbergFlyer` (2D), `Octree` (default `:bridson` graded Poisson-disk fill)
 - Node repulsion for distribution optimization (Miotti 2023)
 - Quality metrics: `metrics`, `spacing_metrics`, `spacing_fidelity_metrics`

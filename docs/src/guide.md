@@ -8,12 +8,27 @@ This guide walks through the core workflow: importing a surface, generating volu
 
 ## Importing a Surface
 
-Load a surface mesh (STL, OBJ, or any format supported by [GeoIO.jl](https://github.com/JuliaEarth/GeoIO.jl)) as a `PointBoundary`:
+Mesh files carry no unit metadata — the coordinates are just numbers, and CAD tools commonly export in millimeters or inches. Every file entry point therefore requires the unit those numbers are meant in; inspect first when unsure:
 
 ```julia
 using WhatsThePoint
+using Unitful: mm
 
-boundary = PointBoundary("model.stl")
+geometry_info("intake.stl")
+# ─── intake.stl ───
+#   min:    (0.0, 0.0, 0.0)
+#   max:    (120.5, 87.3, 42.0)    ← looks like mm
+#   extent: (120.5, 87.3, 42.0)
+
+boundary = PointBoundary("intake.stl", mm)  # 120.5 becomes 120.5 mm, not 0.1205 mm
+```
+
+The unit *reinterprets* the stored numbers — no conversion happens. When the mesh itself is needed downstream (octrees, surface sampling), load it once through [`import_mesh`](@ref) and share it:
+
+```julia
+mesh = import_mesh("model.stl", mm)
+boundary = PointBoundary(mesh)
+octree = TriangleOctree(mesh; classify_leaves=true)
 ```
 
 !!! note "Face centers, not vertices"
@@ -22,7 +37,7 @@ boundary = PointBoundary("model.stl")
 To place boundary points at a spacing *you* choose instead of the one the tessellation dictates, Poisson-disk sample the surface:
 
 ```julia
-mesh = GeoIO.load("model.stl").geometry
+mesh = import_mesh("model.stl", mm)
 boundary = PointBoundary(mesh, spacing)   # blue-noise samples at spacing(x)
 ```
 
@@ -78,7 +93,7 @@ Generate volume points from a boundary using `discretize`. The algorithm choice 
 Before committing to a spacing, probe the geometry:
 
 ```julia
-g = suggest_spacing("model.stl")   # extent, volume, h_ceiling / h_baseline / h_fine
+g = suggest_spacing("model.stl", u"m")   # extent, volume, h_ceiling / h_baseline / h_fine
 spacing = ConstantSpacing(g.h_baseline)
 ```
 
@@ -95,14 +110,15 @@ cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_
 
 # Octree — spacing-driven adaptive fill; the default :bridson placement is a
 # global graded Poisson-disk front, and max_points is auto-estimated when unset
+mesh = import_mesh("model.stl", u"m")
 bl_spacing = BoundaryLayerSpacing(points(boundary); at_wall=0.6m, bulk=4.0m, layer_thickness=8.0m)
-cloud = discretize(boundary, bl_spacing; alg=Octree("model.stl"))
+cloud = discretize(boundary, bl_spacing; alg=Octree(mesh))
 ```
 
 `SlakKosec` can also accept a `TriangleOctree` for accelerated point-in-volume queries:
 
 ```julia
-octree = TriangleOctree("model.stl"; min_ratio=1e-6)
+octree = TriangleOctree(mesh; min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
 
@@ -144,7 +160,7 @@ The Octree algorithm's default Bridson placement delivers blue-noise quality by 
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
 
 # Boundary-aware (3D) — all points move, escaped points projected back to surface
-octree = TriangleOctree("model.stl"; classify_leaves=true)
+octree = TriangleOctree(import_mesh("model.stl", u"m"); classify_leaves=true)
 cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000)
 
 # Collect convergence history via keyword
