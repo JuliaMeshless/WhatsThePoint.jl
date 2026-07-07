@@ -100,8 +100,10 @@ Point distribution optimization.
 ```@docs
 repel
 RepelForceModel
+ClippedSpacingForce
 InverseDistanceForce
 SpacingEquilibriumForce
+StrongSpacingForce
 compute_force
 ```
 
@@ -110,6 +112,19 @@ compute_force
 ```@docs
 metrics
 spacing_metrics
+spacing_fidelity_metrics
+```
+
+## Spacing Guidance
+
+```@docs
+suggest_spacing
+```
+
+## Surface Sampling
+
+```@docs
+sample_surface
 ```
 
 ## I/O
@@ -117,6 +132,7 @@ spacing_metrics
 ```@docs
 import_surface
 save
+export_vtk
 ```
 
 ## Unexported API

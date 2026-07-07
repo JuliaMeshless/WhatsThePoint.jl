@@ -728,15 +728,20 @@ function classify_leaves!(
     classification = fill(LEAF_UNKNOWN, n_boxes)
     leaves = all_leaves(tree)
 
-    # Classify each leaf
-    for leaf_idx in leaves
-        classification[leaf_idx] = _classify_leaf_conservative(
+    # Parallel classification — each leaf's geometry query is independent
+    # (read-only tree access, no shared mutable state).
+    classes = tmap(leaves) do leaf_idx
+        _classify_leaf_conservative(
             tree,
             leaf_idx,
             geometry_query,
             T(tolerance_relative),
             T(tolerance_absolute),
         )
+    end
+
+    for (i, leaf_idx) in enumerate(leaves)
+        classification[leaf_idx] = classes[i]
     end
 
     return classification

@@ -228,3 +228,55 @@ end
     @test contains(output, "surface1")
     @test contains(output, "surface2")
 end
+
+@testitem "PointCloud mactype promotion no-op for same types" setup = [CommonImports] begin
+    # When boundary and volume already share the same mactype, the promotion
+    # constructor must early-return the inputs unchanged (the inner constructor
+    # handles it). This covers the mactype === T guard in _promote_mactype.
+    pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
+    bnd = PointBoundary(pts)
+    vol = PointVolume([Point(0.5, 0.5, 0.5)])
+    cloud = PointCloud(bnd, vol, NoTopology())
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
+    @test length(cloud) == 4
+end
+
+@testitem "PointCloud mactype promotion for mixed types" setup = [CommonImports] begin
+    # A Float32 boundary combined with a Float64 volume must promote both
+    # sides to the common type (Float64) and keep names and counts intact.
+    pts32 = [Point(0.0f0, 0.0f0, 0.0f0), Point(1.0f0, 0.0f0, 0.0f0), Point(0.0f0, 1.0f0, 0.0f0)]
+    bnd = PointBoundary(pts32)
+    vol = PointVolume([Point(0.5, 0.5, 0.5)])
+    cloud = PointCloud(bnd, vol, NoTopology())
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
+    @test length(cloud) == 4
+    @test length(WhatsThePoint.boundary(cloud)) == 3
+    @test names(cloud) == names(bnd)
+end
+
+@testitem "PointCloud mactype promotion promotes the volume side" setup = [CommonImports] begin
+    # The mirror case: a Float64 boundary combined with a Float32 volume must
+    # promote the volume points up to the common type (Float64).
+    pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
+    bnd = PointBoundary(pts)
+    vol = PointVolume([Point(0.5f0, 0.5f0, 0.5f0)])
+    cloud = PointCloud(bnd, vol, NoTopology())
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
+    @test length(cloud) == 4
+    @test length(WhatsThePoint.volume(cloud)) == 1
+end
+
+@testitem "PointCloud rejects CRS differing beyond machine type" setup = [CommonImports] begin
+    # Promotion reconciles only the mactype. A boundary in mm and a volume in
+    # m share Float64, so promotion is a no-op and the CRS still differ — the
+    # constructor must throw instead of re-dispatching into itself forever
+    # (regression: StackOverflowError).
+    pts_mm = [
+        Point(0.0u"mm", 0.0u"mm", 0.0u"mm"),
+        Point(1.0u"mm", 0.0u"mm", 0.0u"mm"),
+        Point(0.0u"mm", 1.0u"mm", 0.0u"mm"),
+    ]
+    bnd = PointBoundary(pts_mm)
+    vol = PointVolume([Point(0.5, 0.5, 0.5)])
+    @test_throws ArgumentError PointCloud(bnd, vol, NoTopology())
+end

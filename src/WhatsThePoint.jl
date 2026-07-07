@@ -6,8 +6,9 @@ using LinearAlgebra
 using StaticArrays
 using StructArrays
 using NearestNeighbors
+using NearestNeighbors: knn, knn!
 using ChunkSplitters
-using OhMyThreads: tmap, tmap!, tmapreduce
+using OhMyThreads: tmap, tmap!, tmapreduce, TaskLocalValue
 using OrderedCollections: LittleDict
 using Statistics
 using Random
@@ -16,7 +17,7 @@ using ProgressMeter
 using GeoIO
 using WriteVTK
 using Graphs, SimpleWeightedGraphs
-using Distances: Distances, Euclidean, evaluate
+using Distances: Euclidean
 
 using Unitful
 
@@ -31,7 +32,7 @@ const spinner_icons = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 const Angle{T} = Union{Quantity{T, NoDims, typeof(u"rad")}, Quantity{T, NoDims, typeof(u"°")}}
 
 include("utils.jl")
-export metrics, spacing_metrics
+export metrics, spacing_metrics, spacing_fidelity_metrics
 
 include("geometry.jl")
 
@@ -82,10 +83,14 @@ export AbstractSpacing, ConstantSpacing, LogLike, BoundaryLayerSpacing
 
 include("discretization/discretization.jl")
 export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, Octree
-export discretize
+export discretize, suggest_spacing
+
+include("surface_sampling.jl")
+export sample_surface
 
 include("repel_forces.jl")
-export RepelForceModel, InverseDistanceForce, SpacingEquilibriumForce, compute_force
+export RepelForceModel, InverseDistanceForce, SpacingEquilibriumForce, StrongSpacingForce,
+    ClippedSpacingForce, compute_force
 
 include("repel.jl")
 export repel
@@ -93,7 +98,7 @@ export repel
 include("metrics.jl")
 
 include("io.jl")
-export import_surface, visualize, save
+export import_surface, visualize, save, export_vtk
 
 # visualize function is defined in WhatsThePointMakieExt when Makie is loaded
 function visualize end

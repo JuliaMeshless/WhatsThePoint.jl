@@ -58,6 +58,7 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 - `isinside.jl` - Point-in-polygon/volume tests (2D: winding number, 3D: Green's function)
 - `shadow.jl` - Shadow point generation
 - `surface_operations.jl` - Split, combine, add surfaces to boundaries
+- `surface_sampling.jl` - Graded Poisson-disk sampling of triangle-mesh surfaces (`sample_surface`, `PointBoundary(mesh, spacing)`)
 
 ### Octree Spatial Indexing (`src/octree/`)
 - `spatial_octree.jl` - Core octree data structure with adaptive subdivision and 2:1 balancing
@@ -72,12 +73,13 @@ Four algorithms available with **important 2D vs 3D considerations:**
 - **SlakKosec** (3D only, default) - `algorithms/slak_kosec.jl`
 - **VanDerSandeFornberg** (3D only) - `algorithms/vandersande_fornberg.jl`
 - **FornbergFlyer** (2D only) - `algorithms/fornberg_flyer.jl`
-- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill (this is a discretization *algorithm*; not to be confused with `TriangleOctree`, a spatial *data structure*)
+- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill; default `:bridson` placement runs a global graded Poisson-disk front seeded from the boundary, with auto-estimated `max_points` and optional gradient-limited spacing (`max_growth`) (this is a discretization *algorithm*; not to be confused with `TriangleOctree`, a spatial *data structure*)
 
-Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing
+Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing (variable spacings require non-empty boundary points; KDTree-accelerated). `spacing_guidance.jl` provides `suggest_spacing` (geometry probe recommending h_ceiling/h_baseline/h_fine) and the bridson coarse-spacing clamp-and-warn guard.
 
 ### Optimization (`src/`)
 - `repel.jl` - Node repulsion algorithm (Miotti 2023) for improving point distribution quality
+- `repel_forces.jl` - Force laws for `repel` (`ClippedSpacingForce` default, `InverseDistanceForce`, `SpacingEquilibriumForce`, `StrongSpacingForce`)
 
 ## Important Technical Details
 
@@ -89,7 +91,6 @@ WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and 
 - `discretize` algorithms - Euclidean point generation
 - `repel` - Euclidean distance-based repulsion
 - `isinside` (Green's function) - Euclidean norms
-- `distance` - Explicitly uses Euclidean metric
 - `generate_shadows` - Euclidean vector arithmetic
 
 **Coordinate Systems:** Any CRS is supported on Euclidean manifolds (Cartesian, Cylindrical, Polar, etc.). The Euclidean requirement is about geometric structure (flat space), not coordinate representation.
@@ -114,7 +115,7 @@ Different algorithms for different dimensions:
 - **3D:** Green's function approach, or `TriangleOctree`-accelerated O(1) queries for large meshes
 
 ### Surface Import Behavior
-When importing meshes (e.g., STL files), the package uses **face centers** as boundary points, not vertices. This is important for understanding point distributions after import.
+When importing meshes (e.g., STL files), the package uses **face centers** as boundary points, not vertices. This is important for understanding point distributions after import. To place boundary points at a prescribed spacing instead of the tessellation's, use `PointBoundary(mesh, spacing)` — graded Poisson-disk sampling of the continuous surface (`sample_surface`).
 
 ### Topology (Point Connectivity)
 
@@ -200,10 +201,31 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
 octree = TriangleOctree("model.stl"; classify_leaves=true)
 cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000)
 
-# Collect convergence history via keyword
+# Production configuration: standoff kicks + quality-based stopping
 conv = Float64[]
-cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000, convergence=conv)
+cloud = repel(cloud, spacing, octree;
+              max_iters=300, kick_after=10, cv_target=0.07, stall_after=50,
+              convergence=conv)
 ```
+
+Key keywords (see the `repel` docstrings for the full list):
+
+- `force_model = ClippedSpacingForce(β)` — default force: repulsion-only with
+  compact support, so a cloud that already satisfies the Poisson-disk
+  criterion is preserved or improved (never re-packed). The previous default
+  `SpacingEquilibriumForce` is still available but its attractive branch
+  slowly condenses good clouds (clusters + voids) over long relaxations.
+- `cv_target` / `stall_after` — quality-based stopping. The force residual of
+  a saturated repulsion-only packing plateaus instead of reaching `tol`, so
+  use `cv_target ≈ 0.07` (direct-pipeline raw quality) as the primary stop;
+  `stall_after = 50` is the backstop, on by default so default runs terminate
+  (`0` disables). `cv_target` is off by default.
+- `kick_after` — breaks balanced standoffs (a frozen closest pair) with a
+  small random kick; `10`–`20` is reasonable.
+- `cull_ratio` — near-duplicate safety net that should NEVER remove anything
+  in healthy generation; it `@warn`s when it fires (cull = defect signal).
+- `deposit_ratio` (octree method) — escaped volume points convert into
+  boundary points (emergent surface sampling).
 
 ### Visualization
 
@@ -219,14 +241,18 @@ visualize(boundary; markersize=0.15)
 
 ## Key Functions Reference
 
+- `suggest_spacing` - Probe a geometry and recommend a baseline spacing (the "step 0" before discretize)
 - `discretize` - Generate volume points from boundary (returns new cloud)
+- `sample_surface` / `PointBoundary(mesh, spacing)` - Poisson-disk surface sampling at a prescribed spacing
 - `split_surface!` - Split boundary surfaces by normal angle threshold
 - `combine_surfaces!` - Merge multiple surfaces into one
 - `compute_normals` / `orient_normals!` - Normal vector handling
 - `repel` - Optimize point distribution via node repulsion; two methods: `repel(cloud, spacing)` volume-only, `repel(cloud, spacing, octree)` boundary-projected (returns new cloud)
 - `isinside` - Test if point is inside domain
+- `metrics` / `spacing_metrics` / `spacing_fidelity_metrics` - Distribution quality (separation, fill, mesh ratio, d_NN/h statistics)
 - `import_surface` - Load from STL/mesh files (via GeoIO.jl)
 - `save` - Save to file (`:jld2` default, or `:vtk` format)
+- `export_vtk` - ParaView `.vtu` export with point_type/surface_id and optional solution fields
 - `visualize` - Makie-based visualization
 - `set_topology` - Build point connectivity and return new object
 - `rebuild_topology!` - Rebuild topology in place with same parameters
@@ -249,6 +275,9 @@ test/
 ├── topology.jl                  # Topology tests (KNNTopology, RadiusTopology)
 ├── isinside.jl                  # Point-in-volume tests
 ├── discretization.jl            # Discretization algorithm tests
+├── float32_pipeline.jl          # End-to-end Float32 machine-type preservation tests
+├── spacing_guidance.jl          # suggest_spacing and coarse-spacing clamp tests
+├── surface_sampling.jl          # Poisson-disk surface sampling tests
 ├── repel.jl                     # Node repulsion tests
 ├── shadow.jl                    # Shadow point tests
 ├── surface_operations.jl        # Split/combine surface tests
@@ -267,7 +296,8 @@ test/
 ├── octree_regression_curvature.jl # Octree curvature regression tests
 └── data/
     ├── bifurcation.stl          # Test data (24,780 points)
-    └── box.stl                  # Test data
+    ├── box.stl                  # Test data
+    └── cavity.stl               # Test data
 ```
 
 ## CI/CD

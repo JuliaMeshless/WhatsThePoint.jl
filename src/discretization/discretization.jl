@@ -5,9 +5,10 @@ include("algorithms/fornberg_flyer.jl")
 include("algorithms/vandersande_fornberg.jl")
 include("algorithms/slak_kosec.jl")
 include("algorithms/octree.jl")
+include("spacing_guidance.jl")
 
 """
-    discretize(bnd::PointBoundary, spacing; alg=auto, max_points=10_000_000)
+    discretize(bnd::PointBoundary, spacing; alg=auto, max_points=nothing)
 
 Generate volume points for the given boundary and return a new PointCloud.
 
@@ -16,7 +17,9 @@ Generate volume points for the given boundary and return a new PointCloud.
 
 # Keyword Arguments
 - `alg`: Discretization algorithm (default: `SlakKosec()` for 3D)
-- `max_points`: Maximum number of volume points to generate
+- `max_points`: Maximum number of volume points to generate. For the `Octree`
+  algorithm, defaults to an automatic estimate from the spacing integral
+  (`∫ 1/h(x)³ dx`) when `nothing`; other algorithms default to 10_000_000.
 
 # Example
 ```julia
@@ -35,7 +38,7 @@ function discretize(
         bnd::PointBoundary{𝔼{3}},
         spacing::AbstractSpacing;
         alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-        max_points = 10_000_000,
+        max_points::Union{Int, Nothing} = nothing,
     )
     cloud = PointCloud(bnd)
     new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
@@ -46,7 +49,7 @@ function discretize(
         bnd::PointBoundary{𝔼{2}},
         spacing::AbstractSpacing;
         alg::AbstractNodeGenerationAlgorithm = FornbergFlyer(),
-        max_points = 10_000_000,
+        max_points::Union{Int, Nothing} = nothing,
     )
     @warn "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
     cloud = PointCloud(bnd)
@@ -56,15 +59,19 @@ function discretize(
 end
 
 """
-    discretize(cloud::PointCloud, spacing; alg=auto, max_points=10_000_000)
+    discretize(cloud::PointCloud, spacing; alg=auto, max_points=nothing)
 
 Generate volume points for an existing cloud and return a new PointCloud with the volume populated.
+
+For the `Octree` algorithm, `max_points` defaults to an automatic estimate from
+the spacing integral (`∫ 1/h(x)³ dx`) when `nothing`. Other algorithms default
+to 10_000_000.
 """
 function discretize(
         cloud::PointCloud,
         spacing::AbstractSpacing;
         alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-        max_points = 10_000_000,
+        max_points::Union{Int, Nothing} = nothing,
     )
     new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())

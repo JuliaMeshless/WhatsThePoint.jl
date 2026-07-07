@@ -32,37 +32,85 @@ function FileIO.save(filename::String, cloud::PointCloud; format::Symbol = :jld2
     if format === :jld2
         return FileIO.save(filename, LittleDict("cloud" => cloud))
     elseif format === :vtk
-        _save_vtk_cloud(filename, cloud)
+        export_vtk(filename, cloud)
     else
         throw(ArgumentError("unsupported format: $format. Use :jld2 or :vtk."))
     end
     return nothing
 end
 
-function _save_vtk_cloud(filename::String, cloud::PointCloud)
+"""
+    export_vtk(filename, cloud::PointCloud; fields=(), verbose=false)
+
+Write `cloud` to a ParaView-ready `.vtu` (one `VTK_VERTEX` cell per point). Open
+it in ParaView and set *Representation* to *Point Gaussian* (or *Points*).
+
+Always-attached point data:
+- `point_type` — `1` = boundary, `2` = volume (colour to separate wall from bulk).
+- `surface_id` — `1..N` in `names(cloud)` order, `0` for volume (colour by named
+  surface). Pass `verbose=true` to print the integer→name legend.
+- `normals` — boundary normals (zero on volume points).
+
+`fields` attaches solution data, so a `.vtu` can be re-exported after solving and
+viewed like any CAE result. It is an iterable of `name => values` pairs (e.g. a
+`Dict` or a tuple of pairs); `values` may be scalars or per-point vectors and
+**must be ordered like [`points`](@ref)`(cloud)` — boundary points first, then
+volume** (the natural global DOF order). Units are stripped automatically.
+
+# Examples
+```julia
+export_vtk("cloud", cloud)                                 # geometry only
+export_vtk("sol", cloud; fields = ("T" => temp, "U" => velocity))
+```
+"""
+function export_vtk(filename::String, cloud::PointCloud; fields = (), verbose::Bool = false)
     bnd_pts = to(boundary(cloud))
     vol_pts = length(volume(cloud)) > 0 ? to(volume(cloud)) : eltype(bnd_pts)[]
     all_pts = vcat(bnd_pts, vol_pts)
 
     nbnd = length(bnd_pts)
     nvol = length(vol_pts)
+    npts = nbnd + nvol
 
     # type indicator: 1 = boundary, 2 = volume
     point_type = vcat(ones(Int, nbnd), fill(2, nvol))
 
+    # per-point surface id: 1..N in names(cloud) order (matches the boundary
+    # point concatenation), 0 for volume points.
+    surface_id = zeros(Int, npts)
+    offset = 0
+    for (i, (name, surf)) in enumerate(namedsurfaces(boundary(cloud)))
+        ns = length(surf)
+        surface_id[(offset + 1):(offset + ns)] .= i
+        offset += ns
+        verbose && println("surface_id $i -> $name")
+    end
+
     # normals: boundary has normals, volume gets zeros
     bnd_normals = normal(boundary(cloud))
     zero_normal = zero(first(bnd_normals))
-    vol_normals = fill(zero_normal, nvol)
-    all_normals = vcat(bnd_normals, vol_normals)
+    all_normals = vcat(bnd_normals, fill(zero_normal, nvol))
 
-    exportvtk(
-        filename, all_pts,
-        [all_normals, point_type],
-        ["normals", "point_type"],
-    )
+    # Accept a single bare `name => values` pair as well as an iterable of pairs.
+    field_pairs = fields isa Pair ? (fields,) : fields
+    for (name, vals) in field_pairs
+        length(vals) == npts || throw(
+            DimensionMismatch(
+                "solution field \"$name\" has $(length(vals)) values but the cloud has " *
+                    "$npts points; fields must be ordered like points(cloud) (boundary then volume)",
+            ),
+        )
+    end
+    data = [all_normals, point_type, surface_id, (_strip_field(vals) for (_, vals) in field_pairs)...]
+    names = ["normals", "point_type", "surface_id", (String(name) for (name, _) in field_pairs)...]
+
+    exportvtk(filename, all_pts, data, names)
     return nothing
 end
+
+# Strip units for VTK: scalar fields element-wise, vector-valued fields per entry.
+_strip_field(v::AbstractVector{<:Number}) = ustrip.(v)
+_strip_field(v::AbstractVector) = [ustrip.(x) for x in v]
 
 """
     save(filename::String, boundary::PointBoundary; format=:jld2)

@@ -37,7 +37,35 @@ Point on triangle surface closest to P (may be on edge or vertex).
 # References
 Ericson, "Real-Time Collision Detection", Chapter 5.1.5
 """
-function closest_point_on_triangle(
+@inline function closest_point_on_triangle(
+        P::SVector{3, T},
+        v1::SVector{3, T},
+        v2::SVector{3, T},
+        v3::SVector{3, T},
+    ) where {T <: Real}
+    return closest_point_on_triangle_feature(P, v1, v2, v3)[1]
+end
+
+# Feature codes returned by `closest_point_on_triangle_feature`: the Ericson
+# region tests below classify the closest point exactly — no tolerance needed.
+const FEATURE_FACE = Int8(0)
+const FEATURE_VERTEX_1 = Int8(1)
+const FEATURE_VERTEX_2 = Int8(2)
+const FEATURE_VERTEX_3 = Int8(3)
+const FEATURE_EDGE_12 = Int8(4)
+const FEATURE_EDGE_13 = Int8(5)
+const FEATURE_EDGE_23 = Int8(6)
+
+"""
+    closest_point_on_triangle_feature(P, v1, v2, v3) -> (SVector{3,T}, Int8)
+
+Same as [`closest_point_on_triangle`](@ref) but also reports which triangle
+feature the closest point lies on (`FEATURE_FACE`, `FEATURE_VERTEX_k`,
+`FEATURE_EDGE_jk`). The feature is a free by-product of the Ericson region
+classification and selects the correct angle-weighted pseudonormal for exact
+signed-distance computation (Bærentzen & Aanæs 2005).
+"""
+@inline function closest_point_on_triangle_feature(
         P::SVector{3, T},
         v1::SVector{3, T},
         v2::SVector{3, T},
@@ -59,7 +87,7 @@ function closest_point_on_triangle(
 
     # Check if P is in vertex region outside A
     if d1 <= 0 && d2 <= 0
-        return a  # Barycentric (1,0,0)
+        return a, FEATURE_VERTEX_1  # Barycentric (1,0,0)
     end
 
     # Check if P is in vertex region outside B
@@ -67,14 +95,14 @@ function closest_point_on_triangle(
     d3 = dot(ab, bp)
     d4 = dot(ac, bp)
     if d3 >= 0 && d4 <= d3
-        return b  # Barycentric (0,1,0)
+        return b, FEATURE_VERTEX_2  # Barycentric (0,1,0)
     end
 
     # Check if P is in edge region of AB
     vc = d1 * d4 - d3 * d2
     if vc <= 0 && d1 >= 0 && d3 <= 0
         v = d1 / (d1 - d3)
-        return a + v * ab  # Barycentric (1-v, v, 0)
+        return a + v * ab, FEATURE_EDGE_12  # Barycentric (1-v, v, 0)
     end
 
     # Check if P is in vertex region outside C
@@ -82,21 +110,21 @@ function closest_point_on_triangle(
     d5 = dot(ab, cp)
     d6 = dot(ac, cp)
     if d6 >= 0 && d5 <= d6
-        return c  # Barycentric (0,0,1)
+        return c, FEATURE_VERTEX_3  # Barycentric (0,0,1)
     end
 
     # Check if P is in edge region of AC
     vb = d5 * d2 - d1 * d6
     if vb <= 0 && d2 >= 0 && d6 <= 0
         w = d2 / (d2 - d6)
-        return a + w * ac  # Barycentric (1-w, 0, w)
+        return a + w * ac, FEATURE_EDGE_13  # Barycentric (1-w, 0, w)
     end
 
     # Check if P is in edge region of BC
     va = d3 * d6 - d5 * d4
     if va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0
         w = (d4 - d3) / ((d4 - d3) + (d5 - d6))
-        return b + w * (c - b)  # Barycentric (0, 1-w, w)
+        return b + w * (c - b), FEATURE_EDGE_23  # Barycentric (0, 1-w, w)
     end
 
     # P is inside triangle face region
@@ -104,7 +132,7 @@ function closest_point_on_triangle(
     denom = 1 / (va + vb + vc)
     v = vb * denom
     w = vc * denom
-    return a + ab * v + ac * w  # Barycentric (1-v-w, v, w)
+    return a + ab * v + ac * w, FEATURE_FACE  # Barycentric (1-v-w, v, w)
 end
 
 """

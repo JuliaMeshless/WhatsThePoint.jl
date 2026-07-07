@@ -102,3 +102,64 @@ end
     @test isinside(SVector(25.0, 3.5, 1.5), octree) == false  # x > 20
     @test isinside(SVector(5.0, 10.0, 1.5), octree) == false  # y > 7
 end
+
+@testitem "isinside pseudonormal sign at corner/edge/face features" setup = [
+    CommonImports, OctreeTestData,
+] begin
+    # The signed distance is signed by the angle-weighted pseudonormal of the
+    # closest feature (Bærentzen & Aanæs 2005). Queries whose closest feature
+    # is a vertex or an edge are exactly the cases a plain face-normal sign
+    # test (and the retired distance-weighted sign vote) can get wrong.
+    mesh = OctreeTestData.unit_cube_mesh()
+    octree = TriangleOctree(mesh; classify_leaves = true)
+    δ = 1.0e-3
+
+    # face features
+    @test isinside(SVector(0.5, 0.5, δ), octree)
+    @test !isinside(SVector(0.5, 0.5, -δ), octree)
+
+    # edge feature: closest point of the outside-diagonal query is on the
+    # cube edge x = 0, z = 0 (the inside companion resolves to a face)
+    @test isinside(SVector(δ, 0.5, δ), octree)
+    @test !isinside(SVector(-δ, 0.5, -δ), octree)
+
+    # vertex features: closest point is the corner itself
+    center = SVector(0.5, 0.5, 0.5)
+    for corner in (
+            SVector(0.0, 0.0, 0.0), SVector(1.0, 1.0, 1.0),
+            SVector(1.0, 0.0, 1.0), SVector(0.0, 1.0, 0.0),
+        )
+        out = normalize(corner - center)
+        @test isinside(corner - δ * out, octree)
+        @test !isinside(corner + δ * out, octree)
+    end
+end
+
+@testitem "TriangleOctree rejects inside-out meshes (signed-volume guard)" setup = [
+    CommonImports, OctreeTestData,
+] begin
+    using WhatsThePoint: _signed_volume
+
+    mesh = OctreeTestData.unit_cube_mesh()
+    @test _signed_volume(Float64, mesh) ≈ 1.0
+
+    # Same cube with every winding reversed: still *consistently* oriented
+    # (passes has_consistent_normals) but globally inside-out — isinside
+    # would classify the complement of the domain as interior, invisible to
+    # any d_NN-based downstream metric. Must be rejected at construction.
+    inverted = SimpleMesh(
+        collect(Meshes.vertices(mesh)),
+        [
+            connect(reverse(Meshes.indices(c)), Meshes.Triangle)
+                for c in Meshes.topology(mesh)
+        ],
+    )
+    @test _signed_volume(Float64, inverted) ≈ -1.0
+    @test_throws ArgumentError TriangleOctree(inverted; classify_leaves = true)
+
+    # distance-only use (no isinside semantics) stays allowed
+    @test TriangleOctree(inverted; classify_leaves = false) isa TriangleOctree
+
+    # open surfaces (signed volume ≈ 0) are not rejected
+    @test TriangleOctree(OctreeTestData.simple_square_mesh()) isa TriangleOctree
+end

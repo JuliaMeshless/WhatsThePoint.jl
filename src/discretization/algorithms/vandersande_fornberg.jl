@@ -12,8 +12,9 @@ function _discretize_volume(
         cloud::PointCloud{𝔼{3}, C},
         spacing::ConstantSpacing,
         ::VanDerSandeFornberg;
-        max_points = 10_000_000,
+        max_points::Union{Int, Nothing} = nothing,
     ) where {C}
+    max_points = @something(max_points, 10_000_000)
     ninit = calculate_ninit(cloud, spacing)
     bbox = boundingbox(cloud)
     xmin, ymin, _ = to(bbox.min)

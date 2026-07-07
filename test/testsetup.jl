@@ -29,13 +29,14 @@ end
     using Meshes: Point, SimpleMesh, connect
     import Meshes
 
-    """Unit cube mesh: 8 vertices, 12 triangles (2 per face, CCW from outside)."""
-    function unit_cube_mesh()
+    """Unit cube mesh: 8 vertices, 12 triangles (2 per face, CCW from outside).
+    `T` sets the coordinate machine type (default Float64)."""
+    function unit_cube_mesh(::Type{T} = Float64) where {T}
         pts = [
-            Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
-            Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
-            Point(0.0, 0.0, 1.0), Point(1.0, 0.0, 1.0),
-            Point(1.0, 1.0, 1.0), Point(0.0, 1.0, 1.0),
+            Point(T(0), T(0), T(0)), Point(T(1), T(0), T(0)),
+            Point(T(1), T(1), T(0)), Point(T(0), T(1), T(0)),
+            Point(T(0), T(0), T(1)), Point(T(1), T(0), T(1)),
+            Point(T(1), T(1), T(1)), Point(T(0), T(1), T(1)),
         ]
         connec = [
             connect((1, 3, 2), Meshes.Triangle), connect((1, 4, 3), Meshes.Triangle),

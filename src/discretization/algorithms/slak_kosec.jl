@@ -78,8 +78,9 @@ function _discretize_volume(
         cloud::PointCloud{𝔼{3}, C},
         spacing::AbstractSpacing,
         alg::SlakKosec;
-        max_points = 1_000,
+        max_points::Union{Int, Nothing} = nothing,
     ) where {C}
+    max_points = @something(max_points, 10_000_000)
     seeds = copy(points(boundary(cloud)))
     search_method = KNearestSearch(seeds, 1)
     new_points = Point{𝔼{3}, C}[]

@@ -28,7 +28,7 @@ PointCloud{𝔼{3}, Cartesian3D}
 ## Surface Elements
 
 Each boundary point is stored as a [`SurfaceElement`](@ref) containing:
-- **point** — The geometric position (face center of the imported mesh, not a vertex)
+- **point** — The geometric position (a face center of the imported mesh — or a Poisson-disk sample when built with `PointBoundary(mesh, spacing)`)
 - **normal** — Outward-pointing unit normal vector
 - **area** — Associated surface area
 

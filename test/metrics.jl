@@ -212,3 +212,29 @@ end
     # catastrophically destroy the spacing relationship.
     @test post.mean_error < 10 * pre.mean_error + 1
 end
+
+@testitem "spacing_fidelity_metrics" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BOX_PATH)
+    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    spacing = _relative_spacing(boundary)
+    cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
+
+    result = spacing_fidelity_metrics(cloud, spacing)
+    @test hasproperty(result, :mean_dnn_h)
+    @test hasproperty(result, :cv)
+    @test hasproperty(result, :p05)
+    @test hasproperty(result, :p50)
+    @test hasproperty(result, :p95)
+    @test hasproperty(result, :coordination)
+    @test isfinite(result.mean_dnn_h)
+    @test result.mean_dnn_h > 0
+    @test result.cv >= 0
+    @test result.p05 <= result.p50 <= result.p95
+    @test result.coordination >= 0
+    @test result.k > 0
+    @test result.coord_radius == 1.4
+
+    # Custom coord_radius changes the coordination count
+    r2 = spacing_fidelity_metrics(cloud, spacing; coord_radius = 2.0)
+    @test r2.coordination >= result.coordination
+end

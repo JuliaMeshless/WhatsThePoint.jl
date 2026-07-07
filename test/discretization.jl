@@ -57,6 +57,20 @@ end
     @test length(volume(cloud)) <= 50
 end
 
+@testitem "FornbergFlyer warns on max_points truncation" setup = [CommonImports] begin
+    points = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+    boundary = PointBoundary(points)
+    spacing = ConstantSpacing(0.1m)
+
+    # A cap far below what 0.1 m spacing implies on the unit square forces
+    # truncation, which must be loud (regression: 2D truncated silently while
+    # the 3D algorithms warned, and the effective 2D default had fallen from
+    # 10M to 10k).
+    @test_logs (:warn, r"stopping early") match_mode = :any discretize(
+        boundary, spacing; alg = FornbergFlyer(), max_points = 5,
+    )
+end
+
 @testitem "max_points cap" setup = [TestData, CommonImports] begin
     bnd = PointBoundary(TestData.BOX_PATH)
     octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
@@ -170,4 +184,13 @@ end
         bulk = 5.0m,
         layer_thickness = 0.0m  # Invalid: zero thickness
     )
+
+    # An empty boundary can never yield a meaningful distance-based spacing;
+    # both variable spacings must reject it at construction instead of
+    # failing on the first evaluation.
+    empty_pts = Point{Meshes.𝔼{3}}[]
+    @test_throws ArgumentError BoundaryLayerSpacing(
+        empty_pts; at_wall = 0.5m, bulk = 5.0m, layer_thickness = 1.0m,
+    )
+    @test_throws ArgumentError WhatsThePoint.LogLike(empty_pts, 0.5m, 1.5)
 end
