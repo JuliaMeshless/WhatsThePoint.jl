@@ -23,7 +23,7 @@ Generate volume points for the given boundary and return a new PointCloud.
 
 # Example
 ```julia
-mesh = GeoIO.load("model.stl").geometry
+mesh = import_mesh("model.stl", u"m")
 boundary = PointBoundary(mesh)
 octree = TriangleOctree(mesh; min_ratio=1e-6)
 cloud = discretize(boundary, 3.0m; alg=SlakKosec(octree), max_points=100_000)

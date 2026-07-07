@@ -10,7 +10,7 @@
         return output, result
     end
 
-    cloud = PointCloud(TestData.BOX_PATH)
+    cloud = PointCloud(TestData.BOX_PATH, u"m")
 
     output, result = capture_stdout(() -> metrics(cloud))
 
@@ -41,7 +41,7 @@ end
         return output, result
     end
 
-    cloud = PointCloud(TestData.BOX_PATH)
+    cloud = PointCloud(TestData.BOX_PATH, u"m")
 
     output, result = capture_stdout(() -> metrics(cloud; k = 10))
 
@@ -72,7 +72,7 @@ end
         return output, result
     end
 
-    cloud = PointCloud(TestData.BOX_PATH)
+    cloud = PointCloud(TestData.BOX_PATH, u"m")
 
     output, result = capture_stdout(() -> metrics(cloud; k = 5))
 
@@ -98,7 +98,7 @@ end
         return output, result
     end
 
-    cloud = PointCloud(TestData.BOX_PATH)
+    cloud = PointCloud(TestData.BOX_PATH, u"m")
 
     output, _ = capture_stdout(() -> metrics(cloud; k = 10))
 
@@ -143,8 +143,8 @@ end
 end
 
 @testitem "spacing_metrics return shape" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
@@ -164,8 +164,8 @@ end
 end
 
 @testitem "spacing_metrics custom k" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
@@ -179,8 +179,8 @@ end
 @testitem "spacing_metrics penalizes mismatched target" setup = [TestData, CommonImports] begin
     using Unitful: m
 
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing_correct = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing_correct; alg = SlakKosec(octree), max_points = 50)
 
@@ -196,8 +196,8 @@ end
 end
 
 @testitem "spacing_metrics tracks repel" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 
@@ -214,8 +214,8 @@ end
 end
 
 @testitem "spacing_fidelity_metrics" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    boundary = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(boundary)
     cloud = discretize(boundary, spacing; alg = SlakKosec(octree), max_points = 50)
 

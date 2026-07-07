@@ -29,7 +29,7 @@ SlakKosec(20, octree)                # Custom n with octree acceleration
 using WhatsThePoint
 
 # Load boundary
-boundary = PointBoundary("model.stl")
+boundary = PointBoundary("model.stl", u"m")
 cloud = PointCloud(boundary)
 
 # Discretize without octree (slow for large domains)
@@ -41,16 +41,11 @@ result = discretize(cloud, spacing; alg=SlakKosec(), max_points=10_000)
 ```julia
 using WhatsThePoint
 
-# Load boundary points
-boundary = PointBoundary("model.stl")
+# Load the mesh once; boundary and octree share it
+mesh = import_mesh("model.stl", u"m")
+boundary = PointBoundary(mesh)
 cloud = PointCloud(boundary)
-
-# Build octree from STL file (Option 1: simplest)
-octree = TriangleOctree("model.stl"; min_ratio=1e-6, classify_leaves=true)
-
-# Or from SimpleMesh (Option 2)
-# mesh = GeoIO.load("model.stl").geometry
-# octree = TriangleOctree(mesh; min_ratio=1e-6, classify_leaves=true)
+octree = TriangleOctree(mesh; min_ratio=1e-6, classify_leaves=true)
 
 # Use octree-accelerated discretization (100-1000× faster!)
 spacing = ConstantSpacing(1.0u"m")

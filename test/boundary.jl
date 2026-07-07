@@ -7,7 +7,7 @@
 end
 
 @testitem "PointBoundary from file" setup = [TestData, CommonImports] begin
-    b = PointBoundary(TestData.BIFURCATION_PATH)
+    b = PointBoundary(TestData.BIFURCATION_PATH, u"m")
     @test length(b) == 24780
     @test hassurface(b, :surface1)
 end

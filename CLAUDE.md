@@ -169,8 +169,8 @@ hastopology(cloud)  # true if topology exists
 ```julia
 using WhatsThePoint
 
-# Import boundary from STL
-boundary = PointBoundary("path/to/file.stl")
+# Import boundary from STL (unit required — mesh files carry no unit metadata)
+boundary = PointBoundary("path/to/file.stl", u"m")
 
 # Define spacing
 spacing = ConstantSpacing(1m)
@@ -198,7 +198,7 @@ split_surface!(boundary, 75°)
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
 
 # Boundary-aware repulsion (3D only) — all points move, escaped points projected back
-octree = TriangleOctree("model.stl"; classify_leaves=true)
+octree = TriangleOctree(import_mesh("model.stl", u"m"); classify_leaves=true)
 cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000)
 
 # Production configuration: standoff kicks + quality-based stopping
@@ -250,7 +250,7 @@ visualize(boundary; markersize=0.15)
 - `repel` - Optimize point distribution via node repulsion; two methods: `repel(cloud, spacing)` volume-only, `repel(cloud, spacing, octree)` boundary-projected (returns new cloud)
 - `isinside` - Test if point is inside domain
 - `metrics` / `spacing_metrics` / `spacing_fidelity_metrics` - Distribution quality (separation, fill, mesh ratio, d_NN/h statistics)
-- `import_surface` - Load from STL/mesh files (via GeoIO.jl)
+- `import_mesh` / `import_surface` - Load from STL/mesh files (via GeoIO.jl) with a required unit that reinterprets the raw coordinates; `geometry_info` probes raw extents first
 - `save` - Save to file (`:jld2` default, or `:vtk` format)
 - `export_vtk` - ParaView `.vtu` export with point_type/surface_id and optional solution fields
 - `visualize` - Makie-based visualization

@@ -191,8 +191,6 @@ function Octree(
     )
 end
 
-Octree(filepath::String; kwargs...) = Octree(GeoIO.load(filepath).geometry; kwargs...)
-
 # ============================================================================
 # Helper functions
 # ============================================================================

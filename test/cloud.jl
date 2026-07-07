@@ -7,13 +7,13 @@
 end
 
 @testitem "PointCloud from file" setup = [TestData, CommonImports] begin
-    cloud = PointCloud(TestData.BIFURCATION_PATH)
+    cloud = PointCloud(TestData.BIFURCATION_PATH, u"m")
     @test length(cloud) == 24780
     @test hassurface(cloud, :surface1)
 end
 
 @testitem "PointCloud from PointBoundary file" setup = [TestData, CommonImports] begin
-    cloud = PointCloud(PointBoundary(TestData.BIFURCATION_PATH))
+    cloud = PointCloud(PointBoundary(TestData.BIFURCATION_PATH, u"m"))
     @test length(cloud) == 24780
     @test hassurface(cloud, :surface1)
 end

@@ -121,6 +121,12 @@ spacing_fidelity_metrics
 suggest_spacing
 ```
 
+## Geometry Inspection
+
+```@docs
+geometry_info
+```
+
 ## Surface Sampling
 
 ```@docs
@@ -130,6 +136,7 @@ sample_surface
 ## I/O
 
 ```@docs
+import_mesh
 import_surface
 save
 export_vtk

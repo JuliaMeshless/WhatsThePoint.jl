@@ -98,7 +98,7 @@ export repel
 include("metrics.jl")
 
 include("io.jl")
-export import_surface, visualize, save, export_vtk
+export import_mesh, import_surface, geometry_info, visualize, save, export_vtk
 
 # visualize function is defined in WhatsThePointMakieExt when Makie is loaded
 function visualize end
@@ -112,7 +112,7 @@ using PrecompileTools
 @setup_workload begin
     using Unitful: m, °
     @compile_workload begin
-        mesh = GeoIO.load(joinpath(@__DIR__, "precompile_tools_dummy.stl")).geometry
+        mesh = import_mesh(joinpath(@__DIR__, "precompile_tools_dummy.stl"), m)
         b = PointBoundary(mesh)
         split_surface!(b, 75°)
         cloud = discretize(b, ConstantSpacing(1m); alg = VanDerSandeFornberg())

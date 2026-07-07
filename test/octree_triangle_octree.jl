@@ -52,7 +52,7 @@ end
 
 @testitem "TriangleOctree from file" setup = [CommonImports, TestData] begin
     if isfile(TestData.BOX_PATH)
-        octree = TriangleOctree(TestData.BOX_PATH)
+        octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"))
         @test octree isa TriangleOctree
         @test num_triangles(octree) == 46786
     else

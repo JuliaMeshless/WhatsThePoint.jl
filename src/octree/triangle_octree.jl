@@ -382,11 +382,6 @@ function TriangleOctree(
     )
 end
 
-function TriangleOctree(filepath::String; kwargs...)
-    geo = GeoIO.load(filepath)
-    return TriangleOctree(geo.geometry; kwargs...)
-end
-
 function _subdivide_triangle_octree!(
         tree::SpatialOctree{Int, T},
         mesh::SimpleMesh,

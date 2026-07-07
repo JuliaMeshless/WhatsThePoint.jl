@@ -39,7 +39,7 @@ Adaptive 3D octree-based algorithm that uses the provided spacing function to de
 The default placement mode is `:bridson` — a single global advancing-front Poisson-disk pass (Bridson 2007), graded to the spacing field and seeded from the boundary points, so every generated point keeps its distance from every other point *and* the wall by construction. The front stops on its own once the domain is saturated, so `max_points` can be left unset (it becomes a non-truncating cap estimated from the spacing integral). Per-leaf `:random`, `:jittered`, and `:lattice` placements remain available.
 
 ```julia
-mesh = GeoIO.load("model.stl").geometry
+mesh = import_mesh("model.stl", u"m")
 
 spacing = BoundaryLayerSpacing(
 	points(PointBoundary(mesh));
@@ -70,7 +70,7 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 cloud = discretize(boundary, spacing; alg=SlakKosec(20))
 
 # With octree acceleration for faster isinside queries
-octree = TriangleOctree("model.stl"; min_ratio=1e-6)
+octree = TriangleOctree(import_mesh("model.stl", u"m"); min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 cloud = discretize(boundary, spacing; alg=SlakKosec(20, octree))
 ```

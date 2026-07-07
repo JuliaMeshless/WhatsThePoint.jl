@@ -25,7 +25,7 @@ Only volume (interior) points move. Boundary points remain fixed. Any volume poi
 ### Boundary-aware (with `TriangleOctree`, 3D only)
 
 ```julia
-octree = TriangleOctree("model.stl"; classify_leaves=true)
+octree = TriangleOctree(import_mesh("model.stl", u"m"); classify_leaves=true)
 cloud = repel(cloud, spacing, octree; β=0.2, max_iters=1000)
 ```
 

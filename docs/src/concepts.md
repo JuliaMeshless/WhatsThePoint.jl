@@ -91,6 +91,8 @@ split_surface!(boundary, 75°)
 
 Units propagate through all operations — point coordinates, normals, areas, and spacing values all carry their units consistently.
 
+Units enter the pipeline at import: mesh files carry no unit metadata, so every file-loading entry point (`import_mesh`, `PointBoundary`, `import_surface`, `suggest_spacing`) requires the unit the file's raw numbers are meant in, and *reinterprets* them in that unit (a stored `46` becomes `46 mm` — no conversion).
+
 ## Parallelism
 
 WhatsThePoint uses [OhMyThreads.jl](https://github.com/JuliaFolds2/OhMyThreads.jl) for threaded execution. The following operations are parallelized:

@@ -15,10 +15,9 @@ This is useful for CFD and boundary-layer-dominated meshless simulations where y
 
 ```julia
 using WhatsThePoint
-using GeoIO
 using Unitful: m
 
-mesh = GeoIO.load("model.stl").geometry
+mesh = import_mesh("model.stl", m)
 boundary = PointBoundary(mesh)
 
 spacing = BoundaryLayerSpacing(

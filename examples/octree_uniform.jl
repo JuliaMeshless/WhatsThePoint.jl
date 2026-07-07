@@ -3,7 +3,7 @@ using GLMakie
 using GeoIO
 using Unitful: m
 
-mesh = GeoIO.load("bunny.stl").geometry
+mesh = import_mesh("bunny.stl", m)
 boundary = PointBoundary(mesh)
 
 # Octree with uniform spacing (simple, fast)

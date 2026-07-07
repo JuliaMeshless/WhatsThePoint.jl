@@ -16,7 +16,7 @@ A Julia package for generating and manipulating point clouds for meshless PDE me
 ## Features
 
 - **Spacing guidance** — `suggest_spacing` probes a geometry and recommends a baseline node spacing before you generate anything
-- **Surface import** from STL and other mesh formats via [GeoIO.jl](https://github.com/JuliaEarth/GeoIO.jl), plus **Poisson-disk surface sampling** (`PointBoundary(mesh, spacing)`) at a prescribed spacing
+- **Surface import** from STL and other mesh formats via [GeoIO.jl](https://github.com/JuliaEarth/GeoIO.jl) with **explicit units** (mesh files carry none — `import_mesh("part.stl", u"mm")` says what the numbers mean), plus **Poisson-disk surface sampling** (`PointBoundary(mesh, spacing)`) at a prescribed spacing
 - **Volume discretization** with multiple algorithms:
   - `SlakKosec` and `VanDerSandeFornberg` (3D)
   - `FornbergFlyer` (2D)
@@ -40,8 +40,8 @@ A Julia package for generating and manipulating point clouds for meshless PDE me
 ```julia
 using WhatsThePoint, Unitful
 
-# Import a surface mesh
-boundary = PointBoundary("model.stl")
+# Import a surface mesh — the unit says what the file's raw numbers mean
+boundary = PointBoundary("model.stl", u"mm")
 
 # Split surfaces by normal angle
 split_surface!(boundary, 75°)

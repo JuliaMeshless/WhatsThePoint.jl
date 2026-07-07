@@ -23,7 +23,7 @@ function PointCloud(boundary::PointBoundary{M, C}) where {M, C}
     return PointCloud(deepcopy(boundary), vol, NoTopology())
 end
 
-PointCloud(filepath::String) = PointCloud(PointBoundary(filepath))
+PointCloud(filepath::AbstractString, unit::Unitful.Units) = PointCloud(PointBoundary(filepath, unit))
 
 """
     PointCloud(boundary::PointBoundary{M,C1}, volume::PointVolume{M,C2}, topo)

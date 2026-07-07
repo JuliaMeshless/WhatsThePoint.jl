@@ -19,8 +19,8 @@ end
 end
 
 @testitem "SlakKosec with octree" setup = [TestData, CommonImports] begin
-    bnd = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(bnd)
 
     cloud = discretize(bnd, spacing; alg = SlakKosec(octree), max_points = 50)
@@ -37,7 +37,7 @@ end
 @testitem "VanDerSandeFornberg" setup = [TestData, CommonImports] begin
     @test_skip "Temporarily skipped - slow without octree acceleration"
 
-    bnd = PointBoundary(TestData.BOX_PATH)
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
     spacing = _relative_spacing(bnd)
 
     cloud = discretize(bnd, spacing; alg = VanDerSandeFornberg(), max_points = 50)
@@ -72,8 +72,8 @@ end
 end
 
 @testitem "max_points cap" setup = [TestData, CommonImports] begin
-    bnd = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(bnd)
 
     cloud = discretize(bnd, spacing; alg = SlakKosec(octree), max_points = 20)
@@ -82,8 +82,8 @@ end
 
 @testitem "discretize accepts bare Unitful.Length" setup = [TestData, CommonImports] begin
     # Test convenience overload that wraps bare Length in ConstantSpacing
-    bnd = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
 
     # Should accept 3.0m instead of ConstantSpacing(3.0m)
     cloud = discretize(bnd, 3.0m; alg = SlakKosec(octree), max_points = 30)
@@ -94,10 +94,10 @@ end
 
 @testitem "discretize works with PointCloud input" setup = [TestData, CommonImports] begin
     # Test discretize(cloud::PointCloud, ...) overload
-    bnd = PointBoundary(TestData.BOX_PATH)
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
     cloud = PointCloud(bnd)  # Empty volume
 
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = _relative_spacing(bnd)
 
     # Discretize the empty cloud
@@ -114,7 +114,7 @@ end
 
 @testitem "SlakKosec with BoundaryLayerSpacing" setup = [TestData, CommonImports] begin
     # Test SlakKosec with variable spacing (exercises calculate_ninit for VariableSpacing)
-    bnd = PointBoundary(TestData.BOX_PATH)
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
     spacing = BoundaryLayerSpacing(
         WhatsThePoint.points(bnd);
         at_wall = 0.5m,
@@ -122,7 +122,7 @@ end
         layer_thickness = 2.0m
     )
 
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     cloud = discretize(bnd, spacing; alg = SlakKosec(octree), max_points = 30)
     @test cloud isa PointCloud
     @test length(volume(cloud)) > 0
@@ -131,8 +131,8 @@ end
 
 @testitem "SlakKosec with variable spacing exercises calculate_ninit" setup = [TestData, CommonImports] begin
     # Test SlakKosec with variable spacing to exercise calculate_ninit(::VariableSpacing)
-    bnd = PointBoundary(TestData.BOX_PATH)
-    octree = TriangleOctree(TestData.BOX_PATH; classify_leaves = true)
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
+    octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     spacing = BoundaryLayerSpacing(
         WhatsThePoint.points(bnd);
         at_wall = 0.8m,
@@ -169,7 +169,7 @@ end
 
 @testitem "BoundaryLayerSpacing validation" setup = [TestData, CommonImports] begin
     # Test that BoundaryLayerSpacing validates layer_thickness > 0
-    bnd = PointBoundary(TestData.BOX_PATH)
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
 
     @test_throws ArgumentError BoundaryLayerSpacing(
         WhatsThePoint.points(bnd);

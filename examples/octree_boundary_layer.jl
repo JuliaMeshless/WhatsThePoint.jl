@@ -49,11 +49,11 @@ isfile(MESH_PATH) || error(
 )
 
 # A quick spacing sanity check before committing to a long run (the "step 0"):
-suggest_spacing(MESH_PATH; name = MESH_PATH)
+suggest_spacing(MESH_PATH, m; name = MESH_PATH)
 println()
 
 println("Loading mesh...")
-@time mesh = GeoIO.load(MESH_PATH).geometry
+@time@time mesh = import_mesh(MESH_PATH, m)
 println("Mesh: $(nelements(mesh)) triangles\n")
 
 # Boundary-layer spacing keyed on the imported boundary points (KDTree-accelerated).

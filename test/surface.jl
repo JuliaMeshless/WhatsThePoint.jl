@@ -18,7 +18,7 @@
     @test length(surf) == 10
     @test surf.geoms isa StructVector
 
-    surf = PointSurface(TestData.BIFURCATION_PATH)
+    surf = PointSurface(TestData.BIFURCATION_PATH, u"m")
     @test length(surf) == 24780
     @test surf.geoms isa StructVector
 
@@ -106,7 +106,7 @@ end
 end
 
 @testitem "PointSurface Shadow Generation" setup = [TestData, CommonImports] begin
-    surf_file = PointSurface(TestData.BIFURCATION_PATH)
+    surf_file = PointSurface(TestData.BIFURCATION_PATH, u"m")
     shadow = ShadowPoints(2m)
 
     shadow_points = generate_shadows(surf_file, shadow)
@@ -115,7 +115,7 @@ end
 end
 
 @testitem "PointSurface Surface Operations" setup = [TestData, CommonImports] begin
-    boundary = PointBoundary(TestData.BIFURCATION_PATH)
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
     split_surface!(boundary, 80°)
     @test length(namedsurfaces(boundary)) == 4
 end

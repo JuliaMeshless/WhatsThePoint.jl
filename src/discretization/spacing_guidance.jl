@@ -15,7 +15,7 @@
 """
     suggest_spacing(mesh; n_points=nothing, bridson_factor=0.75, verbose=true)
     suggest_spacing(boundary; ...)
-    suggest_spacing("model.stl"; ...)
+    suggest_spacing("model.stl", u"mm"; ...)
 
 Quick geometry probe that recommends a baseline node spacing — the "step 0"
 before [`discretize`](@ref). Reports the domain extent, enclosed volume, and
@@ -42,8 +42,9 @@ Returns a `NamedTuple` with `extent`, `min_extent`, `max_extent`, `diagonal`,
 
 # Example
 ```julia
-g = suggest_spacing("bunny.stl")
-cloud = discretize(PointBoundary("bunny.stl"), g.h_baseline; alg=Octree("bunny.stl"))
+mesh = import_mesh("bunny.stl", u"m")
+g = suggest_spacing(mesh)
+cloud = discretize(PointBoundary(mesh), g.h_baseline; alg=Octree(mesh))
 ```
 """
 function suggest_spacing(
@@ -91,8 +92,11 @@ function suggest_spacing(
     )
 end
 
-function suggest_spacing(path::AbstractString; name::AbstractString = basename(path), kwargs...)
-    return suggest_spacing(GeoIO.load(path).geometry; name, kwargs...)
+function suggest_spacing(
+        path::AbstractString, unit::Unitful.Units;
+        name::AbstractString = basename(path), kwargs...,
+    )
+    return suggest_spacing(import_mesh(path, unit); name, kwargs...)
 end
 
 # Core recommendation math, shared by all entry points. `ext`/`V` are stripped

@@ -20,7 +20,7 @@ mkpath(ASSETS_DIR)
 
 function bunny_silhouette(; n_bins = 200)
     stl_path = joinpath(@__DIR__, "src", "assets", "bunny.stl")
-    boundary3d = WTP.PointBoundary(stl_path)
+    boundary3d = WTP.PointBoundary(stl_path, m)
     coords = WTP.to(boundary3d)
 
     # Project to XZ plane (side view)
