@@ -254,6 +254,18 @@ end
     @test names(cloud) == names(bnd)
 end
 
+@testitem "PointCloud mactype promotion promotes the volume side" setup = [CommonImports] begin
+    # The mirror case: a Float64 boundary combined with a Float32 volume must
+    # promote the volume points up to the common type (Float64).
+    pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
+    bnd = PointBoundary(pts)
+    vol = PointVolume([Point(0.5f0, 0.5f0, 0.5f0)])
+    cloud = PointCloud(bnd, vol, NoTopology())
+    @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud)))) === Float64
+    @test length(cloud) == 4
+    @test length(WhatsThePoint.volume(cloud)) == 1
+end
+
 @testitem "PointCloud rejects CRS differing beyond machine type" setup = [CommonImports] begin
     # Promotion reconciles only the mactype. A boundary in mm and a volume in
     # m share Float64, so promotion is a no-op and the CRS still differ — the
