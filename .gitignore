@@ -18,3 +18,9 @@ LocalPreferences.toml
 bunny_slice.png
 bunny_boundary.png
 bunny_hard.vtu
+
+# PR body draft (copy-paste source, not committed)
+PR_description.md
+
+*.png
+*.mp4
