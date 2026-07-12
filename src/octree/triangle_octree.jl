@@ -531,10 +531,12 @@ function _compute_signed_distance_octree(
 end
 
 function _compute_signed_distance_octree(
-        point::SVector{3, T}, octree::TriangleOctree
-    ) where {T <: Real}
+        point::SVector{3, <:Real}, octree::TriangleOctree{<:Manifold, <:CRS, T}
+    ) where {T}
+    # The spatial index is strict in the octree's machine type; convert the
+    # query so callers may probe with any real coordinates.
     return _compute_signed_distance_octree(
-        point, octree.mesh, octree.tree, octree.pseudonormals
+        SVector{3, T}(point), octree.mesh, octree.tree, octree.pseudonormals
     )
 end
 
@@ -592,17 +594,22 @@ end
 """
 Fast interior/exterior test using octree spatial index.
 """
-function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
-    return _classify_point_octree(point, octree) == LEAF_INTERIOR
+function isinside(
+        point::SVector{3, <:Real}, octree::TriangleOctree{<:Manifold, <:CRS, T}
+    ) where {T}
+    # Convert to the octree's machine type: the spatial index is strict in T.
+    return _classify_point_octree(SVector{3, T}(point), octree) == LEAF_INTERIOR
 end
 
-function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}
+function isinside(points::Vector{<:SVector{3, <:Real}}, octree::TriangleOctree)
     return tmap(p -> isinside(p, octree), points)
 end
 
 function isinside(point::Point{𝔼{3}}, octree::TriangleOctree{𝔼{3}, C, T}) where {C, T}
-    # The octree's raw coordinates are in the mesh's length unit.
-    sv = to_numerical(point, length_unit(crs(octree.mesh)))
+    # The octree's raw coordinates are in the mesh's length unit; the spatial
+    # index is strict in the octree's machine type, so convert to T after the
+    # unit-aware strip.
+    sv = SVector{3, T}(to_numerical(point, length_unit(crs(octree.mesh))))
     return isinside(sv, octree)
 end
 

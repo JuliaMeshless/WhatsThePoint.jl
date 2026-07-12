@@ -57,7 +57,9 @@ function sample_surface(
         tri_areas[i] = norm(cross(v2 - v1, v3 - v1)) / 2
         gmin = min.(gmin, min.(v1, min.(v2, v3)))
         gmax = max.(gmax, max.(v1, max.(v2, v3)))
-        r_min = min(r_min, f * h((v1 + v2 + v3) / 3))
+        # h returns Float64 across the numerical boundary; the grid and
+        # separation kernel are strict in the geometry type T.
+        r_min = min(r_min, T(f * h((v1 + v2 + v3) / 3)))
     end
     cum_areas = cumsum(tri_areas)
     total_area = cum_areas[end]
@@ -77,7 +79,7 @@ function sample_surface(
         su = sqrt(rand(T))
         v = rand(T)
         c = (1 - su) * v1 + su * (1 - v) * v2 + su * v * v3
-        r_c = f * h(c)
+        r_c = T(f * h(c))
         if _bridson_separated(grid, pts, rs, c, r_c)
             push!(pts, c)
             push!(rs, r_c)

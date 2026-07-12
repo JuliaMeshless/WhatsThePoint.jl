@@ -110,14 +110,14 @@ end
     # The node octree resolution must follow whichever of inner minimum and
     # cap actually drives the fill.
     clamped = WhatsThePoint._ClampedSpacing(ConstantSpacing(2.0m), 0.1m)
-    @test WhatsThePoint._extract_min_spacing(clamped) == 0.1
+    @test WhatsThePoint._extract_min_spacing(clamped, m) == 0.1
 
     fine = WhatsThePoint._ClampedSpacing(ConstantSpacing(0.05m), 0.1m)
-    @test WhatsThePoint._extract_min_spacing(fine) == 0.05
+    @test WhatsThePoint._extract_min_spacing(fine, m) == 0.05
 
     # An inner spacing with unknown minimum (LogLike) falls back to the cap.
     pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
     loglike = WhatsThePoint.LogLike(pts, 0.5m, 1.5)
     capped = WhatsThePoint._ClampedSpacing(loglike, 0.1m)
-    @test WhatsThePoint._extract_min_spacing(capped) == 0.1
+    @test WhatsThePoint._extract_min_spacing(capped, m) == 0.1
 end
