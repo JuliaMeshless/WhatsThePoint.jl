@@ -21,8 +21,9 @@ PointCloud       — Boundary + volume points + optional topology
 All geometric types inherit from `Domain{M,C}` where `M<:Manifold` describes the geometric space (currently Euclidean: `𝔼{2}` or `𝔼{3}`) and `C<:CRS` is the coordinate reference system (Cartesian, Cylindrical, Polar, etc.). This parameterization comes from [Meshes.jl](https://github.com/JuliaGeometry/Meshes.jl) and enables type stability and proper dispatch.
 
 ```julia
-# A 3D point cloud in Cartesian coordinates on a Euclidean manifold:
-PointCloud{𝔼{3}, Cartesian3D}
+# A 3D point cloud in Cartesian coordinates on a Euclidean manifold;
+# the third parameter is the topology type (NoTopology until set_topology):
+PointCloud{𝔼{3}, Cartesian3D, NoTopology}
 ```
 
 ## Surface Elements

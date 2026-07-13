@@ -72,7 +72,7 @@ This builds a k-nearest neighbor graph on the surface, removes edges where adjac
 Combine multiple surfaces back into one:
 
 ```julia
-combine_surfaces!(boundary, "surface_1", "surface_2")
+combine_surfaces!(boundary, :surface1, :surface2)
 ```
 
 ## Shadow Points (Optional)

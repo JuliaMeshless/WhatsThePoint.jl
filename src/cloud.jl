@@ -108,7 +108,18 @@ to(cloud::PointCloud) = to.(points(cloud))
 function to(namedsurfaces::LittleDict{Symbol, <:PointSurface})
     return mapreduce(to, vcat, values(namedsurfaces))
 end
+"""
+    boundary(cloud::PointCloud)
+
+Return the cloud's `PointBoundary`.
+"""
 boundary(cloud::PointCloud) = cloud.boundary
+
+"""
+    volume(cloud::PointCloud)
+
+Return the cloud's `PointVolume` of interior points.
+"""
 volume(cloud::PointCloud) = cloud.volume
 namedsurfaces(cloud::PointCloud) = namedsurfaces(boundary(cloud))
 surfaces(cloud::PointCloud) = surfaces(boundary(cloud))

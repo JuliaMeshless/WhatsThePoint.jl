@@ -558,7 +558,19 @@ function _classify_leaves(
 end
 
 Base.length(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
+
+"""
+    num_leaves(octree::TriangleOctree) -> Int
+
+Return the number of leaf nodes in the octree.
+"""
 num_leaves(octree::TriangleOctree) = length(all_leaves(octree.tree))
+
+"""
+    num_triangles(octree::TriangleOctree) -> Int
+
+Return the number of triangles in the underlying surface mesh.
+"""
 num_triangles(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
 
 """

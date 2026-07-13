@@ -88,11 +88,28 @@ centroid(boundary::PointBoundary) = centroid(points(boundary))
 boundingbox(boundary::PointBoundary) = boundingbox(points(boundary))
 
 boundary(boundary::PointBoundary) = boundary
+
+"""
+    namedsurfaces(boundary::PointBoundary)
+
+Return the ordered dictionary mapping surface names (`Symbol`) to their `PointSurface`s.
+"""
 namedsurfaces(boundary::PointBoundary) = boundary.surfaces
+
+"""
+    surfaces(boundary::PointBoundary)
+
+Return an iterator over the boundary's `PointSurface`s (without their names).
+"""
 surfaces(boundary::PointBoundary) = values(boundary.surfaces)
 normal(boundary::PointBoundary) = mapreduce(normal, vcat, surfaces(boundary))
 area(boundary::PointBoundary) = mapreduce(area, vcat, surfaces(boundary))
 
+"""
+    hassurface(boundary::PointBoundary, name) -> Bool
+
+Return `true` if the boundary has a surface named `name`.
+"""
 hassurface(boundary::PointBoundary, name) = haskey(namedsurfaces(boundary), name)
 
 # Index-space conversion utilities
@@ -147,6 +164,12 @@ points(boundary::PointBoundary) = mapreduce(points, vcat, surfaces(boundary))
 Meshes.nelements(boundary::PointBoundary) = length(boundary)
 
 Base.length(boundary::PointBoundary) = sum(length, surfaces(boundary))
+
+"""
+    names(boundary::PointBoundary) -> Vector{Symbol}
+
+Return the names of all surfaces in the boundary.
+"""
 Base.names(boundary::PointBoundary) = collect(keys(namedsurfaces(boundary)))
 Base.size(boundary::PointBoundary) = (length(boundary),)
 Base.getindex(boundary::PointBoundary, name::Symbol) = namedsurfaces(boundary)[name]

@@ -101,6 +101,13 @@ include("io.jl")
 export import_mesh, import_surface, geometry_info, visualize, save, export_vtk
 
 # visualize function is defined in WhatsThePointMakieExt when Makie is loaded
+"""
+    visualize(x; kwargs...)
+
+Plot a `PointCloud`, `PointBoundary`, or `PointSurface` with Makie. Requires a
+Makie backend to be loaded (e.g. `using GLMakie`); the implementation lives in
+the `WhatsThePointMakieExt` package extension.
+"""
 function visualize end
 
 # Backward compatibility for deprecated Meshes.jl pointify

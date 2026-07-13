@@ -26,6 +26,12 @@ points
 normal
 area
 topology
+boundary
+volume
+surfaces
+namedsurfaces
+names(::PointBoundary)
+hassurface
 ```
 
 ## Topology
@@ -49,6 +55,7 @@ Volume point generation algorithms and spacing types.
 
 ```@docs
 discretize
+AbstractNodeGenerationAlgorithm
 AbstractSpacing
 SlakKosec
 VanDerSandeFornberg
@@ -87,6 +94,8 @@ Point-in-volume testing, octree acceleration, and spatial utilities.
 ```@docs
 isinside
 TriangleOctree
+num_leaves
+num_triangles
 has_consistent_normals
 emptyspace
 Meshes.boundingbox
@@ -131,6 +140,12 @@ geometry_info
 
 ```@docs
 sample_surface
+```
+
+## Visualization
+
+```@docs
+visualize
 ```
 
 ## I/O

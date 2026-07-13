@@ -107,6 +107,18 @@ cloud = repel(cloud, spacing, octree;
               max_iters = 500)
 ```
 
+### [`StrongSpacingForce`](@ref)
+
+```math
+F(u) = \frac{1 - u^2}{(u^2 + \beta)^\gamma}
+```
+
+Like [`SpacingEquilibriumForce`](@ref) but with a configurable singularity
+strength `γ` (default 3): at small `u` the repulsive core scales as `u^(-2γ)`
+instead of `u^(-4)`, strong enough to break balanced standoffs where neighbor
+forces cancel the weaker default core. `γ = 2` recovers
+[`SpacingEquilibriumForce`](@ref).
+
 ## Tuning Guide
 
 - **`β` (repulsion strength):** Values in the range 0.1–0.5 work well for most problems. Smaller values give gentler repulsion (slower convergence, more stable). Larger values produce stronger forces (faster convergence, risk of oscillation).
