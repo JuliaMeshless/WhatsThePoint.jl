@@ -24,8 +24,7 @@ end
 
 @testitem "isinside correctness" setup = [CommonImports, OctreeTestData] begin
     using Random
-    using WhatsThePoint: _get_triangle_vertices, _get_triangle_normal,
-        closest_point_on_triangle
+    using WhatsThePoint: _get_triangle_vertices, closest_point_on_triangle
 
     mesh = OctreeTestData.unit_cube_mesh()
     octree = TriangleOctree(mesh; classify_leaves = true)
@@ -33,12 +32,13 @@ end
     # Brute-force reference implementation
     function isinside_bruteforce(point::SVector{3, T}, octree) where {T <: Real}
         min_dist = T(Inf)
-        for i in 1:Meshes.nelements(octree.mesh)
-            v1, v2, v3 = _get_triangle_vertices(T, octree.mesh, i)
+        index = octree.index
+        for i in 1:num_triangles(index)
+            v1, v2, v3 = _get_triangle_vertices(index, i)
             cp = closest_point_on_triangle(point, v1, v2, v3)
             dist = norm(point - cp)
             if dist < abs(min_dist)
-                normal = _get_triangle_normal(T, octree.mesh, i)
+                normal = index.face[i]
                 sign = dot(point - cp, normal) >= 0 ? 1 : -1
                 min_dist = sign * dist
             end
@@ -138,10 +138,10 @@ end
 @testitem "TriangleOctree rejects inside-out meshes (signed-volume guard)" setup = [
     CommonImports, OctreeTestData,
 ] begin
-    using WhatsThePoint: _signed_volume
+    using WhatsThePoint: _signed_volume, TriangleIndex
 
     mesh = OctreeTestData.unit_cube_mesh()
-    @test _signed_volume(Float64, mesh) ≈ 1.0
+    @test _signed_volume(TriangleIndex(Float64, mesh)) ≈ 1.0
 
     # Same cube with every winding reversed: still *consistently* oriented
     # (passes has_consistent_normals) but globally inside-out — isinside
@@ -154,7 +154,7 @@ end
                 for c in Meshes.topology(mesh)
         ],
     )
-    @test _signed_volume(Float64, inverted) ≈ -1.0
+    @test _signed_volume(TriangleIndex(Float64, inverted)) ≈ -1.0
     @test_throws ArgumentError TriangleOctree(inverted; classify_leaves = true)
 
     # distance-only use (no isinside semantics) stays allowed

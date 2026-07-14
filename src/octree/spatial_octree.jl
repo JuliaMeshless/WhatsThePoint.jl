@@ -1,14 +1,24 @@
-# Layer 1: Generic Spatial Octree
+# Layer 1: Spatial Octree
 #
-# Concrete implementation of AbstractOctree using integer coordinate system
-# for efficient neighbor finding and 2:1 balance enforcement.
+# Concrete octree using integer coordinate system for efficient neighbor
+# finding and 2:1 balance enforcement.
+
+"""
+    SubdivisionCriterion
+
+Abstract type for octree subdivision decision logic. Subtypes implement
+`should_subdivide(criterion, tree, box_idx)` (subdivide if content/size
+demands it) and `can_subdivide(criterion, tree, box_idx)` (physical limits
+only — used during balancing).
+"""
+abstract type SubdivisionCriterion end
 
 #=============================================================================
 Core Data Structure
 =============================================================================#
 
 """
-    SpatialOctree{E,T<:Real} <: AbstractOctree{E,T}
+    SpatialOctree{E,T<:Real}
 
 Concrete octree implementation using integer coordinate system for efficient neighbor finding.
 
@@ -30,14 +40,12 @@ Uses (i,j,k,N) coordinate system where:
 - `element_lists::Vector{Vector{E}}`: Elements in each box
 - `num_boxes::Ref{Int}`: Current number of boxes (mutable counter)
 
-# Interface Implementation
-
-Implements `AbstractSpatialTree` interface:
-- `find_leaf(tree, point)` - O(log n) point location
-- `bounding_box(tree)` - Root box bounds
-- `num_elements(tree)` - Total stored elements
-- `find_neighbor(tree, box, dir)` - 6-directional neighbor finding
-- `balance_octree!(tree)` - 2:1 refinement constraint
+# Interface:
+# - `find_leaf(tree, point)` - O(log n) point location
+# - `bounding_box(tree)` - Root box bounds
+# - `num_elements(tree)` - Total stored elements
+# - `find_neighbor(tree, box, dir)` - 6-directional neighbor finding
+# - `balance_octree!(tree)` - 2:1 refinement constraint
 
 # Example
 ```julia
@@ -54,7 +62,7 @@ point = SVector(2.0, 2.0, 2.0)
 leaf = find_leaf(octree, point)
 ```
 """
-struct SpatialOctree{E, T <: Real} <: AbstractOctree{E, T}
+struct SpatialOctree{E, T <: Real}
     parent::Vector{Int}
     children::Vector{SVector{8, Int}}    # 8 child indices per box (0 = no child)
     coords::Vector{SVector{4, Int}}      # (i,j,k,N) coordinates per box

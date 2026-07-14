@@ -55,9 +55,10 @@ function suggest_spacing(
         name::AbstractString = "mesh",
     ) where {M, C}
     T = CoordRefSystems.mactype(C)
-    bmin, bmax = _compute_bbox(T, mesh)
+    index = TriangleIndex(T, mesh)
+    bmin, bmax = _compute_bbox(index)
     ext = bmax - bmin
-    V = abs(_signed_volume(T, mesh))
+    V = abs(_signed_volume(index))
     lu = unit(Meshes.to(first(Meshes.vertices(mesh)))[1])
     return _spacing_guidance(
         ext, V, Meshes.nelements(mesh), lu;
@@ -209,8 +210,8 @@ still yields a cloud. Otherwise returns `spacing` unchanged (the request is
 viable and is respected).
 """
 function _guard_coarse_spacing(spacing, tri_octree, bridson_factor)
-    bmin = tri_octree.mesh_bbox_min
-    bmax = tri_octree.mesh_bbox_max
+    bmin = tri_octree.index.bbox_min
+    bmax = tri_octree.index.bbox_max
     Lmin = minimum(bmax - bmin)
     h_ceiling = Lmin / (2 * bridson_factor)
     hmin_domain = _probe_min_spacing(spacing, bmin, bmax)

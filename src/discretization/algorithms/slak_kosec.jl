@@ -61,10 +61,10 @@ struct SlakKosec{O <: Union{Nothing, TriangleOctree}} <: AbstractNodeGenerationA
     octree::O
 end
 SlakKosec(n::Int = 10) = SlakKosec{Nothing}(n, nothing)
-SlakKosec(octree::TriangleOctree{M, C, T}) where {M, C, T} =
-    SlakKosec{TriangleOctree{M, C, T}}(10, octree)
-SlakKosec(n::Int, octree::TriangleOctree{M, C, T}) where {M, C, T} =
-    SlakKosec{TriangleOctree{M, C, T}}(n, octree)
+SlakKosec(octree::TriangleOctree{T}) where {T} =
+    SlakKosec{TriangleOctree{T}}(10, octree)
+SlakKosec(n::Int, octree::TriangleOctree{T}) where {T} =
+    SlakKosec{TriangleOctree{T}}(n, octree)
 
 _check_inside(c::Point{𝔼{3}}, ::PointCloud, octree::TriangleOctree) = isinside(c, octree)
 _check_inside(c::Point{𝔼{3}}, cloud::PointCloud{𝔼{3}}, ::Nothing) = isinside(c, cloud)

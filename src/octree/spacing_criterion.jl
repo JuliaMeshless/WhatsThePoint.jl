@@ -85,8 +85,8 @@ node_tree = build_node_octree(tri_octree, spacing, 1.0, 1e-6)
 ```
 """
 function build_node_octree(
-        triangle_octree::TriangleOctree{M, C, T}, spacing, alpha, node_min_ratio
-    ) where {M, C, T}
+        triangle_octree::TriangleOctree{T}, spacing, alpha, node_min_ratio
+    ) where {T}
     bbox_min, bbox_max = bounding_box(triangle_octree.tree)
     node_tree = SpatialOctree{Int, T}(bbox_min, triangle_octree.tree.root_size; initial_capacity = 1000)
 

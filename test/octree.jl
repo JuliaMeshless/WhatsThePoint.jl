@@ -407,7 +407,7 @@ end
     @test alg32.boundary_oversampling isa Float32
     @test alg32.bridson_factor isa Float32
     @test alg32.max_growth isa Float32
-    @test eltype(alg32.triangle_octree.mesh_bbox_min) === Float32
+    @test eltype(alg32.triangle_octree.index.bbox_min) === Float32
     cloud32 = discretize(bnd, ConstantSpacing(3.0f0m); alg = alg32, max_points = 50)
     @test cloud32 isa PointCloud
     @test length(WhatsThePoint.volume(cloud32)) > 0

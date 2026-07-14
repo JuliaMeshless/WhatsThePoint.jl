@@ -1,14 +1,3 @@
-function findmin_turbo(x)
-    indmin = 0
-    minval = typemax(eltype(x))
-    @inbounds for (i, y) in enumerate(x)
-        newmin = y < minval
-        minval = newmin ? y : minval
-        indmin = newmin ? i : indmin
-    end
-    return minval, indmin
-end
-
 function ranges_from_permutation(permutations::AbstractVector)
     num_elems = length.(permutations)
     # use cumsum here

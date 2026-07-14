@@ -5,7 +5,7 @@
     octree = TriangleOctree(mesh)
 
     @test octree isa TriangleOctree
-    @test octree.mesh === mesh
+    @test num_triangles(octree.index) == 2
     @test num_triangles(octree) == 2
     @test num_leaves(octree) > 0
 end

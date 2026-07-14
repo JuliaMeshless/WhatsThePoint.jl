@@ -81,8 +81,8 @@ cloud = discretize(boundary, spacing; alg, max_points=100_000)
 alg = Octree(mesh; min_ratio=1e-3, spacing, alpha=1.0)
 ```
 """
-struct Octree{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
-    triangle_octree::TriangleOctree{M, C, T}
+struct Octree{T <: Real} <: AbstractNodeGenerationAlgorithm
+    triangle_octree::TriangleOctree{T}
     boundary_oversampling::T
     placement::Symbol
     alpha::T  # Subdivision aggressiveness: boxes are at most alpha*h_local
@@ -93,14 +93,14 @@ end
 
 # Constructors
 function Octree(
-        triangle_octree::TriangleOctree{M, C, T};
+        triangle_octree::TriangleOctree{T};
         node_min_ratio::Union{Nothing, Real} = nothing,
         boundary_oversampling::Real = 2.0,
         placement::Symbol = :bridson,
         alpha::Real = 2.0,
         bridson_factor::Real = 0.75,
         max_growth::Real = 0.0,
-    ) where {M, C, T}
+    ) where {T}
     boundary_oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive"))
     placement in (:random, :jittered, :lattice, :bridson) ||
         throw(ArgumentError("placement must be :random, :jittered, :lattice, or :bridson"))
@@ -108,11 +108,11 @@ function Octree(
     bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
     max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
 
-    # Default: recompute the geometry-based ratio from the octree's mesh
+    # Default: recompute the geometry-based ratio from the octree's triangle count
     node_ratio = isnothing(node_min_ratio) ?
-        _auto_min_ratio(T, triangle_octree.mesh) : T(node_min_ratio)
+        _auto_min_ratio(T, num_triangles(triangle_octree.index)) : T(node_min_ratio)
 
-    return Octree{M, C, T}(
+    return Octree{T}(
         triangle_octree,
         T(boundary_oversampling),
         placement,
@@ -143,7 +143,7 @@ function Octree(
     T = CoordRefSystems.mactype(C)
 
     # Triangle octree: geometry-based or user override
-    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, mesh) : T(min_ratio)
+    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, Meshes.nelements(mesh)) : T(min_ratio)
     triangle_octree = TriangleOctree(
         mesh;
         tolerance_relative,
@@ -180,7 +180,7 @@ function Octree(
         geometry_min_ratio
     end
 
-    return Octree{M, C, T}(
+    return Octree{T}(
         triangle_octree,
         T(boundary_oversampling),
         placement,
@@ -203,8 +203,7 @@ Default triangle octree resolution: `1 / (4 * cbrt(n_triangles))`.
 Factor of 4 (vs. 2) ensures accurate geometry in high-curvature regions.
 Override with explicit `min_ratio` parameter if needed.
 """
-function _auto_min_ratio(::Type{T}, mesh::SimpleMesh) where {T}
-    n = Meshes.nelements(mesh)
+function _auto_min_ratio(::Type{T}, n::Int) where {T}
     # Factor of 4 (rather than 2) for 2× finer subdivision
     # This ensures accurate geometry representation in high-curvature regions
     return inv(T(4) * cbrt(T(n)))
@@ -467,7 +466,7 @@ are rejected.
 @inline function _bridson_inside(
         c::SVector{3, T}, node_tree, classification, tri_octree,
     ) where {T}
-    (any(c .<= tri_octree.mesh_bbox_min) || any(c .>= tri_octree.mesh_bbox_max)) &&
+    (any(c .<= tri_octree.index.bbox_min) || any(c .>= tri_octree.index.bbox_max)) &&
         return false
     cls = classification[find_leaf(node_tree, c)]
     cls == LEAF_INTERIOR && return true
@@ -730,7 +729,7 @@ function _generate_bridson(
     ) where {T <: Real}
     f = T(factor)
     r_min = f * _bridson_h_min(node_tree, classification, spacing)
-    grid = _BridsonGrid(tri_octree.mesh_bbox_min, tri_octree.mesh_bbox_max, r_min)
+    grid = _BridsonGrid(tri_octree.index.bbox_min, tri_octree.index.bbox_max, r_min)
 
     pts = copy(seeds)
     rs = [f * _spacing_value(T, spacing, p) for p in pts]
@@ -816,7 +815,7 @@ end
 function _discretize_volume(
         _cloud::PointCloud{𝔼{3}, C},
         spacing::AbstractSpacing,
-        alg::Octree{<:Manifold, <:CRS, T};
+        alg::Octree{T};
         max_points::Union{Int, Nothing} = nothing,
     ) where {C, T}
     isnothing(alg.triangle_octree.leaf_classification) &&

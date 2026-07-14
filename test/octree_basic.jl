@@ -143,40 +143,6 @@ end
     @test length(octree.element_lists[1]) == 0
 end
 
-@testitem "SpatialOctree Subdivision Criteria" setup = [CommonImports] begin
-    using WhatsThePoint: SpatialOctree, should_subdivide,
-        MaxElementsCriterion, SizeCriterion, AndCriterion
-
-    origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int, Float64}(origin, 10.0)
-
-    # Add elements to root
-    for i in 1:60
-        push!(octree.element_lists[1], i)
-    end
-
-    # MaxElementsCriterion
-    criterion = MaxElementsCriterion(50)
-    @test should_subdivide(criterion, octree, 1) == true
-
-    criterion2 = MaxElementsCriterion(100)
-    @test should_subdivide(criterion2, octree, 1) == false
-
-    # SizeCriterion
-    criterion3 = SizeCriterion(15.0)
-    @test should_subdivide(criterion3, octree, 1) == false
-
-    criterion4 = SizeCriterion(5.0)
-    @test should_subdivide(criterion4, octree, 1) == true
-
-    # AndCriterion
-    criterion5 = AndCriterion((MaxElementsCriterion(50), SizeCriterion(5.0)))
-    @test should_subdivide(criterion5, octree, 1) == true
-
-    criterion6 = AndCriterion((MaxElementsCriterion(100), SizeCriterion(5.0)))
-    @test should_subdivide(criterion6, octree, 1) == false
-end
-
 @testitem "SpatialOctree Leaf Iteration" setup = [CommonImports] begin
     using WhatsThePoint: SpatialOctree, subdivide!, all_leaves, is_leaf, has_children
 
@@ -205,29 +171,26 @@ end
 
 @testitem "SpatialOctree Balancing" setup = [CommonImports] begin
     using WhatsThePoint: SpatialOctree, subdivide!, all_leaves, balance_octree!,
-        SizeCriterion, needs_balancing
+        SubdivisionCriterion, should_subdivide, can_subdivide, needs_balancing, box_size
+
+    # Minimal size-only criterion for the balancing test (no triangle index needed).
+    struct SizeCriterion{T <: Real} <: SubdivisionCriterion
+        h_min::T
+    end
+    WhatsThePoint.should_subdivide(c::SizeCriterion, tree, box_idx) = box_size(tree, box_idx) > c.h_min
+    WhatsThePoint.can_subdivide(c::SizeCriterion, tree, box_idx) = box_size(tree, box_idx) > c.h_min
 
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     # Create imbalanced tree
-    # Subdivide root
     children_1 = subdivide!(octree, 1)
-
-    # Subdivide first child
     children_2 = subdivide!(octree, children_1[1])
-
-    # Subdivide one of those children (creating 3-level difference)
     subdivide!(octree, children_2[1])
 
-    # Now we have boxes at levels 2, 4, 8 next to each other
-    # Balance should fix this
-
-    criterion = SizeCriterion(0.1)  # Allow small boxes
+    criterion = SizeCriterion(0.1)
     balance_octree!(octree, criterion)
 
-    # After balancing, check 2:1 constraint
-    # All neighbors should differ by at most 1 level
     for leaf_idx in all_leaves(octree)
         @test !needs_balancing(octree, leaf_idx)
     end
@@ -271,27 +234,6 @@ end
     @test octree.num_boxes[] == 17
     @test all(is_leaf(octree, gc) for gc in grandchildren)
     @test octree.coords[grandchildren[1]] == SVector(0, 0, 0, 4)
-end
-
-@testitem "SpatialOctree can_subdivide criteria" setup = [CommonImports] begin
-    using WhatsThePoint: SpatialOctree, can_subdivide,
-        MaxElementsCriterion, SizeCriterion, AndCriterion
-
-    origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int, Float64}(origin, 10.0)
-
-    # MaxElementsCriterion: always true (no physical limit)
-    @test can_subdivide(MaxElementsCriterion(50), octree, 1) == true
-    @test can_subdivide(MaxElementsCriterion(0), octree, 1) == true
-
-    # SizeCriterion: checks box_size > h_min
-    @test can_subdivide(SizeCriterion(5.0), octree, 1) == true   # 10 > 5
-    @test can_subdivide(SizeCriterion(15.0), octree, 1) == false  # 10 < 15
-    @test can_subdivide(SizeCriterion(10.0), octree, 1) == false  # 10 == 10
-
-    # AndCriterion: all criteria must pass
-    @test can_subdivide(AndCriterion(MaxElementsCriterion(50), SizeCriterion(5.0)), octree, 1) == true
-    @test can_subdivide(AndCriterion(MaxElementsCriterion(50), SizeCriterion(15.0)), octree, 1) == false
 end
 
 @testitem "SpatialOctree all_boxes" setup = [CommonImports] begin

@@ -9,7 +9,7 @@
 
     tri = TriangleOctree(mesh32; classify_leaves = true)
     @test tri.tree isa WhatsThePoint.SpatialOctree{Int, Float32}
-    @test eltype(tri.mesh_bbox_min) === Float32
+    @test eltype(tri.index.bbox_min) === Float32
 
     # Octree(tri_octree) without node_min_ratio recomputes the geometry ratio
     # from the mesh (regression: read a nonexistent tree.min_ratio field).
