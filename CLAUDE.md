@@ -81,6 +81,14 @@ Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing (
 - `repel.jl` - Node repulsion algorithm (Miotti 2023) for improving point distribution quality
 - `repel_forces.jl` - Force laws for `repel` (`ClippedSpacingForce` default, `InverseDistanceForce`, `SpacingEquilibriumForce`, `StrongSpacingForce`)
 
+### IO & Utilities (`src/`)
+- `io.jl` - Mesh import with required units (`import_mesh`, `import_surface`, `geometry_info`), `save`, `export_vtk`
+- `metrics.jl` - Distribution quality metrics (`metrics`, `spacing_metrics`, `spacing_fidelity_metrics`)
+- `geometry.jl` - `centroid` and `boundingbox` for raw point collections
+- `points.jl` - Point utilities (`emptyspace`)
+- `neighbors.jl` - Meshes.jl search API (`KNearestSearch`, `search`, `searchdists`) over cloud types
+- `utils.jl` - Internal helpers (permutation and range utilities)
+
 ## Important Technical Details
 
 ### Geometric Assumptions (Euclidean Manifolds Only)
@@ -99,8 +107,8 @@ WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and 
 
 ### 2D vs 3D Algorithm Differences
 The discretization algorithms are dimension-specific:
-- 2D geometries: Must use `FornbergFlyer()`
-- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()`, or `Octree()`
+- 2D geometries: Must use `FornbergFlyer()` (requires `ConstantSpacing`)
+- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()` (`ConstantSpacing` only), or `Octree()`
 
 ### Normal Orientation Strategy
 Normal computation and orientation uses a two-step process (Hoppe 1992):
@@ -302,9 +310,9 @@ test/
 
 ## CI/CD
 
-`.github/workflows/CI.yml` runs on Ubuntu, macOS, Windows with Julia 1.10, 1.11, and 1.12. Tests trigger on pushes to main, tags, and PRs (excluding docs/license changes).
+`.github/workflows/CI.yml` runs on Ubuntu with Julia 1.10, 1.11, and 1.12 across a 1- and 2-thread matrix. Tests trigger on pushes to main, tags, and PRs (excluding docs/license changes).
 
-Documentation builds automatically via `documenter.yml` and deploys to GitHub Pages.
+Documentation builds via `documenter.yml` (and CI.yml's `docs` job, which also runs doctests) and deploys to GitHub Pages. Other workflows: `downgrade.yml` (lower-bound compat tests), `format.yml` (format check), `TagBot.yml`, `dependabot-automerge.yml`.
 
 
 # Julia Best Practices

@@ -1,3 +1,9 @@
+"""
+    AbstractNodeGenerationAlgorithm
+
+Abstract supertype for volume discretization algorithms
+(`SlakKosec`, `VanDerSandeFornberg`, `FornbergFlyer`, `Octree`).
+"""
 abstract type AbstractNodeGenerationAlgorithm end
 
 # Discretization algorithms

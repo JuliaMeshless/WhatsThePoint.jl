@@ -158,7 +158,7 @@ end
 function generate_algorithm_comparison()
     println("Generating 3D algorithm comparison...")
 
-    boundary = WTP.PointBoundary(joinpath(@__DIR__, "src", "assets", "bunny.stl"))
+    boundary = WTP.PointBoundary(joinpath(@__DIR__, "src", "assets", "bunny.stl"), m)
     spacing = WTP.ConstantSpacing(1m)
 
     cloud_sk = WTP.discretize(boundary, spacing; alg = WTP.SlakKosec(), max_points = 95_000)

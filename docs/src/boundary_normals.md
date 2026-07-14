@@ -11,10 +11,10 @@ This page covers operations on boundary surfaces: normal computation and orienta
 Normals are computed via **PCA on local neighborhoods** (Hoppe et al. 1992). For each point, a k-nearest neighbor set is found, the covariance matrix of the local neighborhood is formed, and the eigenvector corresponding to the smallest eigenvalue gives the normal direction.
 
 ```julia
-normals = compute_normals(points, k)
+normals = compute_normals(points; k=10)
 ```
 
-The parameter `k` controls the neighborhood size — larger values produce smoother normals but may miss sharp features.
+The keyword `k` (default 5) controls the neighborhood size — larger values produce smoother normals but may miss sharp features.
 
 ## Normal Orientation
 
@@ -26,13 +26,14 @@ After computation, normals point in arbitrary directions (PCA gives an axis, not
 4. DFS through the MST, flipping each normal to agree with its parent
 
 ```julia
-orient_normals!(normals, points, k)
+orient_normals!(normals, points; k=10)
 ```
 
-To recompute and orient normals on an existing boundary in one step:
+To recompute normals in place on an existing surface (e.g. after its points change), then re-orient them:
 
 ```julia
-update_normals!(boundary, k)
+update_normals!(surf; k=10)
+orient_normals!(surf; k=10)
 ```
 
 ## Surface Splitting
@@ -50,7 +51,7 @@ Identify distinct geometric faces (walls, inlets, outlets) so you can apply diff
 split_surface!(boundary, 75°)
 
 # Check the result
-names(boundary)  # e.g. ["surface_1", "surface_2", "surface_3"]
+names(boundary)  # e.g. [:surface1, :surface2, :surface3]
 ```
 
 ## Surface Combining
@@ -58,7 +59,7 @@ names(boundary)  # e.g. ["surface_1", "surface_2", "surface_3"]
 Merge multiple named surfaces back into one:
 
 ```julia
-combine_surfaces!(boundary, "surface_1", "surface_2")
+combine_surfaces!(boundary, :surface1, :surface2)
 ```
 
 The first name is kept and the second surface is merged into it.

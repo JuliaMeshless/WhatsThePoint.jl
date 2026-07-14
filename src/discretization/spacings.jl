@@ -41,10 +41,10 @@ end
 """
     LogLike <: VariableSpacing
 
-Node spacing based on a log-like function of the distance to nearest boundary ``x/(x+a)``
-    where ``x`` is the distance to the nearest boundary and ``a`` is a parameter to control
-    the growth rate as ``a = 1 - (g - 1)`` where ``g`` is the conventional growth rate
-    parameter.
+Node spacing based on a log-like function of the distance to nearest boundary
+    ``h(x) = h_0 \\, x/(x+a)`` where ``x`` is the distance to the nearest boundary,
+    ``h_0`` is `base_size`, and ``a = h_0 (2 - g)`` is the characteristic length
+    controlling the growth rate, with ``g`` the conventional growth rate parameter.
 """
 struct LogLike{B, G, P, K <: KDTree} <: VariableSpacing
     boundary::P

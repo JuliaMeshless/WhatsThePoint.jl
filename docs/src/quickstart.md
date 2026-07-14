@@ -15,7 +15,7 @@ Pkg.add(url="https://github.com/JuliaMeshless/WhatsThePoint.jl")
 
 ```julia
 using WhatsThePoint
-using Unitful: mm
+using Unitful: mm, °
 
 # 1. Import a surface mesh — the unit says what the file's raw numbers mean
 boundary = PointBoundary("model.stl", mm)
@@ -49,6 +49,7 @@ export_vtk("cloud", cloud)
 
 ```julia
 using WhatsThePoint
+using Unitful: m
 
 # 1. Define a 2D polygon boundary
 pts = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
