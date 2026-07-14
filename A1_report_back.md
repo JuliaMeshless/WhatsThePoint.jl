@@ -116,9 +116,49 @@ folded in and deleted.
 - Runic `--check` clean on all 22 touched files
 - Package loads: `julia --project -e 'using WhatsThePoint'` ✓
 
-## Not committed
+## Benchmark — `examples/octree_boundary_layer.jl` (bunny, 69,664 tris)
 
-All changes are in the working tree on `polish_before_JCon`. Nothing is
-staged or committed. Untracked planning docs (`simplification_plan.md`,
-`mechanics.md`) and example assets (`examples/simpler_geometry/`,
-`bunny_nodegen.gif`) remain as before.
+Repeated-run measurement (3 measured runs per commit, compilation paid once
+in a warmup, same session, `-t auto`) against baseline `c7bd9b1` (PR #103):
+
+| Phase (mean of 3) | HEAD `1ff9bde` | BASELINE | Δ |
+|---|---|---|---|
+| node octree build | 21.75 s | 22.33 s | −0.58 s |
+| classify leaves | 2.41 s | 2.71 s | −0.30 s |
+| gradient-limit | 5.76 s | 4.84 s | +0.92 s |
+| Bridson sampling | 55.30 s | 56.55 s | −1.25 s |
+| **total wall** | **88.81 s** | **89.76 s** | **−0.95 s** |
+
+Run-to-run spread: HEAD 88.4–89.5 s, baseline 89.1–90.2 s — distributions
+overlap; the ~1 s gap is at the edge of significance but the direction is
+flat-to-slightly-faster, not a regression.
+
+**Allocations (single full-pipeline run, the `@time` on `_discretize_volume`):**
+398.9 M allocs / 13.95 GiB (HEAD) vs 453.4 M / 16.79 GiB (baseline) —
+**−12% allocations, −17% peak memory**.
+
+### Honest reading of where TriangleIndex helps on this workload
+
+The reference example is **Bridson-dominated**: ~62% of wall time is the
+Bridson sampler (55 s of 88 s), whose hot loop is `_LeafSpacing` lookups +
+dart-throws + `_bridson_inside`/`_bridson_separated` — **none of which touch
+triangle vertices**. TriangleIndex's cached vertices help the phases that
+*do* touch triangles (node-octree build, classify, `isinside`, `repel`'s wall
+projection), and those show a small improvement (build −0.6 s, classify −0.3 s).
+
+The headline `simplification_plan.md` A1 estimate of "~4.7×10⁹ `Meshes.to`
+extractions eliminated → discretize/isinside/repel measurably faster" is
+**correct in direction but workload-dependent**: this example is the wrong
+witness for the speed claim (its hot path doesn't query triangles). A
+triangle-query-heavy witness (`isinside` batches + one `repel` iteration on
+`bifurcation.stl`) is the right benchmark and is **not yet run** — recorded
+as a follow-up, not a blocker. The unambiguous win on this workload is the
+**memory reduction and the correctness fix** (mixed-precision seam: the 2
+previously-errored curvature tests now pass).
+
+## Commit / PR scope
+
+Committed as `1ff9bde` on `polish_before_JCon`. The three root-level
+planning docs (`A1_report.md`, `mechanics.md`, `simplification_plan.md`) are
+**kept out of the PR** — staged-only-code policy for review. They live as
+local working records on this branch.

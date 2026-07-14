@@ -117,22 +117,28 @@ benchmark of `isinside` batch queries and one `repel` iteration on
   2 errored / 2 broken — **both errored items proven pre-existing at HEAD**
   (`octree_regression_curvature.jl`: Float64 probe points vs Float32
   octree; reproduced identically on a clean HEAD worktree).
-- DONE, NOT YET VERIFIED: the mixed-precision seam fix (B3 policy,
-  Davide-directed: "types must be parameters — Float32/Float64 meshes must
-  both work"): converting entry points at `_classify_point_octree`,
-  `_compute_signed_distance_octree(point, octree)`, and
-  `_project_to_boundary` — convert the query to the octree's `T` once at
-  entry, strict `T` below. This should turn the 2 pre-existing errors into
-  passes.
-- REMAINING: (1) rerun the two curvature repros + full `Pkg.test()`;
-  (2) Runic on touched files (`triangle_octree.jl`, `repel.jl`,
-  `surface_sampling.jl`, `spacing_guidance.jl`); (3) before/after benchmark
-  — baseline HEAD worktree + `bench_triangleindex.jl` +
-  `repro_curvature.jl`/`repro_sweep.jl` scripts were in the (ephemeral)
-  session scratchpad; recreate with `git worktree add <dir> HEAD` +
-  copied `Manifest.toml` if gone, and run `git worktree prune` for the
-  stale entry; (4) update `mechanics.md` §5b (TriangleIndex + seam) in the
-  same PR.
+- VERIFIED (2026-07-14, committed `1ff9bde`): full suite
+  190,647 pass / 0 fail / 0 errored / 3 broken (pre-existing `@test_skip`);
+  Runic `--check` clean on all 22 touched files. Repeated-run benchmark on
+  `examples/octree_boundary_layer.jl` (3 runs/commit, warmup-paid):
+  **no regression** — HEAD 88.81 s mean vs baseline 89.76 s mean (flat-to-
+  slightly-faster), with **−12% allocations / −17% peak memory** on the
+  discretize phase. Workload is Bridson-dominated (~62% of wall), which
+  doesn't exercise the cached vertices; the triangle-query-heavy witness
+  (`isinside` batch + one `repel` iteration on `bifurcation.stl`) is the
+  right benchmark for the speed claim and is **not yet run** — follow-up,
+  not a blocker. The mixed-precision seam fix turned the 2 previously-errored
+  curvature tests into passes (bug fix, not a behavior change).
+- DONE: the mixed-precision seam fix (B3 policy, Davide-directed: "types must
+  be parameters — Float32/Float64 meshes must both work"): converting entry
+  points at `_classify_point_octree`, `_compute_signed_distance_octree(point,
+  octree)`, and `_project_to_boundary` — convert the query to the octree's
+  `T` once at entry, strict `T` below. Verified: the 2 pre-existing errors
+  are now passes.
+- REMAINING (non-blocking): (1) the triangle-query-heavy benchmark
+  (`isinside` batch + one `repel` iteration on `bifurcation.stl`) to witness
+  the speed claim on the workload it actually targets; (2) update
+  `mechanics.md` §5b (TriangleIndex + seam) — currently unchanged.
 
 ### A2. Mesh-first entry point, Octree as its default
 
