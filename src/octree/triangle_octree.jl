@@ -48,9 +48,6 @@ Seam contract:
 """
 abstract type AbstractGeometryIndex{M <: Manifold} end
 
-"Spatial dimension of a geometry index (e.g. `3` for `𝔼{3}`)."
-manifold_dim(::AbstractGeometryIndex{𝔼{N}}) where {N} = N
-
 """
 Octree spatial index for triangle mesh queries. Accelerates isinside(),
 signed distance, etc. Carries the mesh as a `TriangleIndex{T}` — no
@@ -148,9 +145,6 @@ end
     t = @inbounds index.triangles[tri_idx]
     @inbounds return index.vertices[t[1]], index.vertices[t[2]], index.vertices[t[3]]
 end
-
-@inline _get_triangle_normal(index::TriangleIndex, tri_idx::Int) =
-    (@inbounds index.face[tri_idx])
 
 num_triangles(index::TriangleIndex) = length(index.triangles)
 

@@ -223,37 +223,21 @@ end
     @test length(WhatsThePoint.volume(cloud)) == 5
 end
 
-@testitem "Octree errors on unclassified octree" setup = [CommonImports, OctreeTestData] begin
-    mesh = OctreeTestData.unit_cube_mesh()
-    bnd = PointBoundary(mesh)
-    octree = TriangleOctree(mesh; classify_leaves = false)
-
-    @test_throws Exception discretize(
-        bnd, ConstantSpacing(1m);
-        alg = Octree(octree), max_points = 50
-    )
-end
-
 @testitem "Octree invalid placement throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
-    octree = TriangleOctree(mesh; classify_leaves = true)
 
-    @test_throws ArgumentError Octree(octree; placement = :invalid)
     @test_throws ArgumentError Octree(mesh; placement = :invalid)
 end
 
 @testitem "Octree invalid oversampling throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
-    octree = TriangleOctree(mesh; classify_leaves = true)
 
-    @test_throws ArgumentError Octree(octree; boundary_oversampling = -1.0)
+    @test_throws ArgumentError Octree(mesh; boundary_oversampling = -1.0)
 end
 
 @testitem "Octree invalid max_growth throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
-    octree = TriangleOctree(mesh; classify_leaves = true)
 
-    @test_throws ArgumentError Octree(octree; max_growth = -0.1)
     @test_throws ArgumentError Octree(mesh; max_growth = -0.1)
 end
 

@@ -89,9 +89,6 @@ end
 Child access (replaces the old `children` field)
 =============================================================================#
 
-"Global index of the `k`-th child (1-based) of a subdivided box."
-@inline child(t::SpatialTree, box::Int, k::Int) = t.first_child[box] + k - 1
-
 "Range of child indices of `box` (empty range if `box` is a leaf)."
 @inline function children(t::SpatialTree, box::Int)
     fc = t.first_child[box]
@@ -240,14 +237,7 @@ end
 Neighbour Finding
 =============================================================================#
 
-"""
-    neighbor_direction(direction) -> SVector{3,Int}
-
-3D convenience: direction code (1:-x,2:+x,3:-y,4:+y,5:-z,6:+z) → offset.
-"""
-neighbor_direction(direction::Int) = _neighbor_offset(direction, Val(3))
-
-"Axis-aligned neighbour offset for a direction code in `1:2N`."
+"Axis-aligned neighbour offset for a direction code in `1:2N` (odd = negative face)."
 @inline function _neighbor_offset(direction::Int, ::Val{N}) where {N}
     axis = (direction + 1) >> 1          # ceil(direction/2)
     s = isodd(direction) ? -1 : 1        # odd = negative face, even = positive

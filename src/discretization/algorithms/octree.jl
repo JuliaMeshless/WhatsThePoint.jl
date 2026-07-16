@@ -81,7 +81,7 @@ cloud = discretize(boundary, spacing; alg, max_points=100_000)
 alg = Octree(mesh; min_ratio=1e-3, spacing, alpha=1.0)
 ```
 """
-struct Octree{T <: Real} <: AbstractNodeGenerationAlgorithm
+struct Octree{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
     triangle_octree::TriangleOctree{T}
     boundary_oversampling::T
     placement::Symbol
@@ -91,38 +91,9 @@ struct Octree{T <: Real} <: AbstractNodeGenerationAlgorithm
     max_growth::T  # Lipschitz cap on |∇h| (0 = off); steep-but-smooth grading
 end
 
-# Constructors
-function Octree(
-        triangle_octree::TriangleOctree{T};
-        node_min_ratio::Union{Nothing, Real} = nothing,
-        boundary_oversampling::Real = 2.0,
-        placement::Symbol = :bridson,
-        alpha::Real = 2.0,
-        bridson_factor::Real = 0.75,
-        max_growth::Real = 0.0,
-    ) where {T}
-    boundary_oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive"))
-    placement in (:random, :jittered, :lattice, :bridson) ||
-        throw(ArgumentError("placement must be :random, :jittered, :lattice, or :bridson"))
-    alpha > 0 || throw(ArgumentError("alpha must be positive"))
-    bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
-    max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
-
-    # Default: recompute the geometry-based ratio from the octree's triangle count
-    node_ratio = isnothing(node_min_ratio) ?
-        _auto_min_ratio(T, num_triangles(triangle_octree.index)) : T(node_min_ratio)
-
-    return Octree{T}(
-        triangle_octree,
-        T(boundary_oversampling),
-        placement,
-        T(alpha),
-        node_ratio,
-        T(bridson_factor),
-        T(max_growth),
-    )
-end
-
+# Constructor — the single entry point: takes the Meshes.jl object at the
+# package boundary, captures `{M, C, T}` from it, and builds the stripped
+# `TriangleOctree` internally (always with classified leaves).
 function Octree(
         mesh::SimpleMesh{M, C};
         spacing::Union{Nothing, AbstractSpacing} = nothing,
@@ -136,8 +107,10 @@ function Octree(
         max_growth::Real = 0.0,
         verify_orientation::Bool = true,
     ) where {M, C}
+    boundary_oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive"))
     placement in (:random, :jittered, :lattice, :bridson) ||
         throw(ArgumentError("placement must be :random, :jittered, :lattice, or :bridson"))
+    alpha > 0 || throw(ArgumentError("alpha must be positive"))
     bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
     max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
     T = CoordRefSystems.mactype(C)
@@ -180,7 +153,7 @@ function Octree(
         geometry_min_ratio
     end
 
-    return Octree{T}(
+    return Octree{M, C, T}(
         triangle_octree,
         T(boundary_oversampling),
         placement,
@@ -815,17 +788,9 @@ end
 function _discretize_volume(
         _cloud::PointCloud{𝔼{3}, C},
         spacing::AbstractSpacing,
-        alg::Octree{T};
+        alg::Octree{<:Manifold, <:CRS, T};
         max_points::Union{Int, Nothing} = nothing,
     ) where {C, T}
-    isnothing(alg.triangle_octree.leaf_classification) &&
-        throw(
-        ArgumentError(
-            "TriangleOctree must be built with classify_leaves=true. " *
-                "Rebuild with: TriangleOctree(mesh; classify_leaves=true)"
-        )
-    )
-
     # Bridson is empty when the spacing is too coarse for the domain to host an
     # interior. Clamp (loudly) before the node octree is built — its resolution
     # is spacing-driven, so the clamp must precede subdivision.

@@ -11,11 +11,6 @@
     @test tri.tree isa WhatsThePoint.SpatialOctree{Int, Float32}
     @test eltype(tri.index.bbox_min) === Float32
 
-    # Octree(tri_octree) without node_min_ratio recomputes the geometry ratio
-    # from the mesh (regression: read a nonexistent tree.min_ratio field).
-    alg_from_tri = Octree(tri)
-    @test alg_from_tri.node_min_ratio isa Float32
-
     alg = Octree(mesh32; spacing = sp)
     @test alg.alpha isa Float32
     @test alg.boundary_oversampling isa Float32
