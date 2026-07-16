@@ -31,15 +31,48 @@ struct TriangleIndex{T <: Real}
 end
 
 """
+    AbstractGeometryIndex{M<:Manifold}
+
+The query interface that node-generation code (`build_node_octree`, `repel`)
+uses to consult boundary geometry, parameterized by the manifold `M`. Because
+every seam method dispatches on `M`, discretization is generic over `Manifold`
+— the mechanism a 2D reimplementation slots into. Implementations:
+`TriangleOctree{T} <: AbstractGeometryIndex{𝔼{3}}` (today), and a future
+`SegmentQuadtree{T} <: AbstractGeometryIndex{𝔼{2}}`.
+
+Seam contract:
+- `domain_bounds(g)`            → `(min, max)::NTuple{2,SVector{N,T}}`
+- `classify_point(g, p, tol)`   → `LEAF_INTERIOR` / `LEAF_BOUNDARY` / `LEAF_EXTERIOR`
+- `isinside(p, g)`              → `Bool`
+- `project_to_boundary(g, p, offset)` → `(SVector{N,T}, element_id::Int)`
+"""
+abstract type AbstractGeometryIndex{M <: Manifold} end
+
+"Spatial dimension of a geometry index (e.g. `3` for `𝔼{3}`)."
+manifold_dim(::AbstractGeometryIndex{𝔼{N}}) where {N} = N
+
+"""
 Octree spatial index for triangle mesh queries. Accelerates isinside(),
 signed distance, etc. Carries the mesh as a `TriangleIndex{T}` — no
 `SimpleMesh` reference, no Meshes.jl in the runtime.
 """
-struct TriangleOctree{T <: Real}
+struct TriangleOctree{T <: Real} <: AbstractGeometryIndex{𝔼{3}}
     tree::SpatialOctree{Int, T}
     index::TriangleIndex{T}
     leaf_classification::Union{Nothing, Vector{Int8}}
 end
+
+# --- seam methods (thin wrappers over the existing 3D query internals) ---
+"Axis-aligned bounds of the boundary geometry."
+domain_bounds(g::TriangleOctree) = (g.index.bbox_min, g.index.bbox_max)
+
+"Classify a query point against the domain (INTERIOR / BOUNDARY / EXTERIOR)."
+@inline classify_point(g::TriangleOctree{T}, p::SVector{3, <:Real}, tol) where {T} =
+    _classify_point_octree(p, g; tol = T(tol))
+
+"Project `p` onto the boundary, returning (projected point, boundary element id).
+Delegates to the `repel` projection kernel (defined later in the module)."
+project_to_boundary(g::TriangleOctree, p, offset) = _project_to_boundary(p, g, offset)
 
 const _BBOX_EXPANSION = 1.02
 const _DEGENERATE_EPS = 1.0e-10
@@ -388,13 +421,12 @@ function _subdivide_triangle_octree!(
     isempty(parent_triangles) && return
 
     subdivide!(tree, box_idx)
-    children = tree.children[box_idx]
+    kids = children(tree, box_idx)
 
     for tri_idx in parent_triangles
         v1, v2, v3 = _get_triangle_vertices(index, tri_idx)
 
-        for child_idx in children
-            child_idx == 0 && continue
+        for child_idx in kids
             child_min, child_max = box_bounds(tree, child_idx)
 
             if triangle_box_intersection(v1, v2, v3, child_min, child_max)
@@ -403,8 +435,7 @@ function _subdivide_triangle_octree!(
         end
     end
 
-    for child_idx in children
-        child_idx == 0 && continue
+    for child_idx in kids
         _subdivide_triangle_octree!(tree, index, child_idx, criterion)
     end
     return
@@ -462,12 +493,11 @@ function _nearest_triangle_octree!(
         return
     end
 
-    children = tree.children[box_idx]
+    kids = children(tree, box_idx)
     dists = MVector{8, T}(ntuple(_ -> typemax(T), Val(8)))
     idxs = MVector{8, Int}(ntuple(_ -> 0, Val(8)))
     n_valid = 0
-    @inbounds for child_idx in children
-        child_idx == 0 && continue
+    @inbounds for child_idx in kids
         cmin, cmax = box_bounds(tree, child_idx)
         d2 = _point_box_distance_sq(point, cmin, cmax)
         if d2 <= state.best_dist_sq

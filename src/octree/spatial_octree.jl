@@ -1,12 +1,17 @@
-# Layer 1: Spatial Octree
+# Layer 1: Spatial Tree (dimension-generic)
 #
-# Concrete octree using integer coordinate system for efficient neighbor
-# finding and 2:1 balance enforcement.
+# `SpatialTree{N,E,T}` is an adaptive 2^N-tree over N-dimensional Cartesian space
+# (N=3 octree, N=2 quadtree). Integer (cell, level) coordinates give O(1)
+# neighbour arithmetic and 2:1 balance enforcement. It is element- and CRS-blind:
+# the whole structure lives in stripped `SVector{N,T}` numeric space.
+#
+# `const SpatialOctree{E,T} = SpatialTree{3,E,T}` keeps the 3D call sites (and the
+# public name) unchanged.
 
 """
     SubdivisionCriterion
 
-Abstract type for octree subdivision decision logic. Subtypes implement
+Abstract type for tree subdivision decision logic. Subtypes implement
 `should_subdivide(criterion, tree, box_idx)` (subdivide if content/size
 demands it) and `can_subdivide(criterion, tree, box_idx)` (physical limits
 only — used during balancing).
@@ -18,103 +23,79 @@ Core Data Structure
 =============================================================================#
 
 """
-    SpatialOctree{E,T<:Real}
+    SpatialTree{N,E,T}
 
-Concrete octree implementation using integer coordinate system for efficient neighbor finding.
+Adaptive 2^N-tree over N-d Cartesian space (N=3 octree, N=2 quadtree). Uses a
+`(cell, level)` integer coordinate system:
+- `cell` are integer coordinates at refinement `level`
+- box center = `origin + (2*cell + 1) * (root_size / level) / 2`
+- O(1) neighbour calculation from coordinates
 
-Uses (i,j,k,N) coordinate system where:
-- (i,j,k) are integer coordinates at refinement level N
-- Box center = origin + (2*[i,j,k] + 1) * (root_size / N) / 2
-- Enables O(1) neighbor calculation from coordinates
+Children of a subdivided box are the contiguous block
+`first_child .+ (0:2^N-1)` (`first_child == 0` marks a leaf).
+
+INVARIANT: `subdivide!` always allocates the `2^N` children contiguously, and
+children are never re-mutated (there is no coarsening). A future merge/coarsen
+feature MUST preserve this or replace `first_child` with an explicit child list.
 
 # Type Parameters
-- `E`: Type of elements stored (e.g., Int for triangle IDs)
-- `T`: Coordinate numeric type (e.g., Float64, Float32)
-
-# Fields
-- `parent::Vector{Int}`: Parent box index for each node (0 = root has no parent)
-- `children::Vector{SVector{8,Int}}`: 8 child indices per box (0 = no child)
-- `coords::Vector{SVector{4,Int}}`: (i,j,k,N) coordinates per box where N is refinement level
-- `origin::SVector{3,T}`: Spatial origin of root box
-- `root_size::T`: Size of root box (assumed cubic)
-- `element_lists::Vector{Vector{E}}`: Elements in each box
-- `num_boxes::Ref{Int}`: Current number of boxes (mutable counter)
-
-# Interface:
-# - `find_leaf(tree, point)` - O(log n) point location
-# - `bounding_box(tree)` - Root box bounds
-# - `num_elements(tree)` - Total stored elements
-# - `find_neighbor(tree, box, dir)` - 6-directional neighbor finding
-# - `balance_octree!(tree)` - 2:1 refinement constraint
-
-# Example
-```julia
-using StaticArrays
-
-origin = SVector(0.0, 0.0, 0.0)
-octree = SpatialOctree{Int,Float64}(origin, 10.0)
-
-# Subdivide root
-subdivide!(octree, 1)
-
-# Find leaf containing point
-point = SVector(2.0, 2.0, 2.0)
-leaf = find_leaf(octree, point)
-```
+- `N`: spatial dimension
+- `E`: element type stored per box (e.g. `Int` for triangle IDs)
+- `T`: coordinate numeric type (`Float64`, `Float32`)
 """
-struct SpatialOctree{E, T <: Real}
+struct SpatialTree{N, E, T <: Real}
     parent::Vector{Int}
-    children::Vector{SVector{8, Int}}    # 8 child indices per box (0 = no child)
-    coords::Vector{SVector{4, Int}}      # (i,j,k,N) coordinates per box
-    origin::SVector{3, T}
+    first_child::Vector{Int}          # 0 = leaf; children are first_child .+ (0:2^N-1)
+    cell::Vector{SVector{N, Int}}     # integer coords at `level`
+    level::Vector{Int}                # refinement level (root = 1, doubles per subdivide)
+    origin::SVector{N, T}
     root_size::T
     element_lists::Vector{Vector{E}}
-    num_boxes::Ref{Int}          # Mutable counter
+    num_boxes::Base.RefValue{Int}
 end
+
+"3D octree — the historical name and the default 3D specialization."
+const SpatialOctree{E, T} = SpatialTree{3, E, T}
+
+@inline n_children(::SpatialTree{N}) where {N} = 1 << N   # 2^N — single source of truth
 
 #=============================================================================
 Constructor
 =============================================================================#
 
 """
-    SpatialOctree{E,T}(origin::SVector{3,T}, size::T; initial_capacity=1000)
+    SpatialTree{N,E,T}(origin::SVector{N,T}, size::T; initial_capacity=1000)
 
-Create empty octree with root node.
-
-# Arguments
-- `origin`: Minimum corner of root box
-- `size`: Edge length of root box (assumed cubic)
-- `initial_capacity`: Initial array capacity (will grow as needed)
-
-# Example
-```julia
-origin = SVector(0.0, 0.0, 0.0)
-octree = SpatialOctree{Int,Float64}(origin, 10.0)
-```
+Create an empty tree with a single root box (cubic, edge length `size`).
 """
-function SpatialOctree{E, T}(
-        origin::SVector{3, T},
+function SpatialTree{N, E, T}(
+        origin::SVector{N, T},
         size::T;
         initial_capacity = 1000,
-    ) where {E, T}
+    ) where {N, E, T}
     parent = zeros(Int, initial_capacity)
-    children = [zero(SVector{8, Int}) for _ in 1:initial_capacity]
-    coords = [zero(SVector{4, Int}) for _ in 1:initial_capacity]
+    first_child = zeros(Int, initial_capacity)
+    cell = [zero(SVector{N, Int}) for _ in 1:initial_capacity]
+    level = ones(Int, initial_capacity)               # root level = 1
     element_lists = [E[] for _ in 1:initial_capacity]
 
-    # Initialize root at (0,0,0,1)
-    coords[1] = SVector{4, Int}(0, 0, 0, 1)
     num_boxes = Ref(1)
-
-    return SpatialOctree{E, T}(
-        parent,
-        children,
-        coords,
-        origin,
-        size,
-        element_lists,
-        num_boxes,
+    return SpatialTree{N, E, T}(
+        parent, first_child, cell, level, origin, size, element_lists, num_boxes
     )
+end
+
+#=============================================================================
+Child access (replaces the old `children` field)
+=============================================================================#
+
+"Global index of the `k`-th child (1-based) of a subdivided box."
+@inline child(t::SpatialTree, box::Int, k::Int) = t.first_child[box] + k - 1
+
+"Range of child indices of `box` (empty range if `box` is a leaf)."
+@inline function children(t::SpatialTree, box::Int)
+    fc = t.first_child[box]
+    return fc == 0 ? (1:0) : (fc:(fc + n_children(t) - 1))
 end
 
 #=============================================================================
@@ -122,55 +103,31 @@ Box Geometry
 =============================================================================#
 
 """
-    box_center(octree::SpatialOctree, box_idx::Int) -> SVector{3}
+    box_center(tree, box_idx) -> SVector{N}
 
-Compute spatial center of box using (i,j,k,N) coordinates.
-
-# Formula
-```
-center = origin + (2*[i,j,k] + 1) * box_size / 2
-```
-where `box_size = root_size / N`
+`center = origin + (2*cell + 1) * box_size / 2`, `box_size = root_size / level`.
 """
-function box_center(octree::SpatialOctree{E, T}, box_idx::Int) where {E, T}
-    i, j, k, N = octree.coords[box_idx]
-    h = octree.root_size / N  # Box size at this level
-
-    x = octree.origin[1] + (2 * i + 1) * h / 2
-    y = octree.origin[2] + (2 * j + 1) * h / 2
-    z = octree.origin[3] + (2 * k + 1) * h / 2
-
-    return SVector{3, T}(x, y, z)
+@inline function box_center(t::SpatialTree{N, E, T}, box::Int) where {N, E, T}
+    c = t.cell[box]
+    h = t.root_size / t.level[box]
+    return t.origin + SVector{N, T}(ntuple(d -> (2 * c[d] + 1) * h / 2, N))
 end
 
 """
-    box_size(octree::SpatialOctree, box_idx::Int) -> Real
+    box_size(tree, box_idx) -> Real
 
-Get edge length of box.
-
-Box size at refinement level N is: `root_size / N`
+Edge length of the box: `root_size / level`.
 """
-function box_size(octree::SpatialOctree, box_idx::Int)
-    N = octree.coords[box_idx][4]
-    return octree.root_size / N
-end
+@inline box_size(t::SpatialTree, box::Int) = t.root_size / t.level[box]
 
 """
-    box_bounds(octree::SpatialOctree, box_idx::Int) -> (SVector{3}, SVector{3})
-
-Get (min_corner, max_corner) of box.
-
-# Returns
-Tuple of (min_corner, max_corner) as SVector{3,C}
+    box_bounds(tree, box_idx) -> (min_corner, max_corner)
 """
-function box_bounds(octree::SpatialOctree{E, T}, box_idx::Int) where {E, T}
-    i, j, k, N = octree.coords[box_idx]
-    h = octree.root_size / N
-
-    min_corner = octree.origin + SVector{3, T}(i * h, j * h, k * h)
-    max_corner = min_corner + SVector{3, T}(h, h, h)
-
-    return (min_corner, max_corner)
+@inline function box_bounds(t::SpatialTree{N, E, T}, box::Int) where {N, E, T}
+    c = t.cell[box]
+    h = t.root_size / t.level[box]
+    lo = t.origin + SVector{N, T}(ntuple(d -> c[d] * h, N))
+    return (lo, lo + SVector{N, T}(ntuple(_ -> h, N)))
 end
 
 #=============================================================================
@@ -178,41 +135,30 @@ Tree Structure Queries
 =============================================================================#
 
 """
-    is_leaf(octree::SpatialOctree, box_idx::Int) -> Bool
-
-Check if box has no children.
+    is_leaf(tree, box_idx) -> Bool
 """
-function is_leaf(octree::SpatialOctree, box_idx::Int)
-    return octree.children[box_idx][1] == 0
+@inline is_leaf(t::SpatialTree, box::Int) = t.first_child[box] == 0
+
+"""
+    has_children(tree, box_idx) -> Bool
+"""
+@inline has_children(t::SpatialTree, box::Int) = !is_leaf(t, box)
+
+"""
+    num_elements(tree) -> Int
+"""
+function num_elements(t::SpatialTree)
+    return sum(i -> length(t.element_lists[i]), 1:t.num_boxes[]; init = 0)
 end
 
 """
-    has_children(octree::SpatialOctree, box_idx::Int) -> Bool
+    bounding_box(tree) -> (min_corner, max_corner)
 
-Check if box has been subdivided.
+Root box bounds.
 """
-function has_children(octree::SpatialOctree, box_idx::Int)
-    return !is_leaf(octree, box_idx)
-end
-
-"""
-    num_elements(octree::SpatialOctree) -> Int
-
-Total number of elements stored in tree.
-"""
-function num_elements(octree::SpatialOctree)
-    return sum(i -> length(octree.element_lists[i]), 1:octree.num_boxes[]; init = 0)
-end
-
-"""
-    bounding_box(octree::SpatialOctree) -> (SVector{3}, SVector{3})
-
-Get overall bounding box of tree (root box).
-"""
-function bounding_box(octree::SpatialOctree{E, T}) where {E, T}
-    max_corner =
-        octree.origin + SVector{3, T}(octree.root_size, octree.root_size, octree.root_size)
-    return (octree.origin, max_corner)
+function bounding_box(t::SpatialTree{N, E, T}) where {N, E, T}
+    max_corner = t.origin + SVector{N, T}(ntuple(_ -> t.root_size, N))
+    return (t.origin, max_corner)
 end
 
 #=============================================================================
@@ -220,97 +166,52 @@ Tree Modification
 =============================================================================#
 
 """
-    add_box!(octree::SpatialOctree, i::Int, j::Int, k::Int, N::Int, parent_idx::Int) -> Int
+    add_box!(tree, cell::SVector{N,Int}, level, parent_idx) -> Int
 
-Add new box to octree. Returns box index.
-
-Automatically grows arrays if capacity exceeded.
-
-# Arguments
-- `i, j, k`: Integer coordinates at level N
-- `N`: Refinement level (N=1 is root, N=2 is first subdivision, etc.)
-- `parent_idx`: Index of parent box
-
-# Returns
-Index of newly created box
+Append a new leaf box at `(cell, level)`; grows arrays as needed. Returns index.
 """
-function add_box!(
-        octree::SpatialOctree{E},
-        i::Int,
-        j::Int,
-        k::Int,
-        N::Int,
-        parent_idx::Int,
-    ) where {E}
-    octree.num_boxes[] += 1
-    box_idx = octree.num_boxes[]
+function add_box!(t::SpatialTree{N, E, T}, cell::SVector{N, Int}, level::Int, parent::Int) where {N, E, T}
+    t.num_boxes[] += 1
+    box = t.num_boxes[]
 
-    # Grow arrays if needed
-    # Invariant: all arrays have same length
-    if box_idx > length(octree.parent)
-        old_capacity = length(octree.parent)
-        new_capacity = 2 * old_capacity
-
-        resize!(octree.parent, new_capacity)
-        append!(
-            octree.children,
-            [zero(SVector{8, Int}) for _ in 1:(new_capacity - old_capacity)],
-        )
-        append!(
-            octree.coords,
-            [zero(SVector{4, Int}) for _ in 1:(new_capacity - old_capacity)],
-        )
-        append!(octree.element_lists, [E[] for _ in 1:(new_capacity - old_capacity)])
+    if box > length(t.parent)
+        old = length(t.parent)
+        newcap = 2 * old
+        resize!(t.parent, newcap)
+        resize!(t.first_child, newcap)
+        @inbounds for i in (old + 1):newcap
+            t.first_child[i] = 0
+        end
+        resize!(t.level, newcap)
+        append!(t.cell, [zero(SVector{N, Int}) for _ in 1:(newcap - old)])
+        append!(t.element_lists, [E[] for _ in 1:(newcap - old)])
     end
 
-    octree.parent[box_idx] = parent_idx
-    octree.coords[box_idx] = SVector{4, Int}(i, j, k, N)
-
-    return box_idx
+    t.parent[box] = parent
+    t.first_child[box] = 0
+    t.cell[box] = cell
+    t.level[box] = level
+    return box
 end
 
 """
-    subdivide!(octree::SpatialOctree, box_idx::Int) -> SVector{8,Int}
+    subdivide!(tree, box_idx) -> UnitRange{Int}
 
-Subdivide box into 8 children. Returns child indices [1:8].
-
-# Child Ordering (Standard Octree Convention)
-1: (0,0,0) - bottom-left-front   (x-, y-, z-)
-2: (1,0,0) - bottom-right-front  (x+, y-, z-)
-3: (0,1,0) - top-left-front      (x-, y+, z-)
-4: (1,1,0) - top-right-front     (x+, y+, z-)
-5: (0,0,1) - bottom-left-back    (x-, y-, z+)
-6: (1,0,1) - bottom-right-back   (x+, y-, z+)
-7: (0,1,1) - top-left-back       (x-, y+, z+)
-8: (1,1,1) - top-right-back      (x+, y+, z+)
-
-# Arguments
-- `box_idx`: Index of box to subdivide (must be leaf)
-
-# Returns
-SVector{8,Int} of child indices in standard order
+Subdivide a leaf into `2^N` children (contiguous block). Returns the child range.
+Child `m` (0-based) sits at `2*cell + bits(m)`, where bit `d-1` of `m` is the
+offset along axis `d` — generalizing the standard octant ordering.
 """
-function subdivide!(octree::SpatialOctree, box_idx::Int)
-    @assert is_leaf(octree, box_idx) "Cannot subdivide non-leaf box"
-
-    i_p, j_p, k_p, N_p = octree.coords[box_idx]
-    N_child = 2 * N_p  # Double refinement level
-
-    # Standard octree ordering: (di, dj, dk) ∈ {0,1}³ decoded from child index
-    # child n (0-indexed) → di = n & 1, dj = (n >> 1) & 1, dk = (n >> 2) & 1
-    child_indices = SVector{8, Int}(
-        ntuple(Val(8)) do n
-            m = n - 1
-            di = m & 1
-            dj = (m >> 1) & 1
-            dk = (m >> 2) & 1
-            add_box!(octree, 2 * i_p + di, 2 * j_p + dj, 2 * k_p + dk, N_child, box_idx)
-        end
-    )
-
-    octree.children[box_idx] = child_indices
-
-    return child_indices
+function subdivide!(t::SpatialTree{N, E, T}, box::Int) where {N, E, T}
+    @assert is_leaf(t, box) "Cannot subdivide non-leaf box"
+    c = t.cell[box]
+    child_level = 2 * t.level[box]
+    first = t.num_boxes[] + 1
+    for m in 0:(n_children(t) - 1)
+        childcell = SVector{N, Int}(ntuple(d -> 2 * c[d] + ((m >> (d - 1)) & 1), N))
+        add_box!(t, childcell, child_level, box)
+    end
+    t.first_child[box] = first
+    return first:(first + n_children(t) - 1)
 end
 
 #=============================================================================
@@ -318,221 +219,117 @@ Point Queries
 =============================================================================#
 
 """
-    find_leaf(octree::SpatialOctree, point::SVector{3}) -> Int
+    find_leaf(tree, point::SVector{N}) -> Int
 
-Find leaf box containing point. Returns box index.
-
-Traverses tree from root to leaf in O(log n) time.
-
-# Arguments
-- `point`: Query point in same coordinate system as octree
-
-# Returns
-Index of leaf box containing point
-
-# Throws
-AssertionError if point is outside octree bounds
+Leaf box containing `point`, O(log n) from root.
 """
-function find_leaf(octree::SpatialOctree{E, T}, point::SVector{3, T}) where {E, T}
-    current = 1  # Start at root
-
-    while has_children(octree, current)
-        # Determine which octant contains point
-        center = box_center(octree, current)
-
-        # Binary decision for each dimension
-        di = point[1] >= center[1] ? 1 : 0
-        dj = point[2] >= center[2] ? 1 : 0
-        dk = point[3] >= center[3] ? 1 : 0
-
-        # Child index (1-8) based on octant
-        # Ordering: di + 2*dj + 4*dk + 1
-        child_offset = di + 2 * dj + 4 * dk + 1
-
-        next = octree.children[current][child_offset]
-        @assert next != 0 "Point outside octree bounds or tree structure corrupted"
-
-        current = next
+@inline function find_leaf(t::SpatialTree{N, E, T}, point::SVector{N, T}) where {N, E, T}
+    current = 1
+    while t.first_child[current] != 0
+        c = box_center(t, current)
+        offset = 0
+        @inbounds for d in 1:N
+            offset += (point[d] >= c[d] ? 1 : 0) << (d - 1)
+        end
+        current = t.first_child[current] + offset
     end
-
     return current
 end
 
 #=============================================================================
-Neighbor Finding
+Neighbour Finding
 =============================================================================#
 
-const _DIRECTIONS = (
-    (-1, 0, 0),  # 1: -x
-    (1, 0, 0),   # 2: +x
-    (0, -1, 0),  # 3: -y
-    (0, 1, 0),   # 4: +y
-    (0, 0, -1),  # 5: -z
-    (0, 0, 1),   # 6: +z
-)
-
 """
-    neighbor_direction(direction::Int) -> (Int, Int, Int)
+    neighbor_direction(direction) -> SVector{3,Int}
 
-Convert direction code to (di, dj, dk) offset.
-
-# Direction Codes
-- 1: -x (left)
-- 2: +x (right)
-- 3: -y (bottom)
-- 4: +y (top)
-- 5: -z (front)
-- 6: +z (back)
+3D convenience: direction code (1:-x,2:+x,3:-y,4:+y,5:-z,6:+z) → offset.
 """
-function neighbor_direction(direction::Int)
-    @assert 1 <= direction <= 6 "Direction must be in 1:6"
-    return _DIRECTIONS[direction]
+neighbor_direction(direction::Int) = _neighbor_offset(direction, Val(3))
+
+"Axis-aligned neighbour offset for a direction code in `1:2N`."
+@inline function _neighbor_offset(direction::Int, ::Val{N}) where {N}
+    axis = (direction + 1) >> 1          # ceil(direction/2)
+    s = isodd(direction) ? -1 : 1        # odd = negative face, even = positive
+    return SVector{N, Int}(ntuple(d -> d == axis ? s : 0, N))
 end
 
 """
-    find_neighbor(octree::SpatialOctree, box_idx::Int, direction::Int) -> Vector{Int}
+    find_neighbor(tree, box_idx, direction) -> Vector{Int}
 
-Find neighbor(s) in given direction. Returns vector of neighbor indices.
-
-Handles 2:1 refinement level difference:
-- If neighbor exists at same level: returns [neighbor_idx]
-- If neighbor is subdivided (finer): returns children on shared face (up to 4)
-- If neighbor doesn't exist (boundary): returns empty vector
-
-# Arguments
-- `box_idx`: Box to find neighbor of
-- `direction`: Direction code (1-6, see `neighbor_direction`)
-
-# Returns
-Vector of neighbor box indices (may be empty if at boundary)
+Neighbour(s) across the face `direction` (`1:2N`). Handles the 2:1 level
+difference: returns `[same-level]`, or the finer boxes covering the face, or
+`Int[]` at a boundary.
 """
-function find_neighbor(octree::SpatialOctree, box_idx::Int, direction::Int)
-    i, j, k, N = octree.coords[box_idx]
-    di, dj, dk = neighbor_direction(direction)
-
-    # Target neighbor coordinates
-    i_n = i + di
-    j_n = j + dj
-    k_n = k + dk
-
-    # Check if outside domain (root box spans 0:N-1 in each dimension)
-    if i_n < 0 || i_n >= N || j_n < 0 || j_n >= N || k_n < 0 || k_n >= N
-        return Int[]
+function find_neighbor(t::SpatialTree{N}, box::Int, direction::Int) where {N}
+    cell = t.cell[box]
+    lvl = t.level[box]
+    ncell = cell + _neighbor_offset(direction, Val(N))
+    @inbounds for d in 1:N
+        (ncell[d] < 0 || ncell[d] >= lvl) && return Int[]   # outside root
     end
-
-    # Search for box at these coordinates
-    # May return single box or multiple if neighbor is subdivided
-    return find_boxes_at_coords(octree, i_n, j_n, k_n, N)
+    return find_boxes_at_coords(t, ncell, lvl)
 end
 
 """
-    find_boxes_at_coords(octree::SpatialOctree, i_target::Int, j_target::Int, k_target::Int, N_target::Int) -> Vector{Int}
+    find_boxes_at_coords(tree, target_cell::SVector{N,Int}, target_level) -> Vector{Int}
 
-Find box(es) at given (i,j,k,N) coordinates.
-
-- If exact match found at level N_target, returns [box_idx]
-- If location is covered by coarser box, returns [coarser_box_idx]
-- If location is subdivided finer, returns all descendants at that location
-
-# Returns
-Vector of box indices covering the target location
+Box(es) covering `(target_cell, target_level)`: exact match, the coarser box
+covering it, or `Int[]` if absent.
 """
-function find_boxes_at_coords(
-        octree::SpatialOctree,
-        i_target::Int,
-        j_target::Int,
-        k_target::Int,
-        N_target::Int,
-    )
-    # Start at root
+function find_boxes_at_coords(t::SpatialTree{N}, target_cell::SVector{N, Int}, target_level::Int) where {N}
     current = 1
-
     while true
-        i, j, k, N = octree.coords[current]
+        cell = t.cell[current]
+        lvl = t.level[current]
 
-        if N == N_target
-            # Check if this is the target
-            if i == i_target && j == j_target && k == k_target
-                return [current]
-            else
-                return Int[]  # Not found
+        if lvl == target_level
+            return cell == target_cell ? [current] : Int[]
+        elseif lvl < target_level
+            is_leaf(t, current) && return [current]      # coarser leaf covers target
+            scale = target_level ÷ lvl
+            scaled = target_cell .÷ scale
+            scaled == cell || return Int[]               # target not in this subtree
+            offset = 0
+            @inbounds for d in 1:N
+                b = (target_cell[d] - cell[d] * scale) ÷ (scale >> 1)
+                b > 1 && (b = 1)
+                offset += b << (d - 1)
             end
-        elseif N < N_target
-            # Need to go deeper
-            if !has_children(octree, current)
-                # This leaf covers the target region (coarser resolution)
-                return [current]
-            end
-
-            # Determine which child contains target
-            # Scale target coords to current level
-            scale_factor = N_target ÷ N
-            i_scaled = i_target ÷ scale_factor
-            j_scaled = j_target ÷ scale_factor
-            k_scaled = k_target ÷ scale_factor
-
-            # Check if scaled coords match current box
-            if i_scaled != i || j_scaled != j || k_scaled != k
-                return Int[]  # Target not in this subtree
-            end
-
-            # Find which child to descend into
-            di = (i_target - i * scale_factor) ÷ (scale_factor ÷ 2)
-            dj = (j_target - j * scale_factor) ÷ (scale_factor ÷ 2)
-            dk = (k_target - k * scale_factor) ÷ (scale_factor ÷ 2)
-
-            # Clamp to {0,1}
-            di = min(di, 1)
-            dj = min(dj, 1)
-            dk = min(dk, 1)
-
-            # Child index based on (di, dj, dk)
-            child_offset = di + 2 * dj + 4 * dk + 1
-            current = octree.children[current][child_offset]
-
-            if current == 0
-                return Int[]  # Path doesn't exist
-            end
+            current = t.first_child[current] + offset
         else
-            # N > N_target: current box is finer than target
-            # This case shouldn't happen in normal traversal from root
-            # Return current box as approximation
-            return [current]
+            return [current]                             # current finer than target
         end
     end
     return
 end
+
+"3D convenience overload preserving the historical `(i,j,k,N)` signature."
+find_boxes_at_coords(t::SpatialTree{3}, i::Int, j::Int, k::Int, N::Int) =
+    find_boxes_at_coords(t, SVector{3, Int}(i, j, k), N)
 
 #=============================================================================
 Iteration Utilities
 =============================================================================#
 
 """
-    all_leaves(octree::SpatialOctree) -> Vector{Int}
-
-Return indices of all leaf boxes.
+    all_leaves(tree) -> Vector{Int}
 """
-function all_leaves(octree::SpatialOctree)
+function all_leaves(t::SpatialTree)
     leaves = Int[]
-    for box_idx in 1:octree.num_boxes[]
-        if is_leaf(octree, box_idx)
-            push!(leaves, box_idx)
-        end
+    for box in 1:t.num_boxes[]
+        is_leaf(t, box) && push!(leaves, box)
     end
     return leaves
 end
 
 """
-    all_boxes(octree::SpatialOctree) -> Vector{Int}
-
-Return indices of all boxes (leaves and internal nodes).
+    all_boxes(tree) -> Vector{Int}
 """
-function all_boxes(octree::SpatialOctree)
-    return collect(1:octree.num_boxes[])
-end
+all_boxes(t::SpatialTree) = collect(1:t.num_boxes[])
 
 @inline function _boxes_overlap(a_min, a_max, b_min, b_max)
-    @inbounds for d in 1:3
+    @inbounds for d in eachindex(a_min)
         a_min[d] > b_max[d] && return false
         a_max[d] < b_min[d] && return false
     end
@@ -540,25 +337,23 @@ end
 end
 
 """
-    any_leaf_overlapping(tree::SpatialOctree, bbox_min, bbox_max, predicate) -> Bool
+    any_leaf_overlapping(tree, bbox_min, bbox_max, predicate) -> Bool
 
-Return `true` if any leaf whose bounding box overlaps `[bbox_min, bbox_max]`
-satisfies `predicate(leaf_idx)`. Descends from root and prunes subtrees that
-cannot overlap, giving O(log L) expected cost instead of O(L) scan.
+`true` if any leaf overlapping `[bbox_min, bbox_max]` satisfies `predicate`.
+Prunes non-overlapping subtrees for O(log L) expected cost.
 """
-function any_leaf_overlapping(tree::SpatialOctree, bbox_min, bbox_max, predicate)
-    return _any_leaf_overlapping(tree, 1, bbox_min, bbox_max, predicate)
+function any_leaf_overlapping(t::SpatialTree, bbox_min, bbox_max, predicate)
+    return _any_leaf_overlapping(t, 1, bbox_min, bbox_max, predicate)
 end
 
-function _any_leaf_overlapping(tree::SpatialOctree, box_idx::Int, bmin, bmax, predicate)
-    node_min, node_max = box_bounds(tree, box_idx)
+function _any_leaf_overlapping(t::SpatialTree, box::Int, bmin, bmax, predicate)
+    node_min, node_max = box_bounds(t, box)
     _boxes_overlap(bmin, bmax, node_min, node_max) || return false
-    if is_leaf(tree, box_idx)
-        return predicate(box_idx)
+    if is_leaf(t, box)
+        return predicate(box)
     end
-    for child_idx in tree.children[box_idx]
-        child_idx == 0 && continue
-        _any_leaf_overlapping(tree, child_idx, bmin, bmax, predicate) && return true
+    for ch in children(t, box)
+        _any_leaf_overlapping(t, ch, bmin, bmax, predicate) && return true
     end
     return false
 end
@@ -568,124 +363,68 @@ Balancing (2:1 Constraint)
 =============================================================================#
 
 """
-    needs_balancing(octree::SpatialOctree, box_idx::Int) -> Bool
+    needs_balancing(tree, box_idx) -> Bool
 
-Check if subdividing this box would violate 2:1 balance with any neighbor.
-
-Returns true if any neighbor has grandchildren (2-level refinement difference).
+`true` if subdividing this leaf would leave a 2-level jump with any face
+neighbour (i.e. a neighbour that already has grandchildren).
 """
-function needs_balancing(octree::SpatialOctree, box_idx::Int)
-    if !is_leaf(octree, box_idx)
-        return false  # Only check leaves
-    end
-
-    # Check all 6 neighbors
-    for direction in 1:6
-        neighbors = find_neighbor(octree, box_idx, direction)
-
-        for neighbor_idx in neighbors
-            if has_children(octree, neighbor_idx)
-                # Check if neighbor's children also have children
-                # This would create a 2-level difference if we don't subdivide
-                for child_idx in octree.children[neighbor_idx]
-                    if child_idx > 0 && has_children(octree, child_idx)
-                        # Found a grandchild neighbor - balance violation!
-                        return true
-                    end
+function needs_balancing(t::SpatialTree{N}, box::Int) where {N}
+    is_leaf(t, box) || return false
+    for direction in 1:(2N)
+        for nb in find_neighbor(t, box, direction)
+            if has_children(t, nb)
+                for ch in children(t, nb)
+                    has_children(t, ch) && return true
                 end
             end
         end
     end
-
     return false
 end
 
 """
-    balance_octree!(octree::SpatialOctree, criterion::SubdivisionCriterion)
+    balance_octree!(tree, criterion::SubdivisionCriterion)
 
-Enforce 2:1 balance constraint across entire octree.
-
-Iteratively subdivides boxes that violate the 2:1 constraint until
-all adjacent boxes differ by at most one refinement level.
-
-# Arguments
-- `criterion`: Subdivision criterion (only size constraints are enforced)
-
-# Algorithm
-1. Collect all leaves
-2. Check each leaf for balance violations
-3. Subdivide violating neighbors (only respecting physical minimum-size limits)
-4. Repeat until no violations
-
-# Note
-- Uses `can_subdivide` (not `should_subdivide`) to ignore element count criteria
-- Balancing is a geometric constraint, not an optimization decision
-- Maximum iterations limit prevents infinite loops. If hit, tree may not be fully balanced.
+Enforce the 2:1 balance constraint across the tree (dimension-agnostic).
+Uses `can_subdivide` (physical limits only), not `should_subdivide`.
 """
-function balance_octree!(octree::SpatialOctree, criterion::SubdivisionCriterion)
-    max_iterations = 100  # Safety limit
+function balance_octree!(t::SpatialTree, criterion::SubdivisionCriterion)
+    max_iterations = 100
     iteration = 0
-
     while iteration < max_iterations
         iteration += 1
-        n = octree.num_boxes[]  # Snapshot: only check boxes that exist at iteration start
+        n = t.num_boxes[]
         subdivided_any = false
-
-        for leaf_idx in 1:n
-            if !is_leaf(octree, leaf_idx)
-                continue  # Not a leaf or already subdivided in this iteration
-            end
-
-            if needs_balancing(octree, leaf_idx)
-                # Check if we CAN subdivide (only physical limits, not element count)
-                if can_subdivide(criterion, octree, leaf_idx)
-                    subdivide!(octree, leaf_idx)
-                    subdivided_any = true
-                end
+        for box in 1:n
+            is_leaf(t, box) || continue
+            if needs_balancing(t, box) && can_subdivide(criterion, t, box)
+                subdivide!(t, box)
+                subdivided_any = true
             end
         end
-
-        # If no boxes subdivided, we're done
-        if !subdivided_any
-            break
-        end
+        subdivided_any || break
     end
-
     if iteration >= max_iterations
         @warn "balance_octree! hit iteration limit - tree may not be fully balanced"
     end
-
     return nothing
 end
 
 #=============================================================================
-LEAF CLASSIFICATION (GENERIC)
-
-Generic conservative classification of octree leaves as INTERIOR/BOUNDARY/EXTERIOR
-given a geometry query function. This logic is reusable across different octree
-types (TriangleOctree, node octrees, etc.) by providing an appropriate query closure.
+LEAF CLASSIFICATION (GENERIC over a geometry query closure)
 =============================================================================#
 
-# Classification constants (shared across all octree types)
 const LEAF_UNKNOWN::Int8 = -1
 const LEAF_EXTERIOR::Int8 = 0
 const LEAF_BOUNDARY::Int8 = 1
 const LEAF_INTERIOR::Int8 = 2
 
-# Tolerance constants for classification
-const _CLASSIFICATION_INSET = 1.0e-9  # Corner inset to avoid on-surface probes
-const _CLASSIFY_TOLERANCE_REL = 1.0e-6  # Relative tolerance (scaled by box size)
-const _CLASSIFY_TOLERANCE_ABS = 1.0e-8  # Absolute tolerance floor
+const _CLASSIFICATION_INSET = 1.0e-9
+const _CLASSIFY_TOLERANCE_REL = 1.0e-6
+const _CLASSIFY_TOLERANCE_ABS = 1.0e-8
 
 """
     _leaf_class_from_signed_distance(sd, tol) -> Int8
-
-Convert signed distance to leaf classification.
-
-Returns:
-- `LEAF_BOUNDARY` if |sd| ≤ tol (on or near surface)
-- `LEAF_INTERIOR` if sd < -tol (inside)
-- `LEAF_EXTERIOR` if sd > tol (outside)
 """
 @inline function _leaf_class_from_signed_distance(sd, tol)
     if abs(sd) <= tol
@@ -695,113 +434,65 @@ Returns:
 end
 
 """
-    classify_leaves!(
-        tree::SpatialOctree,
-        geometry_query::Function;
-        tolerance_relative=1e-6,
-        tolerance_absolute=1e-8
-    ) -> Vector{Int8}
+    classify_leaves!(tree, geometry_query; tolerance_relative, tolerance_absolute) -> Vector{Int8}
 
-Generic conservative classification of octree leaves using a geometry query function.
-
-# Arguments
-- `tree`: The octree to classify
-- `geometry_query`: Function `(point::SVector{3,T}, tol::T) -> Int8` returning
-   `LEAF_INTERIOR`, `LEAF_BOUNDARY`, or `LEAF_EXTERIOR`
-- `tolerance_relative`: Relative tolerance scaled by box size
-- `tolerance_absolute`: Absolute tolerance floor
-
-# Classification Strategy
-Uses 9-point conservative probing (center + 8 actual box corners):
-- `LEAF_INTERIOR`: All 9 points are interior
-- `LEAF_EXTERIOR`: All 9 points are exterior
-- `LEAF_BOUNDARY`: Mixed results or any boundary point
-
-Note: Uses actual box corners (not inset) for accurate classification in high-curvature regions.
-
-# Returns
-Vector of `Int8` classifications for each box:
-- `-1` (`LEAF_UNKNOWN`): Non-leaf nodes
-- `0` (`LEAF_EXTERIOR`): Exterior leaf
-- `1` (`LEAF_BOUNDARY`): Boundary leaf
-- `2` (`LEAF_INTERIOR`): Interior leaf
+Conservative `(2^N + 1)`-point classification (center + corners) per leaf, using
+`geometry_query(point::SVector{N,T}, tol::T) -> Int8`.
 """
 function classify_leaves!(
-        tree::SpatialOctree{E, T},
+        t::SpatialTree{N, E, T},
         geometry_query::Function;
         tolerance_relative::Real = _CLASSIFY_TOLERANCE_REL,
         tolerance_absolute::Real = _CLASSIFY_TOLERANCE_ABS,
-    ) where {E, T <: Real}
-    n_boxes = tree.num_boxes[]
+    ) where {N, E, T <: Real}
+    n_boxes = t.num_boxes[]
     classification = fill(LEAF_UNKNOWN, n_boxes)
-    leaves = all_leaves(tree)
+    leaves = all_leaves(t)
 
-    # Parallel classification — each leaf's geometry query is independent
-    # (read-only tree access, no shared mutable state).
     classes = tmap(leaves) do leaf_idx
         _classify_leaf_conservative(
-            tree,
-            leaf_idx,
-            geometry_query,
-            T(tolerance_relative),
-            T(tolerance_absolute),
+            t, leaf_idx, geometry_query, T(tolerance_relative), T(tolerance_absolute)
         )
     end
-
     for (i, leaf_idx) in enumerate(leaves)
         classification[leaf_idx] = classes[i]
     end
-
     return classification
 end
 
 """
-    _box_corners(bbox_min, bbox_max) -> Tuple
+    _box_corners(lo, hi) -> NTuple{2^N, SVector{N}}
 
-Generate 8 corner points of a 3D bounding box.
+The `2^N` corners of a box, in bit order (bit `d-1` selects `hi[d]`).
 """
-@inline function _box_corners(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
-    x0, x1 = bbox_min[1], bbox_max[1]
-    y0, y1 = bbox_min[2], bbox_max[2]
-    z0, z1 = bbox_min[3], bbox_max[3]
-
-    return (
-        SVector{3, T}(x0, y0, z0),
-        SVector{3, T}(x1, y0, z0),
-        SVector{3, T}(x0, y1, z0),
-        SVector{3, T}(x1, y1, z0),
-        SVector{3, T}(x0, y0, z1),
-        SVector{3, T}(x1, y0, z1),
-        SVector{3, T}(x0, y1, z1),
-        SVector{3, T}(x1, y1, z1),
-    )
+@inline function _box_corners(lo::SVector{N, T}, hi::SVector{N, T}) where {N, T}
+    return ntuple(1 << N) do m
+        mm = m - 1
+        SVector{N, T}(ntuple(d -> ((mm >> (d - 1)) & 1) == 1 ? hi[d] : lo[d], N))
+    end
 end
 
 """
     _classify_leaf_conservative(tree, leaf_idx, geometry_query, tol_rel, tol_abs) -> Int8
-
-Conservative 9-point classification (center + 8 corners).
 """
 function _classify_leaf_conservative(
-        tree::SpatialOctree{E, T},
+        t::SpatialTree{N, E, T},
         leaf_idx::Int,
         geometry_query::Function,
         tol_rel::T,
         tol_abs::T,
-    ) where {E, T <: Real}
-    bbox_min, bbox_max = box_bounds(tree, leaf_idx)
-    h = box_size(tree, leaf_idx)
+    ) where {N, E, T <: Real}
+    bbox_min, bbox_max = box_bounds(t, leaf_idx)
+    h = box_size(t, leaf_idx)
     tol = max(tol_abs, h * tol_rel)
 
-    center = box_center(tree, leaf_idx)
+    center = box_center(t, leaf_idx)
     corners = _box_corners(bbox_min, bbox_max)
 
-    # Classify all 9 points
     classes = map(p -> geometry_query(p, tol), (center, corners...))
 
-    # Conservative logic
     any(==(LEAF_BOUNDARY), classes) && return LEAF_BOUNDARY
     all(==(LEAF_INTERIOR), classes) && return LEAF_INTERIOR
     all(==(LEAF_EXTERIOR), classes) && return LEAF_EXTERIOR
-    return LEAF_BOUNDARY  # Mixed → boundary
+    return LEAF_BOUNDARY
 end

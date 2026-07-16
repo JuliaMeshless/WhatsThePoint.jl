@@ -167,8 +167,7 @@ function _subdivide_node_octree!(node_tree, box_idx, criterion, triangle_octree)
     _box_may_contain_interior(node_tree, box_idx, triangle_octree) || return
 
     subdivide!(node_tree, box_idx)
-    for child_idx in node_tree.children[box_idx]
-        child_idx == 0 && continue
+    for child_idx in children(node_tree, box_idx)
         _subdivide_node_octree!(node_tree, child_idx, criterion, triangle_octree)
     end
     return
