@@ -25,6 +25,8 @@ Not sure what spacing the geometry can host? Run [`suggest_spacing`](@ref) first
 
 ![Algorithm comparison](assets/algorithm-comparison.png)
 
+*Volume fills of the Stanford bunny at identical spacing — left: `SlakKosec`, right: `VanDerSandeFornberg`.*
+
 ### Choosing an Algorithm
 
 - **2D problems:** Use [`FornbergFlyer`](@ref) — it is the only 2D algorithm and is selected by default for 2D boundaries.

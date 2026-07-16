@@ -68,6 +68,8 @@ Any closed polygon works — here's the Stanford Bunny silhouette projected from
 
 ![2D discretization of the Stanford Bunny](assets/2d-discretization.png)
 
+*Boundary points in red, generated interior points in blue.*
+
 ## Visualization
 
 ```julia
