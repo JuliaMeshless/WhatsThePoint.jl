@@ -57,10 +57,12 @@ end
 # Breaking-change guard: a bare path would otherwise fall into the generic
 # PointBoundary(points) method and fail deep inside compute_normals.
 function PointBoundary(::AbstractString)
-    throw(ArgumentError(
-        "PointBoundary(filepath) now requires a unit, e.g. PointBoundary(filepath, u\"mm\"). " *
-            "Mesh files carry no unit metadata — run geometry_info(filepath) to inspect the raw extents.",
-    ))
+    throw(
+        ArgumentError(
+            "PointBoundary(filepath) now requires a unit, e.g. PointBoundary(filepath, u\"mm\"). " *
+                "Mesh files carry no unit metadata — run geometry_info(filepath) to inspect the raw extents.",
+        )
+    )
 end
 
 """
