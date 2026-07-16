@@ -551,7 +551,19 @@ function _classify_leaves(
 end
 
 Base.length(octree::TriangleOctree) = num_triangles(octree.index)
+
+"""
+    num_leaves(octree::TriangleOctree) -> Int
+
+Return the number of leaf nodes in the octree's spatial subdivision.
+"""
 num_leaves(octree::TriangleOctree) = length(all_leaves(octree.tree))
+
+"""
+    num_triangles(octree::TriangleOctree) -> Int
+
+Return the number of triangles indexed by the octree.
+"""
 num_triangles(octree::TriangleOctree) = num_triangles(octree.index)
 
 """
