@@ -157,7 +157,6 @@ function TriangleIndex(::Type{T}, mesh::SimpleMesh) where {T <: Real}
 
     n = Meshes.nelements(mesh)
     triangles = Vector{NTuple{3, Int32}}(undef, n)
-    face = Vector{SVector{3, T}}(undef, n)
     for (i, connec) in enumerate(Meshes.elements(Meshes.topology(mesh)))
         idx = Meshes.indices(connec)
         length(idx) == 3 || throw(
@@ -166,15 +165,40 @@ function TriangleIndex(::Type{T}, mesh::SimpleMesh) where {T <: Real}
                     "element $i has $(length(idx)) vertices"
             )
         )
-        t = (Int32(idx[1]), Int32(idx[2]), Int32(idx[3]))
-        triangles[i] = t
+        triangles[i] = (Int32(idx[1]), Int32(idx[2]), Int32(idx[3]))
+    end
+
+    len_unit = Unitful.unit(Meshes.lentype(mesh))
+    return TriangleIndex(T, vertices, triangles, len_unit)
+end
+
+"""
+    TriangleIndex(T, vertices, triangles, len_unit)
+
+Build a `TriangleIndex` from an indexed representation `(vertices, triangles)`
+already stripped to machine type `T`. This is the shared builder: the
+`SimpleMesh` constructor extracts the indexed arrays and delegates here, and a
+[`Triangulation`](@ref) merge assembles its combined arrays (reindexed, with
+obstacle winding reversed) and calls it directly. `len_unit` is the stripped
+coordinate unit, re-attached at query exits.
+"""
+function TriangleIndex(
+        ::Type{T},
+        vertices::Vector{SVector{3, T}},
+        triangles::Vector{NTuple{3, Int32}},
+        len_unit::Unitful.Units,
+    ) where {T <: Real}
+    n = length(triangles)
+    face = Vector{SVector{3, T}}(undef, n)
+    @inbounds for i in 1:n
+        t = triangles[i]
         a = vertices[t[1]]
         b = vertices[t[2]]
         c = vertices[t[3]]
         # Precompute unit face normal.
         nrm = cross(b - a, c - a)
         mag = norm(nrm)
-        @inbounds face[i] = mag < eps(T) * 100 ? zero(SVector{3, T}) : nrm / mag
+        face[i] = mag < eps(T) * 100 ? zero(SVector{3, T}) : nrm / mag
     end
 
     # Angle-weighted pseudonormals (Bærentzen & Aanæs 2005) for exact sign
@@ -199,8 +223,6 @@ function TriangleIndex(::Type{T}, mesh::SimpleMesh) where {T <: Real}
     end
 
     bbox_min, bbox_max = _compute_bbox_raw(vertices)
-
-    len_unit = Unitful.unit(Meshes.lentype(mesh))
     return TriangleIndex{T}(vertices, triangles, face, edge, vertex, bbox_min, bbox_max, len_unit)
 end
 
@@ -349,8 +371,27 @@ function TriangleOctree(
         verify_orientation::Bool = true,
     ) where {M <: Manifold, C <: CRS}
     T = CoordRefSystems.mactype(C)
-    index = TriangleIndex(T, mesh)
+    return TriangleOctree(
+        TriangleIndex(T, mesh);
+        tolerance_relative = tolerance_relative,
+        min_ratio = min_ratio,
+        classify_leaves = classify_leaves,
+        verify_orientation = verify_orientation,
+    )
+end
 
+"""
+Build a geometry-adaptive octree directly from a `TriangleIndex` (the runtime
+triangle representation — no `SimpleMesh` needed). This is the entry point a
+[`Triangulation`](@ref) uses.
+"""
+function TriangleOctree(
+        index::TriangleIndex{T};
+        tolerance_relative = 1.0e-6,
+        min_ratio = 1.0e-6,
+        classify_leaves::Bool = true,
+        verify_orientation::Bool = true,
+    ) where {T <: Real}
     if verify_orientation && !has_consistent_normals(index)
         throw(
             ArgumentError(

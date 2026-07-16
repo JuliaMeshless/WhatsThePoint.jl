@@ -45,21 +45,21 @@ const MESH_PATH = "bunny.stl"
 
 isfile(MESH_PATH) || error(
     "Mesh '$MESH_PATH' not found. Run this from the repo root (the bunny lives there), " *
-        "or point MESH_PATH at your own STL.",
+    "or point MESH_PATH at your own STL.",
 )
 
 # A quick spacing sanity check before committing to a long run (the "step 0"):
-suggest_spacing(MESH_PATH, m; name = MESH_PATH)
+suggest_spacing(MESH_PATH, m; name=MESH_PATH)
 println()
 
 println("Loading mesh...")
-@time@time mesh = import_mesh(MESH_PATH, m)
+@time mesh = import_mesh(MESH_PATH, m)
 println("Mesh: $(nelements(mesh)) triangles\n")
 
 # Boundary-layer spacing keyed on the imported boundary points (KDTree-accelerated).
 spacing = BoundaryLayerSpacing(
     WhatsThePoint.points(PointBoundary(mesh));
-    at_wall = AT_WALL, bulk = BULK, layer_thickness = LAYER_THICKNESS,
+    at_wall=AT_WALL, bulk=BULK, layer_thickness=LAYER_THICKNESS,
 )
 
 println("Poisson-disk boundary sampling...")
@@ -67,7 +67,9 @@ println("Poisson-disk boundary sampling...")
 println("Boundary: $(length(boundary)) points\n")
 
 # placement defaults to :bridson; max_growth grades the steep layer smoothly.
-alg = Octree(mesh; spacing, alpha = 1.0, max_growth = MAX_GROWTH)
+# alpha=1.0 is the maximum-fidelity scaffold; the default 2.0 gives
+# near-identical quality ~20% faster (see simplification_plan.md O4).
+alg = Octree(mesh; spacing, alpha=1.0, max_growth=MAX_GROWTH)
 
 println("Discretizing volume (max_points auto-estimated from the spacing integral)...")
 @time cloud = discretize(boundary, spacing; alg)
@@ -76,8 +78,8 @@ println("Total cloud: $(length(cloud)) points  ($(nvol) volume + $(length(bounda
 
 # ---- quality ----
 println("--- quality ---")
-sf = spacing_fidelity_metrics(cloud, spacing; k = 30)
-cm = metrics(cloud; k = 20)
+sf = spacing_fidelity_metrics(cloud, spacing; k=30)
+cm = metrics(cloud; k=20)
 h_min = ustrip(minimum(spacing.(WhatsThePoint.points(cloud))))
 @printf "spacing CV:                %.4f   (< 0.15 good)\n" sf.cv
 @printf "sep / h_min:               %.3f   (≈ 0.75 ideal)\n" ustrip(cm.separation) / h_min
@@ -124,58 +126,58 @@ h_slice = [ustrip(spacing(Meshes.Point(p...))) for p in vol_slice]
 
 println(
     "\nRendering visual check ($(length(vol_slice)) interior + " *
-        "$(length(bnd_slice)) boundary points in the slice)..."
+    "$(length(bnd_slice)) boundary points in the slice)..."
 )
 
-fig = Figure(; size = (1500, 760))
+fig = Figure(; size=(1500, 760))
 
 # (1) Interior cross-section coloured by spacing — the grading check.
 axis_names = ("x", "y", "z")
 ax1 = Axis(
     fig[1, 1];
-    aspect = DataAspect(),
-    title = "interior slice ⟂ $(axis_names[slice_axis]) — colour = target spacing h(x)",
-    xlabel = axis_names[u_ax] * " [m]", ylabel = axis_names[v_ax] * " [m]",
+    aspect=DataAspect(),
+    title="interior slice ⟂ $(axis_names[slice_axis]) — colour = target spacing h(x)",
+    xlabel=axis_names[u_ax] * " [m]", ylabel=axis_names[v_ax] * " [m]",
 )
 sc = scatter!(
     ax1,
     getindex.(vol_slice, u_ax), getindex.(vol_slice, v_ax);
-    color = h_slice, colormap = :viridis, markersize = 4,
+    color=h_slice, colormap=:viridis, markersize=4,
 )
 # wall outline in the same slab, in black, to frame the layer.
 scatter!(
     ax1,
     getindex.(bnd_slice, u_ax), getindex.(bnd_slice, v_ax);
-    color = :black, markersize = 3,
+    color=:black, markersize=3,
 )
-Colorbar(fig[1, 2], sc; label = "h(x) [m]")
+Colorbar(fig[1, 2], sc; label="h(x) [m]")
 
 # (2) Boundary Poisson-disk sampling (subsampled for a light render).
 stride = max(1, length(bnd_xyz) ÷ 60_000)
 bsub = bnd_xyz[1:stride:end]
 ax2 = Axis3(
     fig[1, 3];
-    aspect = :data, azimuth = 1.275π, elevation = π / 8,
-    title = "boundary sampling ($(length(bsub)) of $(length(bnd_xyz)) shown)",
+    aspect=:data, azimuth=1.275π, elevation=π / 8,
+    title="boundary sampling ($(length(bsub)) of $(length(bnd_xyz)) shown)",
 )
 scatter!(
     ax2,
     getindex.(bsub, 1), getindex.(bsub, 2), getindex.(bsub, 3);
-    color = :steelblue, markersize = 3,
+    color=:steelblue, markersize=3,
 )
 
 save("bunny_slice.png", fig)
 println("Saved bunny_slice.png  ← open this: density must grade SMOOTHLY, no clumps/voids.")
 
 # Standalone boundary figure (full 3D, easier to rotate mentally).
-figb = Figure(; size = (900, 900))
+figb = Figure(; size=(900, 900))
 axb = Axis3(
-    figb[1, 1]; aspect = :data, azimuth = 1.275π, elevation = π / 8,
-    title = "boundary Poisson-disk sampling"
+    figb[1, 1]; aspect=:data, azimuth=1.275π, elevation=π / 8,
+    title="boundary Poisson-disk sampling"
 )
 scatter!(
     axb, getindex.(bsub, 1), getindex.(bsub, 2), getindex.(bsub, 3);
-    color = :steelblue, markersize = 3
+    color=:steelblue, markersize=3
 )
 save("bunny_boundary.png", figb)
 println("Saved bunny_boundary.png ← wall points must be evenly spaced (no holes/streaks).")
@@ -190,7 +192,7 @@ if SAVE_VTK
     # can see the post-solve workflow — swap in your solver output, ordered like
     # points(cloud) (boundary then volume), and re-export.
     h_field = ustrip.(spacing.(WhatsThePoint.points(cloud)))
-    export_vtk("bunny_hard", cloud; fields = ("h_spacing" => h_field,))
+    export_vtk("bunny_hard", cloud; fields=("h_spacing" => h_field,))
     println("Saved bunny_hard.vtu (ParaView: Point Gaussian, colour by surface_id / point_type / h_spacing).")
 end
 

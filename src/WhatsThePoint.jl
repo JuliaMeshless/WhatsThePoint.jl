@@ -43,6 +43,9 @@ include("octree/triangle_octree.jl")
 include("octree/spacing_criterion.jl")
 export TriangleOctree, num_leaves, num_triangles, has_consistent_normals
 
+include("geometry/triangulation.jl")
+export Triangulation, load_triangulation, patches, npatches
+
 include("points.jl")
 
 include("shadow.jl")
