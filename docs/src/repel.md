@@ -160,6 +160,8 @@ For the default repulsion-only force, the residual of a saturated packing platea
 
 ![Repulsion before and after](assets/repel-comparison.png)
 
+*Left: raw discretization. Right: after node repulsion — the interior points (blue) relax into an even blue-noise distribution.*
+
 ## Verifying Distribution Quality
 
 Use `metrics` to quantify the point distribution before and after repulsion:

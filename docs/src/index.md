@@ -1,21 +1,63 @@
+```@raw html
+---
+layout: home
+
+hero:
+  name: "WhatsThePoint.jl"
+  text: "Point clouds for meshless PDE methods"
+  tagline: Generate, optimize, and connect point clouds — from CAD surface to solver-ready in a few lines of Julia.
+  image:
+    src: /hero.png
+    alt: Discretized Stanford bunny point cloud with cutaway showing interior points
+  actions:
+    - theme: brand
+      text: Get Started
+      link: /quickstart
+    - theme: alt
+      text: Guide
+      link: /guide
+    - theme: alt
+      text: API Reference
+      link: /api
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/JuliaMeshless/WhatsThePoint.jl
+
+features:
+  - icon: 📥
+    title: Import & Sample Surfaces
+    details: Load STL, OBJ, or any GeoIO.jl format with explicit units, then Poisson-disk sample the surface at exactly the spacing you want.
+    link: /guide
+  - icon: 🫧
+    title: Fill the Volume
+    details: Four discretization algorithms generate well-spaced interior points, including spacing-driven adaptive octree fill with graded Poisson-disk fronts.
+    link: /discretization
+  - icon: 🧲
+    title: Optimize the Distribution
+    details: Node repulsion relaxes point clouds toward blue-noise quality, with boundary-aware projection and quality-based stopping.
+    link: /repel
+  - icon: 🕸️
+    title: Build Stencil Connectivity
+    details: k-nearest neighbor and radius-based topologies give every point the neighborhood your meshless solver needs.
+    link: /concepts
+  - icon: 📐
+    title: Units & Quality Metrics
+    details: Full Unitful.jl integration and built-in separation, fill, and spacing-fidelity metrics keep discretizations honest.
+    link: /api
+  - icon: ⚡
+    title: Fast by Default
+    details: Threaded operations via OhMyThreads.jl, cache-friendly StructArray storage, and octree-accelerated O(1) point-in-volume queries.
+    link: /isinside_octree
+---
+```
+
 ```@meta
 CurrentModule = WhatsThePoint
 ```
 
-# WhatsThePoint.jl
-
-*Generate, optimize, and connect point clouds for meshless PDE methods.*
-
-Meshless methods need well-distributed point clouds with neighbor connectivity, but getting from a CAD surface to solver-ready points is tedious. WhatsThePoint.jl handles the complete pipeline — from surface mesh import through volume discretization, point distribution optimization, and connectivity computation — in a few lines of Julia.
-
-## Pipeline at a Glance
-
-1. **Import Surface** — Load STL/OBJ via GeoIO.jl into a `PointBoundary`
-2. **Split & Label** — Identify walls, inlets, outlets by normal angle
-3. **Generate Volume** — Fill the interior with well-spaced points
-4. **Optimize Distribution** — Node repulsion for solver accuracy
-5. **Build Connectivity** — k-nearest neighbor or radius-based stencils
-6. **Ready for Solver** — Export to VTK or pass directly to your meshless code
+```@raw html
+<div class="vp-doc" style="width:80%; margin:auto">
+```
 
 ## Quick Example
 
@@ -54,30 +96,6 @@ using Pkg
 Pkg.add(url="https://github.com/JuliaMeshless/WhatsThePoint.jl")
 ```
 
-## Key Features
-
-**Pipeline**
-- Spacing guidance before generation via `suggest_spacing`, raw-extent probing via `geometry_info`
-- Import surface meshes (STL, OBJ, any GeoIO.jl format) with explicit units via `import_mesh`, or Poisson-disk sample them at a prescribed spacing (`PointBoundary(mesh, spacing)`)
-- Multiple discretization algorithms: `SlakKosec`, `VanDerSandeFornberg` (3D), `FornbergFlyer` (2D), `Octree` (default `:bridson` graded Poisson-disk fill)
-- Node repulsion for distribution optimization (Miotti 2023)
-- Quality metrics: `metrics`, `spacing_metrics`, `spacing_fidelity_metrics`
-- k-nearest neighbor and radius-based topology for meshless stencils
-- ParaView export with solution fields via `export_vtk`
-
-**Performance**
-- `TriangleOctree` for O(1) point-in-volume queries on large meshes
-- Threaded operations throughout via [OhMyThreads.jl](https://github.com/JuliaFolds2/OhMyThreads.jl)
-- `StructArray` layout for cache-friendly surface element access
-
-**Correctness**
-- Full [Unitful.jl](https://github.com/PainterQubits/Unitful.jl) integration — `mm`, `m`, `°` work directly
-- Type-safe geometry built on [Meshes.jl](https://github.com/JuliaGeometry/Meshes.jl) with coordinate system support
-- Immutable, AD-compatible design — operations return new objects
-
----
-
-[![Build Status](https://github.com/JuliaMeshless/WhatsThePoint.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/JuliaMeshless/WhatsThePoint.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaMeshless.github.io/WhatsThePoint.jl/stable)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaMeshless.github.io/WhatsThePoint.jl/dev)
-[![License File](https://img.shields.io/badge/license-MIT-blue)](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/master/LICENSE)
+```@raw html
+</div>
+```

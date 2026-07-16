@@ -2,6 +2,9 @@
 *.jl.cov
 *.jl.mem
 /docs/build/
+/docs/node_modules/
+/docs/package.json
+/docs/package-lock.json
 Manifest.toml
 LocalPreferences.toml
 
