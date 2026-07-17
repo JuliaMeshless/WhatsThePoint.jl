@@ -123,15 +123,15 @@ function depth_sorted_meshscatter!(ax, x, y, z, colors, sizes)
 end
 
 # ============================================================================
-# Shared scene: Poisson-disk sampled boundary + SlakKosec volume fill
+# Shared scene: Poisson-disk sampled boundary + Octree/Bridson volume fill
 # ============================================================================
 
-function build_scene(; h = 1.5, max_points = 500_000)
+function build_scene(; h = 1.5)
     mesh = WTP.import_mesh(STL, m)
     spacing = WTP.ConstantSpacing(h * m)
     boundary = WTP.PointBoundary(mesh, spacing)
     octree = WTP.TriangleOctree(mesh; classify_leaves = true)
-    cloud = WTP.discretize(boundary, spacing; alg = WTP.SlakKosec(octree), max_points)
+    cloud = WTP.discretize(boundary, spacing; alg = WTP.Octree(octree))
 
     bx, by, bz = coords_xyz(boundary)
     bnormals = surface_normals(boundary)
@@ -375,9 +375,8 @@ end
 # frames of animation.
 function generate_pipeline_gif(; h = 2.0, framerate = 12)
     println("Generating pipeline build-up GIF...")
-    # Own scene, filled with the Octree/Bridson front rather than build_scene's
-    # SlakKosec: the front saturates on its own, and a truncated fill leaves a
-    # hollow core that turns the relax stage into large-scale churn.
+    # Own scene at a coarser h than build_scene: fewer points keep the
+    # ~70-frame palette-quantized GIF legible and under the README size budget.
     mesh = WTP.import_mesh(STL, m)
     spacing = WTP.ConstantSpacing(h * m)
     boundary = WTP.PointBoundary(mesh, spacing)

@@ -157,11 +157,11 @@ Works with `SlakKosec` and `Octree`.
 **Typical workflow:**
 ```julia
 # First pass with uniform spacing
-cloud = discretize(boundary, ConstantSpacing(1mm); alg=SlakKosec())
+cloud = discretize(boundary, ConstantSpacing(1mm); alg=Octree(mesh))
 
 # Second pass with variable spacing
 spacing = LogLike(cloud, 0.5mm, 1.2)
-cloud = discretize(boundary, spacing; alg=SlakKosec())
+cloud = discretize(boundary, spacing; alg=Octree(mesh))
 ```
 
 ## References

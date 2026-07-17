@@ -34,16 +34,17 @@ Meshless methods — RBF-FD, generalized finite differences, SPH — need well-d
 using WhatsThePoint, Unitful
 
 # Import a surface mesh — the unit says what the file's raw numbers mean
-boundary = PointBoundary("model.stl", u"mm")
+mesh = import_mesh("model.stl", u"mm")
+boundary = PointBoundary(mesh)
 
 # Split surfaces by normal angle
 split_surface!(boundary, 75°)
 
 # Generate volume points
 spacing = ConstantSpacing(1u"mm")
-cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
+cloud = discretize(boundary, spacing; alg=Octree(mesh))
 
-# Optimize point distribution
+# Optimize point distribution (optional)
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
 
 # Add point connectivity

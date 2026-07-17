@@ -144,7 +144,7 @@ After an initial discretization, you can use variable spacing for a second pass:
 # Variable spacing — denser near boundary, coarser in interior
 # Requires an existing PointCloud (uses boundary distances internally)
 spacing = LogLike(cloud, 0.5mm, 1.2)  # base_size, growth_rate
-cloud = discretize(boundary, spacing; alg=SlakKosec())
+cloud = discretize(boundary, spacing; alg=Octree(mesh))
 ```
 
 See the [Discretization](discretization.md) page for detailed descriptions of each algorithm and spacing type.

@@ -18,16 +18,17 @@ using WhatsThePoint
 using Unitful: mm, °
 
 # 1. Import a surface mesh — the unit says what the file's raw numbers mean
-boundary = PointBoundary("model.stl", mm)
+mesh = import_mesh("model.stl", mm)
+boundary = PointBoundary(mesh)
 
 # 2. Split into named surfaces by normal angle
 split_surface!(boundary, 75°)
 
 # 3. Generate volume points
 spacing = ConstantSpacing(1mm)
-cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg())
+cloud = discretize(boundary, spacing; alg=Octree(mesh))
 
-# 4. Optimize point distribution
+# 4. Optimize point distribution (optional — Bridson placement is already blue-noise)
 cloud = repel(cloud, spacing)
 
 # 5. Build neighbor connectivity

@@ -20,7 +20,16 @@ julia --project -e 'using Pkg; Pkg.test()'
 
 # Build documentation locally
 julia --project=docs docs/make.jl
+
+# Serve docs locally with live rebuild — run from the repo ROOT, not docs/
+# (serves docs/build/1; saves under docs/src/ trigger a full rebuild)
+julia --project=docs -e 'using LiveServer; servedocs(buildfoldername="build/1", launch_browser=true)'
 ```
+
+Local docs serving gotchas:
+- Always enter at `http://localhost:8000/` and navigate within the site. The build uses clean URLs (`/guide` → `guide.html`), which LiveServer cannot resolve on a hard load/refresh — deep links 404 unless you append `.html`.
+- The first build takes minutes (loads the package, npm install/build); later rebuilds are much faster since the package stays loaded. During a rebuild the served folder is deleted, so refreshes 404 until it finishes.
+- Serving `docs/build` instead of `docs/build/1` (e.g. plain `servedocs()`) yields a directory listing and unstyled pages — asset paths are root-absolute.
 
 Tests use `TestItemRunner.jl` with `@testitem` macros — each test item is self-contained and runs independently. There is no way to run a single test file in isolation; `@run_package_tests` discovers and runs all `@testitem` blocks.
 
