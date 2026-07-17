@@ -57,10 +57,11 @@ function discretize(
         alg::AbstractNodeGenerationAlgorithm = FornbergFlyer(),
         max_points::Union{Int, Nothing} = nothing,
     )
-    @warn "Only FornbergFlyer algorithm is implemented for 2D point clouds. Using it."
+    alg isa FornbergFlyer ||
+        throw(ArgumentError("FornbergFlyer is the only 2D discretization algorithm; pass `alg=FornbergFlyer()` (the default) or omit `alg`."))
     cloud = PointCloud(bnd)
     new_volume =
-        _discretize_volume(cloud, spacing, FornbergFlyer(); max_points = max_points)
+        _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
 
@@ -81,13 +82,6 @@ function discretize(
     )
     new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
-end
-
-function calculate_ninit(cloud::PointCloud{𝔼{3}}, s::VariableSpacing)
-    min_s = s(first(points(cloud)))
-    bbox = boundingbox(cloud)
-    extent = bbox.max - bbox.min
-    return (ceil(Int, extent[1] * 10 / min_s), ceil(Int, extent[2] * 10 / min_s))
 end
 
 function calculate_ninit(cloud::PointCloud{𝔼{3}}, s::ConstantSpacing)

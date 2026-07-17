@@ -1,41 +1,75 @@
 """
-    MeshPseudonormals{T}
+    TriangleIndex{T}
 
-Angle-weighted pseudonormals (Bærentzen & Aanæs 2005) for exact sign
-determination in signed-distance queries. For a watertight, consistently
-outward-oriented triangle mesh, `sign(dot(p - cp, n_feature))` is provably
-correct for every query point `p`, where `cp` is the closest point on the
-mesh and `n_feature` is the normal of the closest *feature*: the face normal
-on a face interior, the sum of the two incident face normals on an edge, and
-the incidence-angle-weighted sum of face normals at a vertex. (Only the sign
-of the dot product is used, so the edge/vertex sums are stored unnormalized.)
+The package's runtime representation of a triangle mesh: an indexed,
+unit-stripped, machine-typed cache built once from a `SimpleMesh` at the
+package boundary. After construction, query paths read contiguous
+`SVector{3,T}` arrays — they never touch the Meshes.jl object model.
 
-This replaces the previous distance-weighted "local sign vote" over the
-triangles of one leaf, which was heuristic — it could come back ambiguous
-(mapped to EXTERIOR by `isinside`) and could mix votes from the two sides of
-a thin sheet — and slower (a second `find_leaf` plus a closest-point
-computation per vote triangle on every query).
+Fields (all canonical — no derived cache):
+- `vertices`/`triangles`: indexed representation (unique coords + per-triangle
+  vertex indices). Also the serialization format.
+- `face`: precomputed unit face normals.
+- `edge`/`vertex`: angle-weighted pseudonormals (Bærentzen & Aanæs 2005)
+  keyed by exact coordinates — the sign-exact feature normals for
+  signed-distance queries.
+- `bbox_min`/`bbox_max`: mesh bounding box (computed once at construction).
+- `len_unit`: the unit stripped from mesh coordinates, re-attached at exits.
 
-Edges and vertices are keyed by exact coordinates, so triangle-soup input
-(e.g. binary STL with duplicated vertices) needs no topology cleanup.
+This struct is self-sufficient: nothing in the package carries a
+`SimpleMesh` reference after `TriangleIndex(T, mesh)` runs.
 """
-struct MeshPseudonormals{T <: Real}
+struct TriangleIndex{T <: Real}
+    vertices::Vector{SVector{3, T}}
+    triangles::Vector{NTuple{3, Int32}}
     face::Vector{SVector{3, T}}
     edge::Dict{Tuple{SVector{3, T}, SVector{3, T}}, SVector{3, T}}
     vertex::Dict{SVector{3, T}, SVector{3, T}}
+    bbox_min::SVector{3, T}
+    bbox_max::SVector{3, T}
+    len_unit::Unitful.Units
 end
 
 """
-Octree spatial index for triangle mesh queries. Accelerates isinside(), signed distance, etc.
+    AbstractGeometryIndex{M<:Manifold}
+
+The query interface that node-generation code (`build_node_octree`, `repel`)
+uses to consult boundary geometry, parameterized by the manifold `M`. Because
+every seam method dispatches on `M`, discretization is generic over `Manifold`
+— the mechanism a 2D reimplementation slots into. Implementations:
+`TriangleOctree{T} <: AbstractGeometryIndex{𝔼{3}}` (today), and a future
+`SegmentQuadtree{T} <: AbstractGeometryIndex{𝔼{2}}`.
+
+Seam contract:
+- `domain_bounds(g)`            → `(min, max)::NTuple{2,SVector{N,T}}`
+- `classify_point(g, p, tol)`   → `LEAF_INTERIOR` / `LEAF_BOUNDARY` / `LEAF_EXTERIOR`
+- `isinside(p, g)`              → `Bool`
+- `project_to_boundary(g, p, offset)` → `(SVector{N,T}, element_id::Int)`
 """
-struct TriangleOctree{M <: Manifold, C <: CRS, T <: Real}
+abstract type AbstractGeometryIndex{M <: Manifold} end
+
+"""
+Octree spatial index for triangle mesh queries. Accelerates isinside(),
+signed distance, etc. Carries the mesh as a `TriangleIndex{T}` — no
+`SimpleMesh` reference, no Meshes.jl in the runtime.
+"""
+struct TriangleOctree{T <: Real} <: AbstractGeometryIndex{𝔼{3}}
     tree::SpatialOctree{Int, T}
-    mesh::SimpleMesh{M, C}
+    index::TriangleIndex{T}
     leaf_classification::Union{Nothing, Vector{Int8}}
-    mesh_bbox_min::SVector{3, T}  # Actual mesh bounding box (not expanded octree bounds)
-    mesh_bbox_max::SVector{3, T}
-    pseudonormals::MeshPseudonormals{T}
 end
+
+# --- seam methods (thin wrappers over the existing 3D query internals) ---
+"Axis-aligned bounds of the boundary geometry."
+domain_bounds(g::TriangleOctree) = (g.index.bbox_min, g.index.bbox_max)
+
+"Classify a query point against the domain (INTERIOR / BOUNDARY / EXTERIOR)."
+@inline classify_point(g::TriangleOctree{T}, p::SVector{3, <:Real}, tol) where {T} =
+    _classify_point_octree(p, g; tol = T(tol))
+
+"Project `p` onto the boundary, returning (projected point, boundary element id).
+Delegates to the `repel` projection kernel (defined later in the module)."
+project_to_boundary(g::TriangleOctree, p, offset) = _project_to_boundary(p, g, offset)
 
 const _BBOX_EXPANSION = 1.02
 const _DEGENERATE_EPS = 1.0e-10
@@ -49,15 +83,14 @@ struct VertexResolutionCriterion{T <: Real} <: SubdivisionCriterion
 end
 
 function VertexResolutionCriterion(
-        mesh::SimpleMesh{M, C};
+        index::TriangleIndex{T};
         tolerance_relative = 1.0e-6,
         min_ratio = 1.0e-6
-    ) where {M, C}
-    T = CoordRefSystems.mactype(C)
-    n_triangles = Meshes.nelements(mesh)
+    ) where {T}
+    n_triangles = num_triangles(index)
     n_triangles > 0 || throw(ArgumentError("Mesh must contain at least one triangle"))
 
-    bbox_min, bbox_max = _compute_bbox(T, mesh)
+    bbox_min, bbox_max = _compute_bbox(index)
     diagonal = norm(bbox_max - bbox_min)
 
     tolerance = diagonal * T(tolerance_relative)
@@ -71,7 +104,7 @@ function should_subdivide(
         c::VertexResolutionCriterion{T},
         tree,
         box_idx,
-        mesh::SimpleMesh
+        index::TriangleIndex{T}
     ) where {T}
     box_size(tree, box_idx) <= c.absolute_min && return false
     isempty(tree.element_lists[box_idx]) && return false
@@ -79,7 +112,7 @@ function should_subdivide(
     bbox_min, bbox_max = box_bounds(tree, box_idx)
     found = SVector{3, T}[]
 
-    for tri_idx in tree.element_lists[box_idx], v in _get_triangle_vertices(T, mesh, tri_idx)
+    for tri_idx in tree.element_lists[box_idx], v in _get_triangle_vertices(index, tri_idx)
         all(bbox_min .<= v .<= bbox_max) || continue
         all(sum(abs2, v - existing) >= c.tolerance_sq for existing in found) || continue
         push!(found, v)
@@ -97,82 +130,99 @@ mutable struct NearestTriangleState{T <: Real}
     best_dist_sq::T
     closest_idx::Int
     closest_pt::SVector{3, T}
-    # Winning triangle's feature + vertices, kept so the signed-distance query
-    # can select the feature pseudonormal without re-extracting the triangle.
     closest_feature::Int8
-    v1::SVector{3, T}
-    v2::SVector{3, T}
-    v3::SVector{3, T}
 end
 
 NearestTriangleState{T}(point::SVector{3, T}) where {T <: Real} =
-    NearestTriangleState{T}(typemax(T), 0, point, FEATURE_FACE, point, point, point)
-
-@inline function _normalize_normal(::Type{T}, n_vec) where {T}
-    n = SVector{3, T}(ustrip(n_vec[1]), ustrip(n_vec[2]), ustrip(n_vec[3]))
-    n_mag = norm(n)
-    if n_mag < eps(T) * 100
-        error("Degenerate triangle: zero normal")
-    end
-    return n / n_mag
-end
+    NearestTriangleState{T}(typemax(T), 0, point, FEATURE_FACE)
 
 @inline function _extract_vertex(::Type{T}, vert) where {T}
     coords = Meshes.to(vert)
     return SVector{3, T}(ustrip(coords[1]), ustrip(coords[2]), ustrip(coords[3]))
 end
 
-@inline function _get_triangle_vertices(::Type{T}, mesh::SimpleMesh, tri_idx::Int) where {T}
-    elem = mesh[tri_idx]
-    verts = Meshes.vertices(elem)
-    v1 = _extract_vertex(T, verts[1])
-    v2 = _extract_vertex(T, verts[2])
-    v3 = _extract_vertex(T, verts[3])
-    return v1, v2, v3
+@inline function _get_triangle_vertices(index::TriangleIndex, tri_idx::Int)
+    t = @inbounds index.triangles[tri_idx]
+    @inbounds return index.vertices[t[1]], index.vertices[t[2]], index.vertices[t[3]]
 end
 
-@inline function _get_triangle_normal(::Type{T}, mesh::SimpleMesh, tri_idx::Int) where {T}
-    elem = mesh[tri_idx]
-    return _normalize_normal(T, Meshes.normal(elem))
-end
+num_triangles(index::TriangleIndex) = length(index.triangles)
 
-function _compute_bbox(::Type{T}, mesh::SimpleMesh) where {T}
+function TriangleIndex(::Type{T}, mesh::SimpleMesh) where {T <: Real}
+    verts = Meshes.vertices(mesh)
+    vertices = Vector{SVector{3, T}}(undef, length(verts))
+    @inbounds for i in eachindex(verts)
+        vertices[i] = _extract_vertex(T, verts[i])
+    end
+
     n = Meshes.nelements(mesh)
-
-    v1, v2, v3 = _get_triangle_vertices(T, mesh, 1)
-    min_x = min(v1[1], v2[1], v3[1])
-    min_y = min(v1[2], v2[2], v3[2])
-    min_z = min(v1[3], v2[3], v3[3])
-    max_x = max(v1[1], v2[1], v3[1])
-    max_y = max(v1[2], v2[2], v3[2])
-    max_z = max(v1[3], v2[3], v3[3])
-
-    for i in 2:n
-        v1, v2, v3 = _get_triangle_vertices(T, mesh, i)
-        min_x = min(min_x, v1[1], v2[1], v3[1])
-        min_y = min(min_y, v1[2], v2[2], v3[2])
-        min_z = min(min_z, v1[3], v2[3], v3[3])
-        max_x = max(max_x, v1[1], v2[1], v3[1])
-        max_y = max(max_y, v1[2], v2[2], v3[2])
-        max_z = max(max_z, v1[3], v2[3], v3[3])
+    triangles = Vector{NTuple{3, Int32}}(undef, n)
+    face = Vector{SVector{3, T}}(undef, n)
+    for (i, connec) in enumerate(Meshes.elements(Meshes.topology(mesh)))
+        idx = Meshes.indices(connec)
+        length(idx) == 3 || throw(
+            ArgumentError(
+                "TriangleIndex requires a pure-triangle mesh; " *
+                    "element $i has $(length(idx)) vertices"
+            )
+        )
+        t = (Int32(idx[1]), Int32(idx[2]), Int32(idx[3]))
+        triangles[i] = t
+        a = vertices[t[1]]
+        b = vertices[t[2]]
+        c = vertices[t[3]]
+        # Precompute unit face normal.
+        nrm = cross(b - a, c - a)
+        mag = norm(nrm)
+        @inbounds face[i] = mag < eps(T) * 100 ? zero(SVector{3, T}) : nrm / mag
     end
 
+    # Angle-weighted pseudonormals (Bærentzen & Aanæs 2005) for exact sign
+    # determination. Edges/vertices keyed by exact coordinates — triangle-soup
+    # input (binary STL with duplicated vertices) needs no topology cleanup.
+    edge = Dict{Tuple{SVector{3, T}, SVector{3, T}}, SVector{3, T}}()
+    vertex = Dict{SVector{3, T}, SVector{3, T}}()
+    sizehint!(edge, 3 * n ÷ 2 + 1)
+    sizehint!(vertex, n ÷ 2 + 2)
+    z = zero(SVector{3, T})
+    @inbounds for i in 1:n
+        t = triangles[i]
+        v1, v2, v3 = vertices[t[1]], vertices[t[2]], vertices[t[3]]
+        nhat = face[i]
+        for (va, vb) in ((v1, v2), (v2, v3), (v3, v1))
+            k = _edge_key(va, vb)
+            edge[k] = get(edge, k, z) + nhat
+        end
+        for (vc, va, vb) in ((v1, v2, v3), (v2, v3, v1), (v3, v1, v2))
+            vertex[vc] = get(vertex, vc, z) + _corner_angle(vc, va, vb) * nhat
+        end
+    end
+
+    bbox_min, bbox_max = _compute_bbox_raw(vertices)
+
+    len_unit = Unitful.unit(Meshes.lentype(mesh))
+    return TriangleIndex{T}(vertices, triangles, face, edge, vertex, bbox_min, bbox_max, len_unit)
+end
+
+# Bounding box from raw vertices (used at construction time before the
+# TriangleIndex is assembled).
+function _compute_bbox_raw(vertices::Vector{SVector{3, T}}) where {T}
+    min_x = min_y = min_z = typemax(T)
+    max_x = max_y = max_z = typemin(T)
+    @inbounds for v in vertices
+        min_x = min(min_x, v[1]); max_x = max(max_x, v[1])
+        min_y = min(min_y, v[2]); max_y = max(max_y, v[2])
+        min_z = min(min_z, v[3]); max_z = max(max_z, v[3])
+    end
     eps_val = max(eps(T) * 100, T(_DEGENERATE_EPS))
-    if min_x == max_x
-        min_x -= eps_val
-        max_x += eps_val
-    end
-    if min_y == max_y
-        min_y -= eps_val
-        max_y += eps_val
-    end
-    if min_z == max_z
-        min_z -= eps_val
-        max_z += eps_val
-    end
-
+    min_x == max_x && (min_x -= eps_val; max_x += eps_val)
+    min_y == max_y && (min_y -= eps_val; max_y += eps_val)
+    min_z == max_z && (min_z -= eps_val; max_z += eps_val)
     return SVector{3, T}(min_x, min_y, min_z), SVector{3, T}(max_x, max_y, max_z)
 end
+
+# Field-access shortcut — bbox is stored on the index.
+_compute_bbox(index::TriangleIndex{T}) where {T} = (index.bbox_min, index.bbox_max)
 
 @inline function _edge_key(v1::SVector{3, T}, v2::SVector{3, T}) where {T}
     return v1 < v2 ? (v1, v2) : (v2, v1)
@@ -186,59 +236,37 @@ end
     return acos(clamp(dot(u, w) / den, -one(T), one(T)))
 end
 
-function MeshPseudonormals(::Type{T}, mesh::SimpleMesh) where {T <: Real}
-    n = Meshes.nelements(mesh)
-    face = Vector{SVector{3, T}}(undef, n)
-    edge = Dict{Tuple{SVector{3, T}, SVector{3, T}}, SVector{3, T}}()
-    vertex = Dict{SVector{3, T}, SVector{3, T}}()
-    sizehint!(edge, 3 * n ÷ 2 + 1)
-    sizehint!(vertex, n ÷ 2 + 2)
-    z = zero(SVector{3, T})
-
-    for i in 1:n
-        v1, v2, v3 = _get_triangle_vertices(T, mesh, i)
-        nhat = _get_triangle_normal(T, mesh, i)
-        face[i] = nhat
-        for (va, vb) in ((v1, v2), (v2, v3), (v3, v1))
-            k = _edge_key(va, vb)
-            edge[k] = get(edge, k, z) + nhat
-        end
-        for (vc, va, vb) in ((v1, v2, v3), (v2, v3, v1), (v3, v1, v2))
-            vertex[vc] = get(vertex, vc, z) + _corner_angle(vc, va, vb) * nhat
-        end
-    end
-
-    return MeshPseudonormals(face, edge, vertex)
-end
-
 """
 Pseudonormal of the feature (face / edge / vertex) the closest point lies on.
 Falls back to the face normal if the feature key is missing — cannot happen
 for features built from this mesh's own triangles, but keeps the query total.
 """
 @inline function _feature_pseudonormal(
-        pn::MeshPseudonormals{T},
+        index::TriangleIndex{T},
         tri_idx::Int,
         feature::Int8,
         v1::SVector{3, T},
         v2::SVector{3, T},
         v3::SVector{3, T},
     ) where {T}
-    f = pn.face[tri_idx]
+    f = index.face[tri_idx]
     feature == FEATURE_FACE && return f
-    feature == FEATURE_VERTEX_1 && return get(pn.vertex, v1, f)
-    feature == FEATURE_VERTEX_2 && return get(pn.vertex, v2, f)
-    feature == FEATURE_VERTEX_3 && return get(pn.vertex, v3, f)
-    feature == FEATURE_EDGE_12 && return get(pn.edge, _edge_key(v1, v2), f)
-    feature == FEATURE_EDGE_13 && return get(pn.edge, _edge_key(v1, v3), f)
-    return get(pn.edge, _edge_key(v2, v3), f)
+    feature == FEATURE_VERTEX_1 && return get(index.vertex, v1, f)
+    feature == FEATURE_VERTEX_2 && return get(index.vertex, v2, f)
+    feature == FEATURE_VERTEX_3 && return get(index.vertex, v3, f)
+    feature == FEATURE_EDGE_12 && return get(index.edge, _edge_key(v1, v2), f)
+    feature == FEATURE_EDGE_13 && return get(index.edge, _edge_key(v1, v3), f)
+    return get(index.edge, _edge_key(v2, v3), f)
 end
 
 """
 Check if triangle faces are consistently oriented (manifold orientation test).
 """
-function has_consistent_normals(::Type{T}, mesh::SimpleMesh) where {T}
-    n = Meshes.nelements(mesh)
+has_consistent_normals(mesh::SimpleMesh{M, C}) where {M, C} =
+    has_consistent_normals(TriangleIndex(CoordRefSystems.mactype(C), mesh))
+
+function has_consistent_normals(index::TriangleIndex{T}) where {T}
+    n = num_triangles(index)
     n <= 1 && return true
 
     edge_map = Dict{
@@ -248,7 +276,7 @@ function has_consistent_normals(::Type{T}, mesh::SimpleMesh) where {T}
     sizehint!(edge_map, 3 * n)
 
     for i in 1:n
-        v1, v2, v3 = _get_triangle_vertices(T, mesh, i)
+        v1, v2, v3 = _get_triangle_vertices(index, i)
 
         for (va, vb) in ((v1, v2), (v2, v3), (v3, v1))
             key = _edge_key(va, vb)
@@ -269,10 +297,6 @@ function has_consistent_normals(::Type{T}, mesh::SimpleMesh) where {T}
     return true
 end
 
-function has_consistent_normals(mesh::SimpleMesh{M, C}) where {M, C}
-    return has_consistent_normals(CoordRefSystems.mactype(C), mesh)
-end
-
 """
 Signed volume of a closed triangle mesh (divergence theorem,
 `Σ dot(v1, v2 × v3) / 6`). Positive iff the winding orients normals outward.
@@ -281,17 +305,18 @@ Catches globally inside-out meshes, which `has_consistent_normals` cannot
 interior — exactly the 2026-06-11 cavity corruption #2). Only meaningful for
 closed surfaces.
 """
-function _signed_volume(::Type{T}, mesh::SimpleMesh) where {T <: Real}
+function _signed_volume(index::TriangleIndex{T}) where {T <: Real}
     vol = zero(T)
-    for i in 1:Meshes.nelements(mesh)
-        v1, v2, v3 = _get_triangle_vertices(T, mesh, i)
+    @inbounds for i in 1:num_triangles(index)
+        v1, v2, v3 = _get_triangle_vertices(index, i)
         vol += dot(v1, cross(v2, v3))
     end
     return vol / 6
 end
 
-function _create_root_octree(::Type{T}, mesh::SimpleMesh, n_triangles::Int) where {T}
-    bbox_min, bbox_max = _compute_bbox(T, mesh)
+function _create_root_octree(index::TriangleIndex{T}) where {T}
+    n_triangles = num_triangles(index)
+    bbox_min, bbox_max = _compute_bbox(index)
 
     bbox_sz = bbox_max - bbox_min
     bbox_center = (bbox_min + bbox_max) * T(0.5)
@@ -324,9 +349,9 @@ function TriangleOctree(
         verify_orientation::Bool = true,
     ) where {M <: Manifold, C <: CRS}
     T = CoordRefSystems.mactype(C)
-    n_triangles = Meshes.nelements(mesh)
+    index = TriangleIndex(T, mesh)
 
-    if verify_orientation && !has_consistent_normals(T, mesh)
+    if verify_orientation && !has_consistent_normals(index)
         throw(
             ArgumentError(
                 "Triangle mesh has orientation errors (flipped faces). " *
@@ -347,9 +372,9 @@ function TriangleOctree(
     # meaningless ≈0 signed volume — the scale-relative threshold lets them
     # through).
     if verify_orientation && classify_leaves
-        bbox_min, bbox_max = _compute_bbox(T, mesh)
+        bbox_min, bbox_max = _compute_bbox(index)
         vol_floor = -T(_DEGENERATE_EPS) * norm(bbox_max - bbox_min)^3
-        if _signed_volume(T, mesh) < vol_floor
+        if _signed_volume(index) < vol_floor
             throw(
                 ArgumentError(
                     "Triangle mesh is inside-out (negative signed volume): " *
@@ -363,32 +388,26 @@ function TriangleOctree(
     end
 
     criterion = VertexResolutionCriterion(
-        mesh;
+        index;
         tolerance_relative = tolerance_relative,
         min_ratio = min_ratio
     )
 
-    tree = _create_root_octree(T, mesh, n_triangles)
-    _subdivide_triangle_octree!(tree, mesh, 1, criterion)
+    tree = _create_root_octree(index)
+    _subdivide_triangle_octree!(tree, index, 1, criterion)
     balance_octree!(tree, criterion)
-    pseudonormals = MeshPseudonormals(T, mesh)
-    classification = classify_leaves ? _classify_leaves(tree, mesh, pseudonormals) : nothing
+    classification = classify_leaves ? _classify_leaves(tree, index) : nothing
 
-    # Store actual mesh bounding box (not the expanded cubic octree bounds)
-    mesh_bbox_min, mesh_bbox_max = _compute_bbox(T, mesh)
-
-    return TriangleOctree(
-        tree, mesh, classification, mesh_bbox_min, mesh_bbox_max, pseudonormals
-    )
+    return TriangleOctree{T}(tree, index, classification)
 end
 
 function _subdivide_triangle_octree!(
         tree::SpatialOctree{Int, T},
-        mesh::SimpleMesh,
+        index::TriangleIndex{T},
         box_idx::Int,
         criterion::VertexResolutionCriterion,
     ) where {T <: Real}
-    if !should_subdivide(criterion, tree, box_idx, mesh)
+    if !should_subdivide(criterion, tree, box_idx, index)
         return
     end
 
@@ -396,13 +415,12 @@ function _subdivide_triangle_octree!(
     isempty(parent_triangles) && return
 
     subdivide!(tree, box_idx)
-    children = tree.children[box_idx]
+    kids = children(tree, box_idx)
 
     for tri_idx in parent_triangles
-        v1, v2, v3 = _get_triangle_vertices(T, mesh, tri_idx)
+        v1, v2, v3 = _get_triangle_vertices(index, tri_idx)
 
-        for child_idx in children
-            child_idx == 0 && continue
+        for child_idx in kids
             child_min, child_max = box_bounds(tree, child_idx)
 
             if triangle_box_intersection(v1, v2, v3, child_min, child_max)
@@ -411,9 +429,8 @@ function _subdivide_triangle_octree!(
         end
     end
 
-    for child_idx in children
-        child_idx == 0 && continue
-        _subdivide_triangle_octree!(tree, mesh, child_idx, criterion)
+    for child_idx in kids
+        _subdivide_triangle_octree!(tree, index, child_idx, criterion)
     end
     return
 end
@@ -434,11 +451,11 @@ end
 
 @inline function _update_closest_triangle!(
         point::SVector{3, T},
-        mesh::SimpleMesh,
+        index::TriangleIndex{T},
         tri_idx::Int,
         state::NearestTriangleState{T},
     ) where {T <: Real}
-    v1, v2, v3 = _get_triangle_vertices(T, mesh, tri_idx)
+    v1, v2, v3 = _get_triangle_vertices(index, tri_idx)
     cp, feature = closest_point_on_triangle_feature(point, v1, v2, v3)
     dvec = point - cp
     d2 = dot(dvec, dvec)
@@ -448,9 +465,6 @@ end
         state.closest_idx = tri_idx
         state.closest_pt = cp
         state.closest_feature = feature
-        state.v1 = v1
-        state.v2 = v2
-        state.v3 = v3
     end
 
     return nothing
@@ -459,7 +473,7 @@ end
 function _nearest_triangle_octree!(
         point::SVector{3, T},
         tree::SpatialOctree{Int, T},
-        mesh::SimpleMesh,
+        index::TriangleIndex{T},
         box_idx::Int,
         state::NearestTriangleState{T},
     ) where {T <: Real}
@@ -468,17 +482,16 @@ function _nearest_triangle_octree!(
 
     if is_leaf(tree, box_idx)
         @inbounds for tri_idx in tree.element_lists[box_idx]
-            _update_closest_triangle!(point, mesh, tri_idx, state)
+            _update_closest_triangle!(point, index, tri_idx, state)
         end
         return
     end
 
-    children = tree.children[box_idx]
+    kids = children(tree, box_idx)
     dists = MVector{8, T}(ntuple(_ -> typemax(T), Val(8)))
     idxs = MVector{8, Int}(ntuple(_ -> 0, Val(8)))
     n_valid = 0
-    @inbounds for child_idx in children
-        child_idx == 0 && continue
+    @inbounds for child_idx in kids
         cmin, cmax = box_bounds(tree, child_idx)
         d2 = _point_box_distance_sq(point, cmin, cmax)
         if d2 <= state.best_dist_sq
@@ -495,7 +508,7 @@ function _nearest_triangle_octree!(
     end
 
     return @inbounds for i in 1:n_valid
-        _nearest_triangle_octree!(point, tree, mesh, idxs[i], state)
+        _nearest_triangle_octree!(point, tree, index, idxs[i], state)
     end
 end
 
@@ -508,19 +521,21 @@ feature pseudonormal vanishes).
 """
 function _compute_signed_distance_octree(
         point::SVector{3, T},
-        mesh::SimpleMesh,
+        index::TriangleIndex{T},
         tree::SpatialOctree{Int, T},
-        pn::MeshPseudonormals{T},
     ) where {T <: Real}
     state = NearestTriangleState{T}(point)
-    _nearest_triangle_octree!(point, tree, mesh, 1, state)
+    _nearest_triangle_octree!(point, tree, index, 1, state)
 
     if state.closest_idx == 0
         return typemax(T)
     end
 
+    # Re-gather the winning triangle's vertices once (no per-triangle cache
+    # on the traversal state) to select the feature pseudonormal.
+    v1, v2, v3 = _get_triangle_vertices(index, state.closest_idx)
     n = _feature_pseudonormal(
-        pn, state.closest_idx, state.closest_feature, state.v1, state.v2, state.v3
+        index, state.closest_idx, state.closest_feature, v1, v2, v3
     )
     s = dot(point - state.closest_pt, n)
 
@@ -531,18 +546,20 @@ function _compute_signed_distance_octree(
 end
 
 function _compute_signed_distance_octree(
-        point::SVector{3, T}, octree::TriangleOctree
-    ) where {T <: Real}
+        point::SVector{3, <:Real}, octree::TriangleOctree{T}
+    ) where {T}
+    # Seam policy: convert a foreign-precision query once at the entry point;
+    # the traversal below runs strictly in the octree's machine type T.
     return _compute_signed_distance_octree(
-        point, octree.mesh, octree.tree, octree.pseudonormals
+        SVector{3, T}(point), octree.index, octree.tree
     )
 end
 
 function _classify_leaves(
-        tree::SpatialOctree{Int, T}, mesh::SimpleMesh, pn::MeshPseudonormals{T}
+        tree::SpatialOctree{Int, T}, index::TriangleIndex{T}
     ) where {T <: Real}
     function mesh_query(point::SVector{3, T}, tol::T) where {T <: Real}
-        sd = _compute_signed_distance_octree(point, mesh, tree, pn)
+        sd = _compute_signed_distance_octree(point, index, tree)
         return _leaf_class_from_signed_distance(sd, tol)
     end
 
@@ -557,21 +574,21 @@ function _classify_leaves(
     return classification
 end
 
-Base.length(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
+Base.length(octree::TriangleOctree) = num_triangles(octree.index)
 
 """
     num_leaves(octree::TriangleOctree) -> Int
 
-Return the number of leaf nodes in the octree.
+Return the number of leaf nodes in the octree's spatial subdivision.
 """
 num_leaves(octree::TriangleOctree) = length(all_leaves(octree.tree))
 
 """
     num_triangles(octree::TriangleOctree) -> Int
 
-Return the number of triangles in the underlying surface mesh.
+Return the number of triangles indexed by the octree.
 """
-num_triangles(octree::TriangleOctree) = Meshes.nelements(octree.mesh)
+num_triangles(octree::TriangleOctree) = num_triangles(octree.index)
 
 """
     _classify_point_octree(point, octree; tol=0) -> Int8
@@ -585,19 +602,23 @@ fall through to the full signed-distance computation.
 exact bbox checks, or a positive tolerance for conservative classification).
 """
 @inline function _classify_point_octree(
-        point::SVector{3, T}, octree::TriangleOctree; tol::T = zero(T)
-    ) where {T <: Real}
-    if any(point .< octree.mesh_bbox_min .- tol) || any(point .> octree.mesh_bbox_max .+ tol)
+        point::SVector{3, <:Real}, octree::TriangleOctree{T}; tol::Real = zero(T)
+    ) where {T}
+    # Seam policy: convert a foreign-precision query once at the entry point;
+    # everything below runs strictly in the octree's machine type T.
+    p = SVector{3, T}(point)
+    t = T(tol)
+    if any(p .< octree.index.bbox_min .- t) || any(p .> octree.index.bbox_max .+ t)
         return LEAF_EXTERIOR
     end
     tri_cls = octree.leaf_classification
     if !isnothing(tri_cls)
-        leaf_idx = find_leaf(octree.tree, point)
+        leaf_idx = find_leaf(octree.tree, p)
         cls = tri_cls[leaf_idx]
         cls != LEAF_BOUNDARY && return cls
     end
-    sd = _compute_signed_distance_octree(point, octree)
-    tol_val = isnothing(tri_cls) ? zero(T) : tol
+    sd = _compute_signed_distance_octree(p, octree.index, octree.tree)
+    tol_val = isnothing(tri_cls) ? zero(T) : t
     return _leaf_class_from_signed_distance(sd, tol_val)
 end
 
@@ -612,14 +633,14 @@ function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {
     return tmap(p -> isinside(p, octree), points)
 end
 
-function isinside(point::Point{𝔼{3}}, octree::TriangleOctree{𝔼{3}, C, T}) where {C, T}
+function isinside(point::Point{𝔼{3}}, octree::TriangleOctree{T}) where {T}
     sv = _extract_vertex(T, point)
     return isinside(sv, octree)
 end
 
 function isinside(
         points::AbstractVector{<:Point{𝔼{3}}},
-        octree::TriangleOctree{𝔼{3}},
+        octree::TriangleOctree,
     )
     return tmap(p -> isinside(p, octree), points)
 end

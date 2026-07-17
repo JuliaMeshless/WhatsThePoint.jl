@@ -27,7 +27,7 @@ function _discretize_volume(
     pdp = Meshes.vertices(pdp_grid)
     T = CoordRefSystems.mactype(C)
     heights = rand(T, length(pdp)) * spacing(points(cloud)[1]) * 0.01 .+ coords(bbox.min).z
-    _, current_id = findmin_turbo(heights)
+    _, current_id = findmin(heights)
     p = pdp[current_id]
     new_points = Vector{Point{𝔼{3}, C}}(undef, max_points)
 
@@ -53,7 +53,7 @@ function _discretize_volume(
 
         # naive search
         # TODO implement moving window search
-        _, current_id = findmin_turbo(heights)
+        _, current_id = findmin(heights)
 
         p = pdp[current_id]
         dotnr += 1

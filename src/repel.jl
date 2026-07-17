@@ -122,7 +122,7 @@ The returned boundary is a single surface named `:boundary` (use
 function repel(
         cloud::PointCloud{𝔼{3}, C},
         spacing,
-        octree::TriangleOctree{<:Manifold, <:CRS, TO};
+        octree::TriangleOctree{TO};
         β = 0.2,
         force_model::RepelForceModel = ClippedSpacingForce(β),
         α = minimum(spacing.(to(cloud))) / 20,
@@ -147,7 +147,7 @@ function repel(
     p, p_old, snap = copy(all_p), copy(all_p), copy(all_p)
 
     len_unit = Unitful.unit(Meshes.to(first(all_p))[1])
-    offset_dist = TO(1.0e-6) * norm(octree.mesh_bbox_max - octree.mesh_bbox_min)
+    offset_dist = TO(1.0e-6) * norm(octree.index.bbox_max - octree.index.bbox_min)
     tri_indices = zeros(Int, npoints)
     # Mutable membership: deposition converts volume points into boundary
     # points. Vector{Bool} (not BitVector) — per-slot writes from tmap! tasks
@@ -447,7 +447,7 @@ proposed position while it stays inside, and escapees revert — flagged in
 """
 function _constrain_octree(
         id, xi, x_proposed, is_bnd, escaped, tri_indices,
-        octree::TriangleOctree{<:Manifold, <:CRS, T}, offset_dist, len_unit,
+        octree::TriangleOctree{T}, offset_dist, len_unit,
     ) where {T}
     # Geometry queries run at the octree's machine type; results convert back
     # to the point's own machine type before a stored Point is built.
@@ -482,7 +482,7 @@ layer escapes in one iteration.
 """
 function _deposit_escaped!(
         p, tree, kq, escaped, is_bnd, tri_indices,
-        octree::TriangleOctree{<:Manifold, <:CRS, T},
+        octree::TriangleOctree{T},
         spacing, deposit_ratio, offset_dist, len_unit,
     ) where {T}
     n_dep = 0
@@ -520,17 +520,20 @@ Nearest point on the mesh surface, nudged `offset_dist` inward along the
 triangle normal. `tri_idx == 0` means no triangle was found.
 """
 function _project_to_boundary(
-        sv::SVector{3, T}, octree::TriangleOctree, offset_dist::T,
-    ) where {T <: Real}
-    state = NearestTriangleState{T}(sv)
-    _nearest_triangle_octree!(sv, octree.tree, octree.mesh, 1, state)
-    state.closest_idx == 0 && return (sv, 0)
+        sv::SVector{3, <:Real}, octree::TriangleOctree{T}, offset_dist::Real,
+    ) where {T}
+    # Seam policy: convert a foreign-precision query once at the entry point;
+    # the search and projection run strictly in the octree's machine type T.
+    p = SVector{3, T}(sv)
+    state = NearestTriangleState{T}(p)
+    _nearest_triangle_octree!(p, octree.tree, octree.index, 1, state)
+    state.closest_idx == 0 && return (p, 0)
 
-    v1, v2, v3 = _get_triangle_vertices(T, octree.mesh, state.closest_idx)
-    projected = closest_point_on_triangle(sv, v1, v2, v3)
+    v1, v2, v3 = _get_triangle_vertices(octree.index, state.closest_idx)
+    projected = closest_point_on_triangle(p, v1, v2, v3)
 
-    n = _get_triangle_normal(T, octree.mesh, state.closest_idx)
-    return (projected - offset_dist * n, state.closest_idx)
+    n = octree.index.face[state.closest_idx]
+    return (projected - T(offset_dist) * n, state.closest_idx)
 end
 
 # ======================================================================
@@ -608,7 +611,7 @@ function _reconstruct_cloud(
         if is_bnd[id]
             push!(new_bnd_pts, p[id])
             if tri_indices[id] > 0
-                push!(new_bnd_normals, _get_triangle_normal(Tc, octree.mesh, tri_indices[id]))
+                push!(new_bnd_normals, SVector{3, Tc}(octree.index.face[tri_indices[id]]))
             else
                 push!(new_bnd_normals, orig_normals[id])
             end

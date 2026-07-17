@@ -2,7 +2,7 @@
 
 @testitem "TriangleOctree regression - near-surface normal offsets (bifurcation)" setup = [CommonImports, TestData] begin
     using GeoIO
-    using WhatsThePoint: _compute_bbox, _get_triangle_vertices, _get_triangle_normal, all_leaves
+    using WhatsThePoint: _compute_bbox, _get_triangle_vertices, all_leaves
 
     if !isfile(TestData.BIFURCATION_PATH)
         @test_skip "bifurcation.stl not available"
@@ -11,11 +11,12 @@
     mesh = GeoIO.load(TestData.BIFURCATION_PATH).geometry
     octree = TriangleOctree(mesh; classify_leaves = true)
 
-    bbox_min, bbox_max = _compute_bbox(Float64, octree.mesh)
+    index = octree.index
+    bbox_min, bbox_max = _compute_bbox(index)
     diagonal = norm(bbox_max - bbox_min)
     ε = max(diagonal * 1.0e-5, 1.0e-8)
 
-    n_tri = Meshes.nelements(octree.mesh)
+    n_tri = num_triangles(index)
     n_samples = min(128, n_tri)
     step = max(1, fld(n_tri, n_samples))
     tri_indices = collect(1:step:n_tri)[1:n_samples]
@@ -24,8 +25,8 @@
     inside_hits = 0
 
     for tri_idx in tri_indices
-        v1, v2, v3 = _get_triangle_vertices(Float64, octree.mesh, tri_idx)
-        n = _get_triangle_normal(Float64, octree.mesh, tri_idx)
+        v1, v2, v3 = _get_triangle_vertices(index, tri_idx)
+        n = index.face[tri_idx]
         centroid = (v1 + v2 + v3) / 3
 
         p_out = centroid + ε * n
@@ -61,27 +62,27 @@ end
 
     if isempty(interior_leaves)
         @test_skip "no interior leaves found"
-    end
+    else
+        Random.seed!(2026)
+        n_leaf_samples = min(40, length(interior_leaves))
+        sampled_leaves = randperm(length(interior_leaves))[1:n_leaf_samples]
 
-    Random.seed!(2026)
-    n_leaf_samples = min(40, length(interior_leaves))
-    sampled_leaves = randperm(length(interior_leaves))[1:n_leaf_samples]
+        positive_sd_count = 0
+        n_checked = 0
 
-    positive_sd_count = 0
-    n_checked = 0
+        for leaf_pos in sampled_leaves
+            leaf_idx = interior_leaves[leaf_pos]
+            bbox_min, bbox_max = box_bounds(octree.tree, leaf_idx)
 
-    for leaf_pos in sampled_leaves
-        leaf_idx = interior_leaves[leaf_pos]
-        bbox_min, bbox_max = box_bounds(octree.tree, leaf_idx)
-
-        for _ in 1:5
-            p = bbox_min + rand(SVector{3, Float64}) .* (bbox_max - bbox_min)
-            sd = _compute_signed_distance_octree(p, octree)
-            global n_checked += 1
-            global positive_sd_count += sd > 1.0e-10 ? 1 : 0
+            for _ in 1:5
+                p = bbox_min + rand(SVector{3, Float64}) .* (bbox_max - bbox_min)
+                sd = _compute_signed_distance_octree(p, octree)
+                global n_checked += 1
+                global positive_sd_count += sd > 1.0e-10 ? 1 : 0
+            end
         end
-    end
 
-    @test n_checked > 0
-    @test positive_sd_count == 0
+        @test n_checked > 0
+        @test positive_sd_count == 0
+    end
 end

@@ -2,10 +2,9 @@
 
 @testitem "Octree invalid alpha throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
-    octree = TriangleOctree(mesh; classify_leaves = true)
 
-    @test_throws ArgumentError Octree(octree; alpha = -1.0)
-    @test_throws ArgumentError Octree(octree; alpha = 0.0)
+    @test_throws ArgumentError Octree(mesh; alpha = -1.0)
+    @test_throws ArgumentError Octree(mesh; alpha = 0.0)
 end
 
 @testitem "_extract_min_spacing methods" setup = [CommonImports, OctreeTestData] begin

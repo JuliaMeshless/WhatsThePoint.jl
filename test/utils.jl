@@ -1,11 +1,3 @@
-@testitem "findmin_turbo" setup = [TestData, CommonImports] begin
-    @test WhatsThePoint.findmin_turbo([3.0, 1.0, 4.0, 1.0, 5.0]) == (1.0, 2)
-    @test WhatsThePoint.findmin_turbo([5.0, 4.0, 3.0, 2.0, 1.0]) == (1.0, 5)
-    @test WhatsThePoint.findmin_turbo([1.0]) == (1.0, 1)
-    @test WhatsThePoint.findmin_turbo([10, 20, 5, 15]) == (5, 3)
-    @test WhatsThePoint.findmin_turbo([-1.0, -5.0, 3.0]) == (-5.0, 2)
-end
-
 @testitem "_angle SVector{2}" setup = [TestData, CommonImports] begin
     u = SVector(1.0, 0.0)
     v = SVector(0.0, 1.0)

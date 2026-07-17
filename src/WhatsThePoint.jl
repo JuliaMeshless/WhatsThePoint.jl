@@ -37,7 +37,6 @@ export metrics, spacing_metrics, spacing_fidelity_metrics
 include("geometry.jl")
 
 # Octree spatial indexing
-include("octree/traits.jl")
 include("octree/spatial_octree.jl")
 include("octree/geometric_utils.jl")
 include("octree/triangle_octree.jl")

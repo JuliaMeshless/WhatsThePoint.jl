@@ -7,7 +7,8 @@
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     @test octree.num_boxes[] == 1
-    @test octree.coords[1] == SVector(0, 0, 0, 1)
+    @test octree.cell[1] == SVector(0, 0, 0) &&
+        octree.level[1] == 1
     @test octree.parent[1] == 0
     @test is_leaf(octree, 1)
     @test !has_children(octree, 1)
@@ -44,8 +45,10 @@ end
     @test all(is_leaf(octree, c) for c in children)
 
     # Check child coordinates
-    @test octree.coords[children[1]] == SVector(0, 0, 0, 2)  # (0,0,0) at level 2
-    @test octree.coords[children[8]] == SVector(1, 1, 1, 2)  # (1,1,1) at level 2
+    @test octree.cell[children[1]] == SVector(0, 0, 0) &&
+        octree.level[children[1]] == 2  # (0,0,0) at level 2
+    @test octree.cell[children[8]] == SVector(1, 1, 1) &&
+        octree.level[children[8]] == 2  # (1,1,1) at level 2
 
     # Check child sizes
     @test all(box_size(octree, c) ≈ 5.0 for c in children)
@@ -75,12 +78,14 @@ end
     # Query point in first octant (0,0,0)
     point = SVector(2.0, 2.0, 2.0)
     leaf = find_leaf(octree, point)
-    @test octree.coords[leaf] == SVector(0, 0, 0, 2)
+    @test octree.cell[leaf] == SVector(0, 0, 0) &&
+        octree.level[leaf] == 2
 
     # Query point in last octant (1,1,1)
     point = SVector(8.0, 8.0, 8.0)
     leaf = find_leaf(octree, point)
-    @test octree.coords[leaf] == SVector(1, 1, 1, 2)
+    @test octree.cell[leaf] == SVector(1, 1, 1) &&
+        octree.level[leaf] == 2
 
     # Query point on boundary (should go to one side consistently)
     point = SVector(5.0, 5.0, 5.0)
@@ -102,12 +107,14 @@ end
     # Neighbor in +x direction should be (1,0,0)
     neighbors_x = find_neighbor(octree, first_child, 2)  # +x direction
     @test length(neighbors_x) == 1
-    @test octree.coords[neighbors_x[1]] == SVector(1, 0, 0, 2)
+    @test octree.cell[neighbors_x[1]] == SVector(1, 0, 0) &&
+        octree.level[neighbors_x[1]] == 2
 
     # Neighbor in +y direction should be (0,1,0)
     neighbors_y = find_neighbor(octree, first_child, 4)  # +y direction
     @test length(neighbors_y) == 1
-    @test octree.coords[neighbors_y[1]] == SVector(0, 1, 0, 2)
+    @test octree.cell[neighbors_y[1]] == SVector(0, 1, 0) &&
+        octree.level[neighbors_y[1]] == 2
 
     # Neighbor in -x direction should be empty (boundary)
     neighbors_boundary = find_neighbor(octree, first_child, 1)  # -x direction
@@ -143,40 +150,6 @@ end
     @test length(octree.element_lists[1]) == 0
 end
 
-@testitem "SpatialOctree Subdivision Criteria" setup = [CommonImports] begin
-    using WhatsThePoint: SpatialOctree, should_subdivide,
-        MaxElementsCriterion, SizeCriterion, AndCriterion
-
-    origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int, Float64}(origin, 10.0)
-
-    # Add elements to root
-    for i in 1:60
-        push!(octree.element_lists[1], i)
-    end
-
-    # MaxElementsCriterion
-    criterion = MaxElementsCriterion(50)
-    @test should_subdivide(criterion, octree, 1) == true
-
-    criterion2 = MaxElementsCriterion(100)
-    @test should_subdivide(criterion2, octree, 1) == false
-
-    # SizeCriterion
-    criterion3 = SizeCriterion(15.0)
-    @test should_subdivide(criterion3, octree, 1) == false
-
-    criterion4 = SizeCriterion(5.0)
-    @test should_subdivide(criterion4, octree, 1) == true
-
-    # AndCriterion
-    criterion5 = AndCriterion((MaxElementsCriterion(50), SizeCriterion(5.0)))
-    @test should_subdivide(criterion5, octree, 1) == true
-
-    criterion6 = AndCriterion((MaxElementsCriterion(100), SizeCriterion(5.0)))
-    @test should_subdivide(criterion6, octree, 1) == false
-end
-
 @testitem "SpatialOctree Leaf Iteration" setup = [CommonImports] begin
     using WhatsThePoint: SpatialOctree, subdivide!, all_leaves, is_leaf, has_children
 
@@ -205,29 +178,26 @@ end
 
 @testitem "SpatialOctree Balancing" setup = [CommonImports] begin
     using WhatsThePoint: SpatialOctree, subdivide!, all_leaves, balance_octree!,
-        SizeCriterion, needs_balancing
+        SubdivisionCriterion, should_subdivide, can_subdivide, needs_balancing, box_size
+
+    # Minimal size-only criterion for the balancing test (no triangle index needed).
+    struct SizeCriterion{T <: Real} <: SubdivisionCriterion
+        h_min::T
+    end
+    WhatsThePoint.should_subdivide(c::SizeCriterion, tree, box_idx) = box_size(tree, box_idx) > c.h_min
+    WhatsThePoint.can_subdivide(c::SizeCriterion, tree, box_idx) = box_size(tree, box_idx) > c.h_min
 
     origin = SVector(0.0, 0.0, 0.0)
     octree = SpatialOctree{Int, Float64}(origin, 10.0)
 
     # Create imbalanced tree
-    # Subdivide root
     children_1 = subdivide!(octree, 1)
-
-    # Subdivide first child
     children_2 = subdivide!(octree, children_1[1])
-
-    # Subdivide one of those children (creating 3-level difference)
     subdivide!(octree, children_2[1])
 
-    # Now we have boxes at levels 2, 4, 8 next to each other
-    # Balance should fix this
-
-    criterion = SizeCriterion(0.1)  # Allow small boxes
+    criterion = SizeCriterion(0.1)
     balance_octree!(octree, criterion)
 
-    # After balancing, check 2:1 constraint
-    # All neighbors should differ by at most 1 level
     for leaf_idx in all_leaves(octree)
         @test !needs_balancing(octree, leaf_idx)
     end
@@ -258,40 +228,22 @@ end
 
     # Verify all arrays grew consistently
     @test length(octree.parent) >= 9
-    @test length(octree.children) >= 9
-    @test length(octree.coords) >= 9
+    @test length(octree.first_child) >= 9
+    @test length(octree.cell) >= 9
     @test length(octree.element_lists) >= 9
 
     # Verify children have correct coordinates after resize
-    @test octree.coords[children[1]] == SVector(0, 0, 0, 2)
-    @test octree.coords[children[8]] == SVector(1, 1, 1, 2)
+    @test octree.cell[children[1]] == SVector(0, 0, 0) &&
+        octree.level[children[1]] == 2
+    @test octree.cell[children[8]] == SVector(1, 1, 1) &&
+        octree.level[children[8]] == 2
 
     # Second subdivision should also work (may trigger another resize)
     grandchildren = subdivide!(octree, children[1])
     @test octree.num_boxes[] == 17
     @test all(is_leaf(octree, gc) for gc in grandchildren)
-    @test octree.coords[grandchildren[1]] == SVector(0, 0, 0, 4)
-end
-
-@testitem "SpatialOctree can_subdivide criteria" setup = [CommonImports] begin
-    using WhatsThePoint: SpatialOctree, can_subdivide,
-        MaxElementsCriterion, SizeCriterion, AndCriterion
-
-    origin = SVector(0.0, 0.0, 0.0)
-    octree = SpatialOctree{Int, Float64}(origin, 10.0)
-
-    # MaxElementsCriterion: always true (no physical limit)
-    @test can_subdivide(MaxElementsCriterion(50), octree, 1) == true
-    @test can_subdivide(MaxElementsCriterion(0), octree, 1) == true
-
-    # SizeCriterion: checks box_size > h_min
-    @test can_subdivide(SizeCriterion(5.0), octree, 1) == true   # 10 > 5
-    @test can_subdivide(SizeCriterion(15.0), octree, 1) == false  # 10 < 15
-    @test can_subdivide(SizeCriterion(10.0), octree, 1) == false  # 10 == 10
-
-    # AndCriterion: all criteria must pass
-    @test can_subdivide(AndCriterion(MaxElementsCriterion(50), SizeCriterion(5.0)), octree, 1) == true
-    @test can_subdivide(AndCriterion(MaxElementsCriterion(50), SizeCriterion(15.0)), octree, 1) == false
+    @test octree.cell[grandchildren[1]] == SVector(0, 0, 0) &&
+        octree.level[grandchildren[1]] == 4
 end
 
 @testitem "SpatialOctree all_boxes" setup = [CommonImports] begin
@@ -350,7 +302,7 @@ end
     ) == false
 
     # Predicate selects a single leaf by coords — true only when query overlaps it
-    target = only(findall(c -> c == SVector(1, 1, 1, 2), tree.coords[1:tree.num_boxes[]]))
+    target = only(findall(i -> tree.cell[i] == SVector(1, 1, 1) && tree.level[i] == 2, 1:tree.num_boxes[]))
     predicate = idx -> idx == target
     @test any_leaf_overlapping(
         tree, SVector(6.0, 6.0, 6.0), SVector(9.0, 9.0, 9.0), predicate
@@ -373,12 +325,14 @@ end
     # Search for (1,0,0) at level 2 — navigates root→child 2 and matches
     result = find_boxes_at_coords(octree, 1, 0, 0, 2)
     @test result == [children_L1[2]]
-    @test octree.coords[result[1]] == SVector(1, 0, 0, 2)
+    @test octree.cell[result[1]] == SVector(1, 0, 0) &&
+        octree.level[result[1]] == 2
 
     # Also verify via find_neighbor: grandchild (1,0,0,4) looking -x → (0,0,0,4)
     result = find_neighbor(octree, children_L2[2], 1)  # (1,0,0,4), -x direction
     @test length(result) == 1
-    @test octree.coords[result[1]] == SVector(0, 0, 0, 4)
+    @test octree.cell[result[1]] == SVector(0, 0, 0) &&
+        octree.level[result[1]] == 4
 
     # --- Line 412: neighbor outside domain ---
     # Grandchild (0,0,0,4) looking -x: i_n = -1 → outside domain
@@ -405,5 +359,59 @@ end
     # Navigates to child (1,0,0,2) which is a leaf → returns coarser box
     result = find_neighbor(octree, children_L2[2], 2)  # +x
     @test length(result) == 1
-    @test octree.coords[result[1]] == SVector(1, 0, 0, 2)
+    @test octree.cell[result[1]] == SVector(1, 0, 0) &&
+        octree.level[result[1]] == 2
+end
+
+@testitem "SpatialTree quadtree (N=2) genericity" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialTree, subdivide!, find_leaf, is_leaf, box_bounds, n_children
+    using StaticArrays
+
+    tree = SpatialTree{2, Int, Float64}(SVector(0.0, 0.0), 1.0)
+    @test n_children(tree) == 4                     # 2^2, the same generic code as the octree
+
+    # complete depth-3 quadtree from the generic subdivide! (in a function to
+    # avoid loop soft-scope on the reassigned frontier)
+    function build_complete!(t, depth)
+        frontier = [1]
+        for _ in 1:depth
+            nxt = Int[]
+            for b in frontier
+                append!(nxt, collect(subdivide!(t, b)))
+            end
+            frontier = nxt
+        end
+        return frontier
+    end
+    leaves = build_complete!(tree, 3)
+    @test length(leaves) == 4^3                     # 64 leaves at depth 3
+
+    # every located leaf must actually contain its query point
+    for _ in 1:2000
+        p = SVector(rand(), rand())
+        b = find_leaf(tree, p)
+        @test is_leaf(tree, b)
+        lo, hi = box_bounds(tree, b)
+        @test all(lo .<= p) && all(p .<= hi)
+    end
+end
+
+@testitem "SpatialTree child-contiguity invariant" setup = [CommonImports] begin
+    using WhatsThePoint: SpatialTree, subdivide!, children, n_children, is_leaf
+    using StaticArrays
+
+    # first_child assumes children are a contiguous 2^N block — guard it for N=2 and N=3.
+    for N in (2, 3)
+        tree = SpatialTree{N, Int, Float64}(zero(SVector{N, Float64}), 1.0)
+        rng = subdivide!(tree, 1)
+        fc = tree.first_child[1]
+        @test collect(rng) == collect(fc:(fc + n_children(tree) - 1))
+        @test collect(children(tree, 1)) == collect(rng)
+        @test length(rng) == n_children(tree)
+        @test !is_leaf(tree, 1)
+        # a grandchild subdivision is also a contiguous block
+        g = subdivide!(tree, first(rng))
+        gfc = tree.first_child[first(rng)]
+        @test collect(g) == collect(gfc:(gfc + n_children(tree) - 1))
+    end
 end

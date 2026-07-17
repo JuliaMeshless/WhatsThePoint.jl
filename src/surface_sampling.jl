@@ -45,13 +45,16 @@ function sample_surface(
     n_tri > 0 || throw(ArgumentError("mesh has no elements"))
     f = T(factor)
 
+    # Build-once triangle cache; the dart loop below reads it per candidate.
+    index = TriangleIndex(T, mesh)
+
     # Triangle areas (for area-weighted sampling) and domain bounds.
     tri_areas = Vector{T}(undef, n_tri)
     gmin = SVector{3, T}(typemax(T), typemax(T), typemax(T))
     gmax = SVector{3, T}(typemin(T), typemin(T), typemin(T))
     r_min = typemax(T)
     for i in 1:n_tri
-        v1, v2, v3 = _get_triangle_vertices(T, mesh, i)
+        v1, v2, v3 = _get_triangle_vertices(index, i)
         tri_areas[i] = norm(cross(v2 - v1, v3 - v1)) / 2
         gmin = min.(gmin, min.(v1, min.(v2, v3)))
         gmax = max.(gmax, max.(v1, max.(v2, v3)))
@@ -70,7 +73,7 @@ function sample_surface(
     misses = 0
     while length(pts) < max_points && misses < stall_limit
         tri = clamp(searchsortedfirst(cum_areas, rand(T) * total_area), 1, n_tri)
-        v1, v2, v3 = _get_triangle_vertices(T, mesh, tri)
+        v1, v2, v3 = _get_triangle_vertices(index, tri)
         # Uniform point in the triangle (square-root trick).
         su = sqrt(rand(T))
         v = rand(T)
@@ -92,7 +95,7 @@ function sample_surface(
 
     len_unit = Unitful.unit(Meshes.to(first(Meshes.vertices(mesh)))[1])
     sample_points = [Point((c .* len_unit)...) for c in pts]
-    sample_normals = [_get_triangle_normal(T, mesh, t) for t in tri_of]
+    sample_normals = [@inbounds index.face[t] for t in tri_of]
     # Total-area-preserving shares, proportional to the local disk area.
     w = rs .^ 2
     sample_areas = (total_area / sum(w)) .* w .* len_unit^2
