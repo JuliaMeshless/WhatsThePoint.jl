@@ -13,7 +13,7 @@
   <a href="https://codecov.io/gh/JuliaMeshless/WhatsThePoint.jl"><img src="https://codecov.io/gh/JuliaMeshless/WhatsThePoint.jl/graph/badge.svg?token=S3BQ5FIULZ" alt="Coverage"></a>
 </p>
 
-![From surface points to a discretized volume to meshless stencils](docs/src/assets/hero-banner.png)
+![Pipeline: sample the surface, fill the volume, connect meshless stencils](docs/src/assets/hero-banner.png)
 
 Meshless methods — RBF-FD, generalized finite differences, SPH — need well-distributed point clouds with neighbor connectivity, but getting from a CAD surface to solver-ready points is tedious. WhatsThePoint.jl handles the complete pipeline: surface import, volume discretization, distribution optimization, and stencil connectivity, in a few lines of Julia. Part of the [JuliaMeshless](https://github.com/JuliaMeshless) organization.
 
@@ -55,7 +55,7 @@ visualize(cloud; markersize=0.15)
 ```
 
 <p align="center">
-  <img src="docs/src/assets/turntable.gif" alt="Rotating point-cloud discretization of the Stanford bunny" width="480">
+  <img src="docs/src/assets/pipeline.gif" alt="Build-up of the meshless pipeline on the Stanford bunny: surface sampling, volume fill, node repulsion, stencil connectivity" width="480">
 </p>
 
 ## Features

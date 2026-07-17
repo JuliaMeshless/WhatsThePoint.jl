@@ -39,6 +39,10 @@ With `max_growth > 0`, the prescribed spacing is replaced by its gradient-limite
 
 A too-coarse spacing (one the domain cannot host an interior at) is clamped with a loud warning instead of silently producing an empty cloud; run [`suggest_spacing`](@ref) first to pick a viable spacing deliberately.
 
+![Adaptive octree subdivision over a vessel bifurcation](assets/octree-leaves.png)
+
+*Octree leaves crossing the vessel's mid-plane — boxes subdivide adaptively where the geometry lives, fine along the wall and coarse in the lumen, and their size sets the local candidate density.*
+
 ## Parameters
 
 The constructor supports the same octree controls used elsewhere, plus placement options for candidate generation:

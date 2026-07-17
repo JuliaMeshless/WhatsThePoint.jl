@@ -57,6 +57,12 @@ cloud = discretize(boundary, spacing; alg)
 
 `max_growth` caps how fast the spacing may vary between neighboring points (a Lipschitz limit on `|∇h|`) — steep boundary layers stay sharp at the wall but transition smoothly into the bulk. See the [Octree Algorithm](octree.md) page for details.
 
+The result of exactly this recipe on a vessel bifurcation:
+
+![Spacing-graded fill of a vessel bifurcation](assets/bifurcation-spacing.png)
+
+*Interior cross-section of a vessel bifurcation filled with `Octree` + `BoundaryLayerSpacing`, each point colored by its local target spacing h(x) — red at the wall, blue in the bulk.*
+
 For a complete runnable script, see:
 - [examples/octree_boundary_layer.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/octree_boundary_layer.jl)
 
