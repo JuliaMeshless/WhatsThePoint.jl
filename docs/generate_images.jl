@@ -260,7 +260,7 @@ function generate_bifurcation_spacing(bif)
         label = "h(x)  [mm]", labelcolor = LABEL_GRAY,
         ticklabelcolor = LABEL_GRAY, tickcolor = LABEL_GRAY, spinewidth = 0,
     )
-    save_atomic(joinpath(ASSETS_DIR, "bifurcation-spacing.png"), fig; px_per_unit = 2)
+    save_atomic(joinpath(ASSETS_DIR, "bifurcation-spacing.png"), fig; px_per_unit = 1)
     return println("  Saved bifurcation-spacing.png ($(length(keep)) slab points)")
 end
 
@@ -292,7 +292,7 @@ function generate_octree_leaves(bif)
     ax = bare_ax3(fig[1, 1]; azimuth = -π / 2, elevation = π / 2 - 0.001)
     scatter!(ax, bx[wall], by[wall], bz[wall]; color = BOUNDARY_RED, markersize = 6)
     linesegments!(ax, segs; color = (JULIA_PURPLE, 0.55), linewidth = 1.3)
-    save_atomic(joinpath(ASSETS_DIR, "octree-leaves.png"), fig; px_per_unit = 2)
+    save_atomic(joinpath(ASSETS_DIR, "octree-leaves.png"), fig; px_per_unit = 1)
     return println("  Saved octree-leaves.png")
 end
 
@@ -322,7 +322,7 @@ function generate_isinside_classification(bif)
     scatter!(ax, qx[.!inside], qy[.!inside]; color = (CONTEXT_GRAY, 0.5), markersize = 3.5)
     scatter!(ax, qx[inside], qy[inside]; color = VOLUME_BLUE, markersize = 6)
     scatter!(ax, bx[wall], by[wall]; color = BOUNDARY_RED, markersize = 5)
-    save_atomic(joinpath(ASSETS_DIR, "isinside-classification.png"), fig; px_per_unit = 1.5)
+    save_atomic(joinpath(ASSETS_DIR, "isinside-classification.png"), fig; px_per_unit = 1)
     return println("  Saved isinside-classification.png")
 end
 
@@ -333,7 +333,7 @@ end
 function generate_hero(scene)
     fig = Figure(; size = (1100, 1100), backgroundcolor = :transparent)
     cutaway_panel!(fig[1, 1], scene)
-    save_atomic(joinpath(PUBLIC_DIR, "hero.png"), fig; px_per_unit = 2)
+    save_atomic(joinpath(PUBLIC_DIR, "hero.png"), fig; px_per_unit = 0.6)
     return println("  Saved public/hero.png")
 end
 
@@ -351,18 +351,18 @@ function generate_hero_banner(scene)
     end
     colgap!(fig.layout, 24)
     rowgap!(fig.layout, 4)
-    save_atomic(joinpath(ASSETS_DIR, "hero-banner.png"), fig; px_per_unit = 1)
+    save_atomic(joinpath(ASSETS_DIR, "hero-banner.png"), fig; px_per_unit = 0.5)
     return println("  Saved hero-banner.png")
 end
 
 function generate_bunny_pair(scene)
     fig = Figure(; size = (900, 900), backgroundcolor = :transparent)
     boundary_panel!(fig[1, 1], scene)
-    save_atomic(joinpath(ASSETS_DIR, "bunny-boundary.png"), fig; px_per_unit = 2)
+    save_atomic(joinpath(ASSETS_DIR, "bunny-boundary.png"), fig; px_per_unit = 1)
 
     fig2 = Figure(; size = (900, 900), backgroundcolor = :transparent)
     cutaway_panel!(fig2[1, 1], scene)
-    save_atomic(joinpath(ASSETS_DIR, "bunny-discretized.png"), fig2; px_per_unit = 2)
+    save_atomic(joinpath(ASSETS_DIR, "bunny-discretized.png"), fig2; px_per_unit = 1)
     return println("  Saved bunny-boundary.png, bunny-discretized.png")
 end
 
@@ -577,7 +577,7 @@ function generate_normals_orientation(; k = 10, n_arrows = 300, shaft = 2.5)
     fig = Figure(; size = (1600, 900), backgroundcolor = :transparent)
     normals_panel!(fig[1, 1], x, y, z, origins, before_dirs, before_cols)
     normals_panel!(fig[1, 2], x, y, z, origins, after_dirs, fill(JULIA_PURPLE, length(sel)))
-    save_atomic(joinpath(ASSETS_DIR, "normals-orientation.png"), fig; px_per_unit = 2)
+    save_atomic(joinpath(ASSETS_DIR, "normals-orientation.png"), fig; px_per_unit = 1)
     return println("  Saved normals-orientation.png")
 end
 
@@ -646,7 +646,7 @@ function generate_2d_discretization()
     cloud, _ = silhouette_cloud()
     fig = Figure(; size = (700, 640), backgroundcolor = :transparent)
     scatter_cloud2d!(fig[1, 1], cloud)
-    save_atomic(joinpath(ASSETS_DIR, "2d-discretization.png"), fig; px_per_unit = 2)
+    save_atomic(joinpath(ASSETS_DIR, "2d-discretization.png"), fig; px_per_unit = 1)
     return println("  Saved 2d-discretization.png ($(length(cloud)) points)")
 end
 
@@ -663,7 +663,7 @@ function generate_repel_comparison()
     fig = Figure(; size = (1400, 640), backgroundcolor = :transparent)
     scatter_cloud2d!(fig[1, 1], cloud_before; volume_size = 4, boundary_size = 6)
     scatter_cloud2d!(fig[1, 2], cloud_after; volume_size = 4, boundary_size = 6)
-    save_atomic(joinpath(ASSETS_DIR, "repel-comparison.png"), fig; px_per_unit = 2)
+    save_atomic(joinpath(ASSETS_DIR, "repel-comparison.png"), fig; px_per_unit = 1)
     println("  Saved repel-comparison.png")
     return println("  Convergence: $(conv[end]) after $(length(conv)) iterations")
 end
@@ -688,7 +688,7 @@ function generate_algorithm_comparison()
         depth_sorted_meshscatter!(ax, vx, vy, vz, vcol, fill(1.1, length(vx)))
         println("  $(nameof(typeof(alg))): $(length(cloud)) points")
     end
-    save_atomic(joinpath(ASSETS_DIR, "algorithm-comparison.png"), fig; px_per_unit = 2)
+    save_atomic(joinpath(ASSETS_DIR, "algorithm-comparison.png"), fig; px_per_unit = 1)
     return println("  Saved algorithm-comparison.png")
 end
 

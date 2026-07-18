@@ -18,18 +18,24 @@ WhatsThePoint.jl is a Julia package providing tools for manipulating point cloud
 # Run full test suite
 julia --project -e 'using Pkg; Pkg.test()'
 
-# Build documentation locally
+# Build documentation locally (full build, minutes; output in docs/build/1)
 julia --project=docs docs/make.jl
-
-# Serve docs locally with live rebuild — run from the repo ROOT, not docs/
-# (serves docs/build/1; saves under docs/src/ trigger a full rebuild)
-julia --project=docs -e 'using LiveServer; servedocs(buildfoldername="build/1", launch_browser=true)'
 ```
 
-Local docs serving gotchas:
-- Always enter at `http://localhost:8000/` and navigate within the site. The build uses clean URLs (`/guide` → `guide.html`), which LiveServer cannot resolve on a hard load/refresh — deep links 404 unless you append `.html`.
-- The first build takes minutes (loads the package, npm install/build); later rebuilds are much faster since the package stays loaded. During a rebuild the served folder is deleted, so refreshes 404 until it finishes.
-- Serving `docs/build` instead of `docs/build/1` (e.g. plain `servedocs()`) yields a directory listing and unstyled pages — asset paths are root-absolute.
+Preferred local docs workflow — Vitepress dev server with hot reload (styled, instant):
+
+```bash
+# 1. Generate the markdown only (VITEPRESS_DEV skips the slow Vitepress build)
+VITEPRESS_DEV=1 julia --project=docs docs/make.jl
+# 2. Serve with hot reload (from docs/; npm install once first)
+cd docs && npm install && npm run docs:dev
+```
+
+Re-run step 1 after editing `docs/src/*.md`; the dev server picks up the regenerated markdown automatically. `docs/package.json` is committed (DocumenterVitepress uses it instead of its bundled template) — keep `package-lock.json` committed too so npm deps stay pinned.
+
+Full-build serving gotchas (only if serving `docs/build/1` directly):
+- The built site's asset paths are root-absolute (base `/`), so `docs/build/1` must be the web root — opening `index.html` via `file://` or serving `docs/build` yields unstyled pages.
+- Clean URLs (`/guide` → `guide.html`) mean deep links 404 on static servers unless you append `.html`; enter at the site root and navigate from there.
 
 Tests use `TestItemRunner.jl` with `@testitem` macros — each test item is self-contained and runs independently. There is no way to run a single test file in isolation; `@run_package_tests` discovers and runs all `@testitem` blocks.
 
