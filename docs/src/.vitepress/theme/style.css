@@ -150,6 +150,14 @@ font-feature-settings: "calt" off;
     --vp-home-hero-image-filter: blur(72px);
   }
 }
+/* Component: home Quick Example */
+
+.quick-example img {
+  display: block;
+  width: 50%;
+  margin: 0 auto;
+}
+
 /* Component: MathJax */
 
 

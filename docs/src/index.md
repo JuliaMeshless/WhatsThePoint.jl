@@ -56,7 +56,7 @@ CurrentModule = WhatsThePoint
 ```
 
 ```@raw html
-<div class="vp-doc" style="width:80%; margin:auto">
+<div class="vp-doc quick-example" style="width:80%; margin:auto">
 ```
 
 ## Quick Example

@@ -12,7 +12,6 @@
 import WhatsThePoint as WTP
 using CairoMakie
 using LinearAlgebra: dot, norm, normalize
-using StaticArrays: SVector
 using Unitful: m, ustrip
 
 const ASSETS_DIR = joinpath(@__DIR__, "src", "assets")
@@ -76,7 +75,13 @@ surface_normals(boundary) = first(values(WTP.surfaces(boundary))).geoms.normal
 # 2D; shading each point by its surface normal restores depth.
 lambert_shades(normals) = [clamp(dot(n, LIGHT_DIR), 0, 1) for n in normals]
 
-view_depth(x, y, z) = @. x * CAMDIR[1] + y * CAMDIR[2] + z * CAMDIR[3]
+view_depth(x, y, z; camdir = CAMDIR) = @. x * camdir[1] + y * camdir[2] + z * camdir[3]
+
+camera_dir(azimuth, elevation) = [
+    cos(elevation) * cos(azimuth),
+    cos(elevation) * sin(azimuth),
+    sin(elevation),
+]
 
 # 12 unique cube edges as Point3f pairs for one linesegments! call per box set.
 # Corners are indexed by bits (x=1, y=2, z=4); each edge joins corners differing
@@ -117,8 +122,8 @@ end
 # CairoMakie composites separate plot objects in creation order, so mixed
 # boundary/volume scenes must go through a single meshscatter sorted
 # back-to-front along the camera direction.
-function depth_sorted_meshscatter!(ax, x, y, z, colors, sizes)
-    ord = sortperm(view_depth(x, y, z))
+function depth_sorted_meshscatter!(ax, x, y, z, colors, sizes; camdir = CAMDIR)
+    ord = sortperm(view_depth(x, y, z; camdir))
     return meshscatter!(ax, x[ord], y[ord], z[ord]; markersize = sizes[ord], color = colors[ord])
 end
 
@@ -143,16 +148,16 @@ end
 
 boundary_colors(scene) = [RGBAf(get(RED_GRAD, s)) for s in scene.bshade]
 
-# Cutaway: remove the shell quarter {x > 0, y < 0} facing the camera and show
-# the volume fill inside it. The wedge is inset by ~one spacing so interior
-# points don't speckle through the pores of the remaining shell.
-function cutaway_arrays(scene; inset = 1.2)
+# Cutaway: remove the shell quarter {x > 0, y < 0} and show the volume fill
+# inside it. The wedge is inset by ~one spacing so interior points don't
+# speckle through the pores of the remaining shell.
+function cutaway_arrays(scene; inset = 1.2, bsize = 0.55, vsize = 0.5, camdir = CAMDIR)
     (; bx, by, bz, bshade, vx, vy, vz) = scene
     keep = findall(i -> !(bx[i] > 0 && by[i] < 0), eachindex(bx))
     wedge = findall(i -> (vx[i] > inset && vy[i] < -inset), eachindex(vx))
 
     bcol = [RGBAf(get(RED_GRAD, s)) for s in bshade[keep]]
-    vdepth = view_depth(vx[wedge], vy[wedge], vz[wedge])
+    vdepth = view_depth(vx[wedge], vy[wedge], vz[wedge]; camdir)
     lo, hi = extrema(vdepth)
     vcol = [RGBAf(get(BLUE_GRAD, (d - lo) / (hi - lo))) for d in vdepth]
 
@@ -160,7 +165,7 @@ function cutaway_arrays(scene; inset = 1.2)
     y = vcat(by[keep], vy[wedge])
     z = vcat(bz[keep], vz[wedge])
     colors = vcat(bcol, vcol)
-    sizes = vcat(fill(0.55, length(keep)), fill(0.5, length(wedge)))
+    sizes = vcat(fill(bsize, length(keep)), fill(vsize, length(wedge)))
     return x, y, z, colors, sizes
 end
 
@@ -173,9 +178,12 @@ function boundary_panel!(figpos, scene)
     return ax
 end
 
-function cutaway_panel!(figpos, scene)
-    ax = bare_ax3(figpos)
-    depth_sorted_meshscatter!(ax, cutaway_arrays(scene)...)
+# `azimuth` swings the camera relative to the fixed cut plane — the default
+# views the cut edge-on; ~1.5π faces it obliquely.
+function cutaway_panel!(figpos, scene; azimuth = AZIMUTH, kwargs...)
+    ax = bare_ax3(figpos; azimuth)
+    camdir = camera_dir(azimuth, ELEVATION)
+    depth_sorted_meshscatter!(ax, cutaway_arrays(scene; camdir, kwargs...)...; camdir)
     return ax
 end
 
@@ -296,44 +304,16 @@ function generate_octree_leaves(bif)
     return println("  Saved octree-leaves.png")
 end
 
-# A regular grid of query points on the mid-z plane classified by the
-# octree-accelerated isinside — a lattice makes the inside/outside frontier
-# crisp where random samples read as noise.
-function generate_isinside_classification(bif)
-    println("Generating isinside classification figure...")
-    bx, by, bz = coords_xyz(bif.boundary)
-    zmid = (minimum(bz) + maximum(bz)) / 2
-    margin = 0.003
-    step = 0.0005
-    xs = range(minimum(bx) - margin, maximum(bx) + margin; step)
-    ys = range(minimum(by) - margin, maximum(by) + margin; step)
-    # the octree's machine type follows the STL parse (Float32); isinside
-    # dispatches on matching scalar types
-    query = [SVector{3, Float32}(x, y, zmid) for x in xs for y in ys]
-    inside = WTP.isinside(query, bif.octree)
-    println("  $(count(inside)) / $(length(query)) grid points inside")
-
-    qx = getindex.(query, 1)
-    qy = getindex.(query, 2)
-    wall = findall(z -> abs(z - zmid) < 0.001, bz)
-
-    fig = Figure(; size = (1300, 750), backgroundcolor = :transparent)
-    ax = bare_ax2(fig[1, 1])
-    scatter!(ax, qx[.!inside], qy[.!inside]; color = (CONTEXT_GRAY, 0.5), markersize = 3.5)
-    scatter!(ax, qx[inside], qy[inside]; color = VOLUME_BLUE, markersize = 6)
-    scatter!(ax, bx[wall], by[wall]; color = BOUNDARY_RED, markersize = 5)
-    save_atomic(joinpath(ASSETS_DIR, "isinside-classification.png"), fig; px_per_unit = 1)
-    return println("  Saved isinside-classification.png")
-end
-
 # ============================================================================
 # Hero images
 # ============================================================================
 
+# The hero views the cutaway obliquely so the interior fill reads at hero size
+# while the bunny's face stays intact.
 function generate_hero(scene)
     fig = Figure(; size = (1100, 1100), backgroundcolor = :transparent)
-    cutaway_panel!(fig[1, 1], scene)
-    save_atomic(joinpath(PUBLIC_DIR, "hero.png"), fig; px_per_unit = 0.6)
+    cutaway_panel!(fig[1, 1], scene; azimuth = 1.5π, bsize = 0.65, vsize = 0.6)
+    save_atomic(joinpath(PUBLIC_DIR, "hero.png"), fig; px_per_unit = 1)
     return println("  Saved public/hero.png")
 end
 
@@ -549,14 +529,17 @@ end
 
 function normals_panel!(figpos, x, y, z, origins, dirs, colors)
     ax = bare_ax3(figpos)
-    meshscatter!(ax, x, y, z; markersize = 0.7, color = (CONTEXT_GRAY, 0.6))
-    arrows3d!(ax, origins, dirs; color = colors)
+    meshscatter!(ax, x, y, z; markersize = 0.6, color = (CONTEXT_GRAY, 0.45))
+    arrows3d!(
+        ax, origins, dirs;
+        color = colors, shaftradius = 0.08, tipradius = 0.22, tiplength = 0.45,
+    )
     return ax
 end
 
 # PCA gives each normal an axis but an arbitrary sign — the "before" panel
 # colors the arrows that MST+DFS orientation will flip.
-function generate_normals_orientation(; k = 10, n_arrows = 300, shaft = 2.5)
+function generate_normals_orientation(; k = 10, n_arrows = 300, shaft = 4.0)
     println("Generating normals orientation figure...")
     mesh = WTP.import_mesh(STL, m)
     bnd = WTP.PointBoundary(mesh, WTP.ConstantSpacing(4.0m))
@@ -582,48 +565,16 @@ function generate_normals_orientation(; k = 10, n_arrows = 300, shaft = 2.5)
 end
 
 # ============================================================================
-# 2D Stanford Bunny silhouette (projected from 3D bunny.stl)
+# 2D starfish domain r(θ) = 1 + ε sin(kθ) — the classic RBF-FD test shape
 # ============================================================================
 
-function bunny_silhouette(; n_bins = 200)
-    boundary3d = WTP.PointBoundary(STL, m)
-    coords = WTP.to(boundary3d)
-
-    # Project to XZ plane (side view)
-    xs = [ustrip(c[1]) for c in coords]
-    zs = [ustrip(c[3]) for c in coords]
-
-    cx = sum(xs) / length(xs)
-    cz = sum(zs) / length(zs)
-
-    # Angular binning — take outermost point per bin for silhouette
-    angles = atan.(zs .- cz, xs .- cx)
-    dists = @. sqrt((xs - cx)^2 + (zs - cz)^2)
-
-    bin_edges = range(-π, π; length = n_bins + 1)
-    outline_x = Float64[]
-    outline_z = Float64[]
-
-    for i in 1:n_bins
-        mask = @. (bin_edges[i] <= angles) & (angles < bin_edges[i + 1])
-        if any(mask)
-            idx = findall(mask)
-            best = idx[argmax(dists[idx])]
-            push!(outline_x, xs[best])
-            push!(outline_z, zs[best])
-        end
-    end
-
-    pts = WTP.Point.(collect(zip(outline_x, outline_z)))
-    return WTP.PointBoundary(pts)
-end
-
-function silhouette_cloud()
-    boundary = bunny_silhouette()
-    coords = WTP.to(boundary)
-    xs = [ustrip(c[1]) for c in coords]
-    dx = maximum(xs) - minimum(xs)
-    spacing = WTP.ConstantSpacing((dx / 60) * m)
+# Mirrors the quickstart.md 2D example exactly, so the committed figure matches
+# the code readers run.
+function starfish_cloud(; n = 200, ε = 0.2, k = 5)
+    θ = range(0, 2π; length = n)[1:(end - 1)]
+    r = @. 1 + ε * sin(k * θ)
+    boundary = WTP.PointBoundary(WTP.Point.(r .* cos.(θ), r .* sin.(θ)))
+    spacing = WTP.ConstantSpacing(0.05m)
     cloud = WTP.discretize(boundary, spacing; alg = WTP.FornbergFlyer())
     return cloud, spacing
 end
@@ -642,9 +593,9 @@ end
 # ============================================================================
 
 function generate_2d_discretization()
-    println("Generating 2D Stanford Bunny discretization...")
-    cloud, _ = silhouette_cloud()
-    fig = Figure(; size = (700, 640), backgroundcolor = :transparent)
+    println("Generating 2D starfish discretization...")
+    cloud, _ = starfish_cloud()
+    fig = Figure(; size = (700, 700), backgroundcolor = :transparent)
     scatter_cloud2d!(fig[1, 1], cloud)
     save_atomic(joinpath(ASSETS_DIR, "2d-discretization.png"), fig; px_per_unit = 1)
     return println("  Saved 2d-discretization.png ($(length(cloud)) points)")
@@ -656,40 +607,16 @@ end
 
 function generate_repel_comparison()
     println("Generating repulsion before/after comparison...")
-    cloud_before, spacing = silhouette_cloud()
+    cloud_before, spacing = starfish_cloud()
     conv = Float64[]
     cloud_after = WTP.repel(cloud_before, spacing; max_iters = 500, convergence = conv)
 
-    fig = Figure(; size = (1400, 640), backgroundcolor = :transparent)
+    fig = Figure(; size = (1400, 700), backgroundcolor = :transparent)
     scatter_cloud2d!(fig[1, 1], cloud_before; volume_size = 4, boundary_size = 6)
     scatter_cloud2d!(fig[1, 2], cloud_after; volume_size = 4, boundary_size = 6)
     save_atomic(joinpath(ASSETS_DIR, "repel-comparison.png"), fig; px_per_unit = 1)
     println("  Saved repel-comparison.png")
     return println("  Convergence: $(conv[end]) after $(length(conv)) iterations")
-end
-
-# ============================================================================
-# Algorithm comparison — 3D (SlakKosec vs VanDerSandeFornberg)
-# ============================================================================
-
-function generate_algorithm_comparison()
-    println("Generating 3D algorithm comparison...")
-    boundary = WTP.PointBoundary(STL, m)
-    spacing = WTP.ConstantSpacing(3m)
-
-    fig = Figure(; size = (1400, 640), backgroundcolor = :transparent)
-    for (idx, alg) in enumerate([WTP.SlakKosec(), WTP.VanDerSandeFornberg()])
-        cloud = WTP.discretize(boundary, spacing; alg, max_points = 400_000)
-        vx, vy, vz = coords_xyz(WTP.volume(cloud))
-        vdepth = view_depth(vx, vy, vz)
-        lo, hi = extrema(vdepth)
-        vcol = [RGBAf(get(BLUE_GRAD, (d - lo) / (hi - lo))) for d in vdepth]
-        ax = bare_ax3(fig[1, idx])
-        depth_sorted_meshscatter!(ax, vx, vy, vz, vcol, fill(1.1, length(vx)))
-        println("  $(nameof(typeof(alg))): $(length(cloud)) points")
-    end
-    save_atomic(joinpath(ASSETS_DIR, "algorithm-comparison.png"), fig; px_per_unit = 1)
-    return println("  Saved algorithm-comparison.png")
 end
 
 # ============================================================================
@@ -707,10 +634,8 @@ function main()
     bif = bifurcation_scene()
     generate_bifurcation_spacing(bif)
     generate_octree_leaves(bif)
-    generate_isinside_classification(bif)
     generate_2d_discretization()
     generate_repel_comparison()
-    generate_algorithm_comparison()
     return println("Done! Images saved to $ASSETS_DIR and $PUBLIC_DIR")
 end
 

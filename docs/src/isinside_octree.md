@@ -61,10 +61,6 @@ Each leaf in the octree is classified as one of:
 
 This classification enables O(1) point-in-volume queries for interior and exterior leaves.
 
-![Point-in-volume classification on a vessel bifurcation](assets/isinside-classification.png)
-
-*A regular grid of query points on a cross-section plane, classified by octree-accelerated `isinside` — blue inside the lumen, gray outside, red the sampled surface itself.*
-
 ### Octree-Accelerated isinside
 
 ```julia
