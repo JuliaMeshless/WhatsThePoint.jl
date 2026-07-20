@@ -56,7 +56,7 @@ CurrentModule = WhatsThePoint
 ```
 
 ```@raw html
-<div class="vp-doc" style="width:80%; margin:auto">
+<div class="vp-doc quick-example" style="width:80%; margin:auto">
 ```
 
 ## Quick Example
@@ -66,7 +66,8 @@ Load a surface mesh and inspect the boundary structure:
 ```@example quickstart
 using WhatsThePoint
 using Unitful: m
-boundary = PointBoundary(joinpath(@__DIR__, "assets/bunny.stl"), m)
+mesh = import_mesh(joinpath(@__DIR__, "assets/bunny.stl"), m)
+boundary = PointBoundary(mesh)
 ```
 
 ```julia
@@ -80,7 +81,7 @@ Generate volume points with `discretize`:
 
 ```julia
 spacing = ConstantSpacing(1m)
-cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
+cloud = discretize(boundary, spacing; alg=Octree(mesh))
 ```
 
 ```julia

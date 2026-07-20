@@ -29,6 +29,10 @@ After computation, normals point in arbitrary directions (PCA gives an axis, not
 orient_normals!(normals, points; k=10)
 ```
 
+![Normal orientation before and after MST+DFS](assets/normals-orientation.png)
+
+*Left: raw PCA normals — each sign is arbitrary, and the red arrows point the wrong way. Right: after `orient_normals!`, every normal points consistently outward.*
+
 To recompute normals in place on an existing surface (e.g. after its points change), then re-orient them:
 
 ```julia

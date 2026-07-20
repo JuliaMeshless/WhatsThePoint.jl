@@ -18,16 +18,17 @@ using WhatsThePoint
 using Unitful: mm, °
 
 # 1. Import a surface mesh — the unit says what the file's raw numbers mean
-boundary = PointBoundary("model.stl", mm)
+mesh = import_mesh("model.stl", mm)
+boundary = PointBoundary(mesh)
 
 # 2. Split into named surfaces by normal angle
 split_surface!(boundary, 75°)
 
 # 3. Generate volume points
 spacing = ConstantSpacing(1mm)
-cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg())
+cloud = discretize(boundary, spacing; alg=Octree(mesh))
 
-# 4. Optimize point distribution
+# 4. Optimize point distribution (optional — Bridson placement is already blue-noise)
 cloud = repel(cloud, spacing)
 
 # 5. Build neighbor connectivity
@@ -51,9 +52,10 @@ export_vtk("cloud", cloud)
 using WhatsThePoint
 using Unitful: m
 
-# 1. Define a 2D polygon boundary
-pts = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
-boundary = PointBoundary(pts)
+# 1. Define a 2D boundary — a starfish domain r(θ) = 1 + 0.2 sin(5θ)
+θ = range(0, 2π; length=200)[1:(end - 1)]
+r = @. 1 + 0.2 * sin(5θ)
+boundary = PointBoundary(Point.(r .* cos.(θ), r .* sin.(θ)))
 
 # 2. Discretize with FornbergFlyer (2D algorithm)
 spacing = ConstantSpacing(0.05m)
@@ -64,9 +66,9 @@ cloud = repel(cloud, spacing)
 cloud = set_topology(cloud, KNNTopology, 9)
 ```
 
-Any closed polygon works — here's the Stanford Bunny silhouette projected from 3D:
+Any closed, ordered polygon works — the starfish is a standard test domain in the RBF-FD literature this package grew out of:
 
-![2D discretization of the Stanford Bunny](assets/2d-discretization.png)
+![2D discretization of a starfish domain](assets/2d-discretization.png)
 
 *Boundary points in red, generated interior points in blue.*
 

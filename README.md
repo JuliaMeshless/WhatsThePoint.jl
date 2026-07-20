@@ -13,7 +13,7 @@
   <a href="https://codecov.io/gh/JuliaMeshless/WhatsThePoint.jl"><img src="https://codecov.io/gh/JuliaMeshless/WhatsThePoint.jl/graph/badge.svg?token=S3BQ5FIULZ" alt="Coverage"></a>
 </p>
 
-![From surface points to a discretized volume to meshless stencils](docs/src/assets/hero-banner.png)
+![Pipeline: sample the surface, fill the volume, connect meshless stencils](docs/src/assets/hero-banner.png)
 
 Meshless methods — RBF-FD, generalized finite differences, SPH — need well-distributed point clouds with neighbor connectivity, but getting from a CAD surface to solver-ready points is tedious. WhatsThePoint.jl handles the complete pipeline: surface import, volume discretization, distribution optimization, and stencil connectivity, in a few lines of Julia. Part of the [JuliaMeshless](https://github.com/JuliaMeshless) organization.
 
@@ -34,16 +34,17 @@ Meshless methods — RBF-FD, generalized finite differences, SPH — need well-d
 using WhatsThePoint, Unitful
 
 # Import a surface mesh — the unit says what the file's raw numbers mean
-boundary = PointBoundary("model.stl", u"mm")
+mesh = import_mesh("model.stl", u"mm")
+boundary = PointBoundary(mesh)
 
 # Split surfaces by normal angle
 split_surface!(boundary, 75°)
 
 # Generate volume points
 spacing = ConstantSpacing(1u"mm")
-cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
+cloud = discretize(boundary, spacing; alg=Octree(mesh))
 
-# Optimize point distribution
+# Optimize point distribution (optional)
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
 
 # Add point connectivity
@@ -55,7 +56,7 @@ visualize(cloud; markersize=0.15)
 ```
 
 <p align="center">
-  <img src="docs/src/assets/turntable.gif" alt="Rotating point-cloud discretization of the Stanford bunny" width="480">
+  <img src="docs/src/assets/pipeline.gif" alt="Build-up of the meshless pipeline on the Stanford bunny: surface sampling, volume fill, node repulsion, stencil connectivity" width="480">
 </p>
 
 ## Features

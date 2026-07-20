@@ -18,9 +18,9 @@ println("Loaded boundary with $(length(boundary)) points")
 octree = TriangleOctree(mesh; classify_leaves = true)
 println("Constructed octree with $(length(octree)) nodes")
 
-# Discretize volume with octree acceleration (bunny is ~86m across, 3m gives good density)
-node_gen_alg = SlakKosec(octree)
-cloud = discretize(boundary, 3.0m, max_points = 50_000; alg = node_gen_alg)
+# Discretize volume with the Octree algorithm (bunny is ~86m across, 3m gives good density)
+node_gen_alg = Octree(octree)
+cloud = discretize(boundary, 3.0m; alg = node_gen_alg)
 
 # Print results
 println("Boundary: $(length(boundary)) | Volume: $(length(WhatsThePoint.volume(cloud))) | Total: $(length(cloud))")

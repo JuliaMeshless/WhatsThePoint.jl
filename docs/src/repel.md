@@ -64,36 +64,36 @@ how points interact. All models take a softening parameter `β` and
 implement `compute_force(model, u)` where `u = r / s` is the ratio of neighbor
 distance to local target spacing.
 
-### [`ClippedSpacingForce`](@ref) — default
+### ClippedSpacingForce — default
 
 ```math
 F(u) = \begin{cases} \dfrac{u_0^2 - u^2}{(u^2 + \beta)^2} & u < u_0 \\ 0 & u \ge u_0 \end{cases}
 ```
 
-Repulsion-only with compact support. Any configuration whose pairwise
+[`ClippedSpacingForce`](@ref) is repulsion-only with compact support. Any configuration whose pairwise
 distances all exceed `u0·s` is an exact equilibrium — the Poisson-disk
 property — so an already-good (blue-noise) cloud is preserved or improved
 rather than re-packed. This is the right default for polishing seeded clouds
 and for re-relaxation inside a shape-optimization loop.
 
-### [`InverseDistanceForce`](@ref)
+### InverseDistanceForce
 
 ```math
 F(u) = \frac{1}{(u^2 + \beta)^2}
 ```
 
-Purely repulsive and monotonically decreasing. This is the original Miotti
+[`InverseDistanceForce`](@ref) is purely repulsive and monotonically decreasing. This is the original Miotti
 (2023) formulation. The force has no root, so equilibrium is reached only
 through damping via `α` — the point configuration never stops moving on its
 own, which is why a `tol` threshold is needed.
 
-### [`SpacingEquilibriumForce`](@ref)
+### SpacingEquilibriumForce
 
 ```math
 F(u) = \frac{1 - u^2}{(u^2 + \beta)^2}
 ```
 
-Zero at `u = 1` (neighbor exactly at the target spacing), positive for `u < 1`
+[`SpacingEquilibriumForce`](@ref) is zero at `u = 1` (neighbor exactly at the target spacing), positive for `u < 1`
 (push apart), negative for `u > 1` (pull together). Caution: the attractive
 branch behaves like a cohesion force whose preferred bond length is
 unreachable at the prescribed density, so long relaxations slowly condense
@@ -107,13 +107,13 @@ cloud = repel(cloud, spacing, octree;
               max_iters = 500)
 ```
 
-### [`StrongSpacingForce`](@ref)
+### StrongSpacingForce
 
 ```math
 F(u) = \frac{1 - u^2}{(u^2 + \beta)^\gamma}
 ```
 
-Like [`SpacingEquilibriumForce`](@ref) but with a configurable singularity
+[`StrongSpacingForce`](@ref) is like [`SpacingEquilibriumForce`](@ref) but with a configurable singularity
 strength `γ` (default 3): at small `u` the repulsive core scales as `u^(-2γ)`
 instead of `u^(-4)`, strong enough to break balanced standoffs where neighbor
 forces cancel the weaker default core. `γ = 2` recovers

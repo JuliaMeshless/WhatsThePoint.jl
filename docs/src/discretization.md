@@ -23,10 +23,6 @@ Not sure what spacing the geometry can host? Run [`suggest_spacing`](@ref) first
 | [`FornbergFlyer`](@ref) | 2D | Yes (`ConstantSpacing` only) | 1D projection with height-field fill |
 | [`Octree`](@ref) | 3D | Yes (variable-friendly) | Octree-guided adaptive fill; default `:bridson` placement is a global graded Poisson-disk front |
 
-![Algorithm comparison](assets/algorithm-comparison.png)
-
-*Volume fills of the Stanford bunny at identical spacing — left: `SlakKosec`, right: `VanDerSandeFornberg`.*
-
 ### Choosing an Algorithm
 
 - **2D problems:** Use [`FornbergFlyer`](@ref) — it is the only 2D algorithm and is selected by default for 2D boundaries.
@@ -56,6 +52,12 @@ cloud = discretize(boundary, spacing; alg)
 ```
 
 `max_growth` caps how fast the spacing may vary between neighboring points (a Lipschitz limit on `|∇h|`) — steep boundary layers stay sharp at the wall but transition smoothly into the bulk. See the [Octree Algorithm](octree.md) page for details.
+
+The result of exactly this recipe on a vessel bifurcation:
+
+![Spacing-graded fill of a vessel bifurcation](assets/bifurcation-spacing.png)
+
+*Interior cross-section of a vessel bifurcation filled with `Octree` + `BoundaryLayerSpacing`, each point colored by its local target spacing h(x) — red at the wall, blue in the bulk.*
 
 For a complete runnable script, see:
 - [examples/octree_boundary_layer.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/octree_boundary_layer.jl)
@@ -151,11 +153,11 @@ Works with `SlakKosec` and `Octree`.
 **Typical workflow:**
 ```julia
 # First pass with uniform spacing
-cloud = discretize(boundary, ConstantSpacing(1mm); alg=SlakKosec())
+cloud = discretize(boundary, ConstantSpacing(1mm); alg=Octree(mesh))
 
 # Second pass with variable spacing
 spacing = LogLike(cloud, 0.5mm, 1.2)
-cloud = discretize(boundary, spacing; alg=SlakKosec())
+cloud = discretize(boundary, spacing; alg=Octree(mesh))
 ```
 
 ## References

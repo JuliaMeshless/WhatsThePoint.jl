@@ -13,6 +13,7 @@ makedocs(;
         repo = "github.com/JuliaMeshless/WhatsThePoint.jl",
         devbranch = "main",
         devurl = "dev",
+        build_vitepress = (!haskey(ENV, "VITEPRESS_DEV")),
     ),
     pages = [
         "Getting Started" => [
@@ -29,6 +30,7 @@ makedocs(;
         ],
         "API Reference" => "api.md",
     ],
+    clean = false,
 )
 
 DocumenterVitepress.deploydocs(;
