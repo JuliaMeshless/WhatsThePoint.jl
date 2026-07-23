@@ -373,12 +373,19 @@ function needs_balancing(t::SpatialTree{N}, box::Int) where {N}
 end
 
 """
-    balance_octree!(tree, criterion::SubdivisionCriterion)
+    balance_octree!(tree, criterion::SubdivisionCriterion; redistribute! = nothing)
 
 Enforce the 2:1 balance constraint across the tree (dimension-agnostic).
 Uses `can_subdivide` (physical limits only), not `should_subdivide`.
+
+`subdivide!` does not move a leaf's `element_lists` entries into the new
+children — queries only scan leaves, so elements of a balance-subdivided box
+would vanish from the queryable tree. Callers whose queries read element
+lists (e.g. `TriangleOctree`'s nearest-triangle search) must pass
+`redistribute!(tree, box_idx)`, invoked right after each forced subdivision
+to push the parent's elements into the intersecting children.
 """
-function balance_octree!(t::SpatialTree, criterion::SubdivisionCriterion)
+function balance_octree!(t::SpatialTree, criterion::SubdivisionCriterion; redistribute! = nothing)
     max_iterations = 100
     iteration = 0
     while iteration < max_iterations
@@ -390,6 +397,7 @@ function balance_octree!(t::SpatialTree, criterion::SubdivisionCriterion)
             if needs_balancing(t, box) && can_subdivide(criterion, t, box)
                 subdivide!(t, box)
                 subdivided_any = true
+                redistribute! !== nothing && redistribute!(t, box)
             end
         end
         subdivided_any || break

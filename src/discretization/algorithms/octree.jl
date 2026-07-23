@@ -79,6 +79,11 @@ cloud = discretize(boundary, spacing; alg, max_points=100_000)
 
 # Manual geometry resolution
 alg = Octree(mesh; min_ratio=1e-3, spacing, alpha=1.0)
+
+# Multi-STL: one merged triangulation (see `load_triangulation`)
+tri = load_triangulation(:tank => ("tank.stl", :container),
+                         :impeller => ("impeller.stl", :obstacle); units = u"mm")
+alg = Octree(tri; spacing)
 ```
 """
 struct Octree{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
@@ -152,6 +157,99 @@ function Octree(
         # No spacing hint, use triangle octree ratio
         geometry_min_ratio
     end
+
+    return Octree{M, C, T}(
+        triangle_octree,
+        T(boundary_oversampling),
+        placement,
+        T(alpha),
+        node_ratio,
+        T(bridson_factor),
+        T(max_growth),
+    )
+end
+
+# Constructor — the multi-STL entry point: identical behavior to the SimpleMesh
+# one above, but the geometry is a merged, consistently-oriented `Triangulation`
+# (see `load_triangulation`). There is no mesh CRS to capture `{M, C}` from, so
+# they are reconstructed from the index's `len_unit` — both are inert at runtime
+# (`_discretize_volume` wildcards them); only `T` drives the stripped pipeline.
+#
+# `verify_orientation` defaults to `false` here (unlike the SimpleMesh door):
+# `load_triangulation` already ran the per-patch signed-volume orientation
+# guard, and real CAD STLs are often non-manifold in the strict edge-direction
+# sense `has_consistent_normals` tests while still classifying correctly via
+# the pseudonormal signed distance.
+"""
+    Octree(tri::Triangulation; kwargs...)
+
+Build the spacing-driven volume discretization algorithm over a merged
+multi-patch [`Triangulation`](@ref) — the multi-STL counterpart of
+`Octree(mesh)`. Same keywords as the mesh constructor, except
+`verify_orientation` defaults to `false` (orientation was already guarded
+per patch at load).
+"""
+function Octree(
+        tri::Triangulation{T};
+        spacing::Union{Nothing, AbstractSpacing} = nothing,
+        min_ratio::Union{Nothing, Real} = nothing,
+        node_min_ratio::Union{Nothing, Real} = nothing,
+        tolerance_relative::Real = 1.0e-6,
+        boundary_oversampling::Real = 2.0,
+        placement::Symbol = :bridson,
+        alpha::Real = 2.0,
+        bridson_factor::Real = 0.75,
+        max_growth::Real = 0.0,
+        verify_orientation::Bool = false,
+    ) where {T <: Real}
+    boundary_oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive"))
+    placement in (:random, :jittered, :lattice, :bridson) ||
+        throw(ArgumentError("placement must be :random, :jittered, :lattice, or :bridson"))
+    alpha > 0 || throw(ArgumentError("alpha must be positive"))
+    bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
+    max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
+
+    # Triangle octree over the merged index: geometry-based or user override
+    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, num_triangles(tri)) : T(min_ratio)
+    triangle_octree = TriangleOctree(
+        tri;
+        tolerance_relative,
+        min_ratio = geometry_min_ratio,
+        classify_leaves = true,
+        verify_orientation,
+    )
+
+    # Node octree: spacing-aware automatic or user override (same logic as the
+    # mesh constructor, with extents read from the index's stripped bbox)
+    node_ratio = if !isnothing(node_min_ratio)
+        # User provided explicit node_min_ratio
+        T(node_min_ratio)
+    elseif !isnothing(spacing)
+        # Compute from spacing
+        h_min = _extract_min_spacing(spacing)
+        if !isnothing(h_min)
+            max_extent = maximum(tri.index.bbox_max - tri.index.bbox_min)
+
+            # Node octree must resolve features alpha times smaller than minimum spacing
+            # to properly capture spacing variations across the domain
+            min_resolvable_size = h_min / T(alpha)
+            T(min_resolvable_size) / max_extent
+        else
+            # Unknown spacing type, fall back to triangle octree ratio
+            geometry_min_ratio
+        end
+    else
+        # No spacing hint, use triangle octree ratio
+        geometry_min_ratio
+    end
+
+    # Reconstruct the inert {M, C} params exactly as the boundary points carry
+    # them (sample_surface builds Point((c .* len_unit)...)), so a cloud
+    # assembled from both sides is homogeneous.
+    len_unit = tri.index.len_unit
+    probe = Point((zero(SVector{3, T}) .* len_unit)...)
+    M = manifold(probe)
+    C = crs(probe)
 
     return Octree{M, C, T}(
         triangle_octree,

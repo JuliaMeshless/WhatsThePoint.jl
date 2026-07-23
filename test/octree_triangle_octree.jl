@@ -78,3 +78,55 @@ end
     results = isinside([Point(0.5, 0.5, 0.5), Point(-0.5, 0.5, 0.5)], octree)
     @test results == [true, false]
 end
+
+@testitem "TriangleOctree balancing redistributes triangles" setup = [CommonImports] begin
+    using WhatsThePoint: all_leaves, NearestTriangleState, _nearest_triangle_octree!
+
+    # Regression: `balance_octree!` subdivides leaves without moving their
+    # element lists to the children — triangles of a balance-subdivided leaf
+    # vanish from the queryable tree, and nearest-triangle search then returns
+    # far-away triangles. Exposed on multi-density geometry (coarse wall +
+    # fine patch), where 2:1 balancing subdivides occupied wall leaves.
+    #
+    # Mesh: one NARROW tall sliver (5mm × 2m, 2 triangles, x=0 plane — the
+    # kind CAD exports produce on vessel walls) flanked by a dense patch of
+    # tiny triangles 1cm away spanning its full height. The sliver's mid-span
+    # leaves stay coarse (no local vertices) while the patch goes deep, so
+    # 2:1 balancing subdivides them — pre-fix the sliver was orphaned out of
+    # the queryable tree entirely.
+    pts = [Point(0.0, -0.0025, 0.0), Point(0.0, 0.0025, 0.0), Point(0.0, 0.0025, 2.0), Point(0.0, -0.0025, 2.0)]
+    connec = [connect((1, 2, 3), Meshes.Triangle), connect((1, 3, 4), Meshes.Triangle)]
+    patch_d = 0.002
+    ny, nz = 30, 1000
+    grid = [
+        Point(0.01, -0.03 + iy * patch_d, iz * patch_d)
+            for iz in 0:nz for iy in 0:ny
+    ]
+    offset = length(pts)
+    append!(pts, grid)
+    v(iy, iz) = offset + iz * (ny + 1) + iy + 1
+    for iz in 1:nz, iy in 1:ny
+        a, b, c, d = v(iy - 1, iz - 1), v(iy, iz - 1), v(iy, iz), v(iy - 1, iz)
+        push!(connec, connect((a, b, c), Meshes.Triangle))
+        push!(connec, connect((a, c, d), Meshes.Triangle))
+    end
+    mesh = SimpleMesh(pts, connec)
+
+    octree = TriangleOctree(mesh; verify_orientation = false, classify_leaves = false)
+
+    # Invariant: every triangle is present in at least one leaf's element list.
+    present = falses(num_triangles(octree))
+    for leaf in all_leaves(octree.tree)
+        for ti in octree.tree.element_lists[leaf]
+            present[ti] = true
+        end
+    end
+    @test all(present)
+
+    # Query 2.5mm off the sliver at mid-height: the nearest triangle must be a
+    # sliver triangle (2.5mm away), not a patch triangle (7.5mm away).
+    p = SVector(0.0025, 0.0, 1.0)
+    state = NearestTriangleState{Float64}(p)
+    _nearest_triangle_octree!(p, octree.tree, octree.index, 1, state)
+    @test state.closest_idx in (1, 2)
+end

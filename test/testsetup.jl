@@ -25,6 +25,32 @@ end
     const BOX_PATH = joinpath(TEST_DIR, "data", "box.stl")
 end
 
+@testmodule STLHelpers begin
+    import Meshes
+    using Unitful: ustrip
+
+    """Write a triangle `SimpleMesh` as a minimal ASCII STL (loads back as Float64,
+    unlike the binary Float32 fixtures — handy for mactype-promotion tests)."""
+    function write_ascii_stl(path, mesh)
+        open(path, "w") do io
+            println(io, "solid gen")
+            for elem in Meshes.elements(mesh)
+                vs = Meshes.vertices(elem)
+                n = Meshes.normal(elem)
+                println(io, " facet normal ", join(ustrip.(n), " "))
+                println(io, "  outer loop")
+                for v in vs
+                    println(io, "   vertex ", join(ustrip.(Meshes.to(v)), " "))
+                end
+                println(io, "  endloop")
+                println(io, " endfacet")
+            end
+            println(io, "endsolid gen")
+        end
+        return path
+    end
+end
+
 @testmodule OctreeTestData begin
     using Meshes: Point, SimpleMesh, connect
     import Meshes

@@ -49,14 +49,36 @@ Seam contract:
 abstract type AbstractGeometryIndex{M <: Manifold} end
 
 """
+    SeamVeto
+
+Multi-patch coincident-seam data (e.g. an obstacle resting flush on the
+container floor). `flags` marks container triangles that have an obstacle
+surface within `tol`; `obstacle_ranges` are the triangle-index ranges of the
+obstacle patches. At a seam, the nearest-feature sign is a coin flip between
+the coincident container (fluid) and obstacle (solid) surfaces — when a
+flagged triangle wins the nearest-feature search, the signed-distance query
+cross-checks the nearest obstacle triangle so the obstacle wins (see
+[`_compute_signed_distance_octree`](@ref)).
+"""
+struct SeamVeto
+    flags::BitVector
+    obstacle_ranges::Vector{UnitRange{Int}}
+    tol::Float64
+end
+
+"""
 Octree spatial index for triangle mesh queries. Accelerates isinside(),
 signed distance, etc. Carries the mesh as a `TriangleIndex{T}` — no
 `SimpleMesh` reference, no Meshes.jl in the runtime.
+
+`seam_veto` is `nothing` for single-mesh/no-obstacle geometry (zero
+query-time cost); it is only built by `TriangleOctree(tri::Triangulation)`.
 """
 struct TriangleOctree{T <: Real} <: AbstractGeometryIndex{𝔼{3}}
     tree::SpatialOctree{Int, T}
     index::TriangleIndex{T}
     leaf_classification::Union{Nothing, Vector{Int8}}
+    seam_veto::Union{Nothing, SeamVeto}
 end
 
 # --- seam methods (thin wrappers over the existing 3D query internals) ---
@@ -391,6 +413,7 @@ function TriangleOctree(
         min_ratio = 1.0e-6,
         classify_leaves::Bool = true,
         verify_orientation::Bool = true,
+        seam_veto = nothing,
     ) where {T <: Real}
     if verify_orientation && !has_consistent_normals(index)
         throw(
@@ -436,10 +459,13 @@ function TriangleOctree(
 
     tree = _create_root_octree(index)
     _subdivide_triangle_octree!(tree, index, 1, criterion)
-    balance_octree!(tree, criterion)
-    classification = classify_leaves ? _classify_leaves(tree, index) : nothing
+    balance_octree!(
+        tree, criterion;
+        redistribute! = (t, box_idx) -> _redistribute_triangles!(t, index, box_idx),
+    )
+    classification = classify_leaves ? _classify_leaves(tree, index; seam_veto) : nothing
 
-    return TriangleOctree{T}(tree, index, classification)
+    return TriangleOctree{T}(tree, index, classification, seam_veto)
 end
 
 function _subdivide_triangle_octree!(
@@ -452,26 +478,40 @@ function _subdivide_triangle_octree!(
         return
     end
 
+    isempty(tree.element_lists[box_idx]) && return
+
+    subdivide!(tree, box_idx)
+    _redistribute_triangles!(tree, index, box_idx)
+
+    for child_idx in children(tree, box_idx)
+        _subdivide_triangle_octree!(tree, index, child_idx, criterion)
+    end
+    return
+end
+
+# Push a just-subdivided box's triangles into the children they intersect.
+# Queries only scan leaves, so every subdivision — geometry-driven or
+# balance-forced — must be followed by this, else the parent's triangles
+# vanish from the queryable tree (the multi-density merge exposed this:
+# 2:1 balancing subdivides occupied wall leaves near fine obstacle patches,
+# orphaning their triangles and corrupting nearest-triangle search).
+function _redistribute_triangles!(
+        tree::SpatialOctree{Int, T},
+        index::TriangleIndex{T},
+        box_idx::Int,
+    ) where {T <: Real}
     parent_triangles = tree.element_lists[box_idx]
     isempty(parent_triangles) && return
 
-    subdivide!(tree, box_idx)
     kids = children(tree, box_idx)
-
     for tri_idx in parent_triangles
         v1, v2, v3 = _get_triangle_vertices(index, tri_idx)
-
         for child_idx in kids
             child_min, child_max = box_bounds(tree, child_idx)
-
             if triangle_box_intersection(v1, v2, v3, child_min, child_max)
                 push!(tree.element_lists[child_idx], tri_idx)
             end
         end
-    end
-
-    for child_idx in kids
-        _subdivide_triangle_octree!(tree, index, child_idx, criterion)
     end
     return
 end
@@ -495,7 +535,9 @@ end
         index::TriangleIndex{T},
         tri_idx::Int,
         state::NearestTriangleState{T},
+        tri_accept = Returns(true),
     ) where {T <: Real}
+    tri_accept(tri_idx) || return nothing
     v1, v2, v3 = _get_triangle_vertices(index, tri_idx)
     cp, feature = closest_point_on_triangle_feature(point, v1, v2, v3)
     dvec = point - cp
@@ -517,13 +559,14 @@ function _nearest_triangle_octree!(
         index::TriangleIndex{T},
         box_idx::Int,
         state::NearestTriangleState{T},
+        tri_accept = Returns(true),
     ) where {T <: Real}
     bbox_min, bbox_max = box_bounds(tree, box_idx)
     _point_box_distance_sq(point, bbox_min, bbox_max) > state.best_dist_sq && return
 
     if is_leaf(tree, box_idx)
         @inbounds for tri_idx in tree.element_lists[box_idx]
-            _update_closest_triangle!(point, index, tri_idx, state)
+            _update_closest_triangle!(point, index, tri_idx, state, tri_accept)
         end
         return
     end
@@ -549,7 +592,7 @@ function _nearest_triangle_octree!(
     end
 
     return @inbounds for i in 1:n_valid
-        _nearest_triangle_octree!(point, tree, index, idxs[i], state)
+        _nearest_triangle_octree!(point, tree, index, idxs[i], state, tri_accept)
     end
 end
 
@@ -559,11 +602,20 @@ angle-weighted pseudonormal of the closest feature (exact for watertight,
 consistently outward-oriented meshes — Bærentzen & Aanæs 2005). Returns 0
 only for points exactly on the surface (or at a degenerate fold where the
 feature pseudonormal vanishes).
+
+`seam_veto` (multi-patch geometry): when the nearest feature is a container
+triangle flagged as flush against an obstacle surface, the fluid vote
+(`sd < 0`) is ambiguous — an obstacle surface coincides with it and votes
+solid at the same distance. The veto then searches obstacle triangles within
+`dist + tol`: if the nearest of those puts the point on the solid side, the
+point is not fluid. Runs only when a flagged triangle wins, so query cost is
+unaffected away from seams.
 """
 function _compute_signed_distance_octree(
         point::SVector{3, T},
         index::TriangleIndex{T},
-        tree::SpatialOctree{Int, T},
+        tree::SpatialOctree{Int, T};
+        seam_veto = nothing,
     ) where {T <: Real}
     state = NearestTriangleState{T}(point)
     _nearest_triangle_octree!(point, tree, index, 1, state)
@@ -581,9 +633,27 @@ function _compute_signed_distance_octree(
     s = dot(point - state.closest_pt, n)
 
     nearest_dist = sqrt(state.best_dist_sq)
-    s < zero(T) && return -nearest_dist
     s > zero(T) && return nearest_dist
-    return zero(T)
+    s == zero(T) && return zero(T)
+
+    # Fluid vote — at a coincident container/obstacle seam, veto it if the
+    # nearest obstacle surface (within the seam band) says solid.
+    if seam_veto !== nothing && @inbounds(seam_veto.flags[state.closest_idx])
+        band = (nearest_dist + T(seam_veto.tol))^2
+        ostate = NearestTriangleState{T}(point)
+        ostate.best_dist_sq = band
+        ranges = seam_veto.obstacle_ranges
+        _nearest_triangle_octree!(point, tree, index, 1, ostate, ti -> _in_any_range(ti, ranges))
+        if ostate.closest_idx != 0
+            w1, w2, w3 = _get_triangle_vertices(index, ostate.closest_idx)
+            n_obs = _feature_pseudonormal(
+                index, ostate.closest_idx, ostate.closest_feature, w1, w2, w3
+            )
+            dvec = point - ostate.closest_pt
+            dot(dvec, n_obs) > zero(T) && return sqrt(ostate.best_dist_sq)
+        end
+    end
+    return -nearest_dist
 end
 
 function _compute_signed_distance_octree(
@@ -592,15 +662,15 @@ function _compute_signed_distance_octree(
     # Seam policy: convert a foreign-precision query once at the entry point;
     # the traversal below runs strictly in the octree's machine type T.
     return _compute_signed_distance_octree(
-        SVector{3, T}(point), octree.index, octree.tree
+        SVector{3, T}(point), octree.index, octree.tree; seam_veto = octree.seam_veto
     )
 end
 
 function _classify_leaves(
-        tree::SpatialOctree{Int, T}, index::TriangleIndex{T}
+        tree::SpatialOctree{Int, T}, index::TriangleIndex{T}; seam_veto = nothing
     ) where {T <: Real}
     function mesh_query(point::SVector{3, T}, tol::T) where {T <: Real}
-        sd = _compute_signed_distance_octree(point, index, tree)
+        sd = _compute_signed_distance_octree(point, index, tree; seam_veto)
         return _leaf_class_from_signed_distance(sd, tol)
     end
 
@@ -658,7 +728,7 @@ exact bbox checks, or a positive tolerance for conservative classification).
         cls = tri_cls[leaf_idx]
         cls != LEAF_BOUNDARY && return cls
     end
-    sd = _compute_signed_distance_octree(p, octree.index, octree.tree)
+    sd = _compute_signed_distance_octree(p, octree.index, octree.tree; seam_veto = octree.seam_veto)
     tol_val = isnothing(tri_cls) ? zero(T) : t
     return _leaf_class_from_signed_distance(sd, tol_val)
 end
