@@ -121,6 +121,52 @@ end
     @test sum(area(inner)) ≈ 24.0m^2 atol = 1.0e-6m^2
 end
 
+@testitem "PointBoundary(tri, patch => spacing) - per-patch wall spacing" setup = [
+    CommonImports, TestData, STLHelpers,
+] begin
+    Random.seed!(13)
+
+    dir = mktempdir()
+    inner_path = joinpath(dir, "inner.stl")
+    inner_mesh = Meshes.simplexify(
+        Meshes.boundary(Box(Meshes.Point(3.0, 1.0, 1.0), Meshes.Point(5.0, 3.0, 3.0))),
+    )
+    STLHelpers.write_ascii_stl(inner_path, inner_mesh)
+    tri = load_triangulation(
+        :outer => (TestData.BOX_PATH, :container),
+        :inner => (inner_path, :obstacle);
+        units = u"m",
+    )
+
+    # Fine spacing on the obstacle, coarse on the container via `default`. Finer
+    # spacing ⇒ more points on the (smaller) obstacle than the coarse container
+    # would ever yield at that size, and finer than the same obstacle sampled
+    # coarse.
+    bnd = PointBoundary(tri, :inner => 0.25m; default = 1.0m)
+    surfs = namedsurfaces(bnd)
+    @test collect(keys(surfs)) == [:outer, :inner]
+    coarse_inner = length(namedsurfaces(PointBoundary(tri, ConstantSpacing(1.0m)))[:inner])
+    @test length(surfs[:inner]) > coarse_inner
+
+    # Bare Unitful.Length and AbstractSpacing values are interchangeable.
+    b_mixed = PointBoundary(tri, :inner => ConstantSpacing(0.25m); default = 1.0m)
+    @test length(namedsurfaces(b_mixed)[:inner]) > coarse_inner
+
+    # Validation: unknown patch, and a patch left uncovered (no default).
+    @test_throws ArgumentError PointBoundary(tri, :nope => 0.25m; default = 1.0m)
+    @test_throws ArgumentError PointBoundary(tri, :inner => 0.25m)
+
+    # Compatibility warning: fine wall + coarse volume field ⇒ @warn (advisory,
+    # fill still happens). A matched constant field stays silent.
+    @test_logs (:warn,) (:warn,) match_mode = :any discretize(
+        bnd, ConstantSpacing(1.0m); alg = Octree(tri; spacing = ConstantSpacing(1.0m)),
+    )
+    bc = PointBoundary(tri, ConstantSpacing(1.0m))
+    @test_logs min_level = Base.CoreLogging.Warn discretize(
+        bc, ConstantSpacing(1.0m); alg = Octree(tri; spacing = ConstantSpacing(1.0m)),
+    )
+end
+
 @testitem "Triangulation - obstacle flush on container floor (seam veto)" setup = [
     CommonImports, TestData, STLHelpers,
 ] begin

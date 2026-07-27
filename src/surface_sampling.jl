@@ -166,3 +166,40 @@ function PointBoundary(tri::Triangulation, spacing::AbstractSpacing; kwargs...)
     C = crs(first(pairs).second)
     return PointBoundary(LittleDict{Symbol, PointSurface{M, C}}(pairs))
 end
+
+_as_spacing(s::AbstractSpacing) = s
+_as_spacing(s::Unitful.Length) = ConstantSpacing(s)
+
+"""
+    PointBoundary(tri::Triangulation, patch => spacing, ...; default=nothing, kwargs...)
+
+Sample each patch at its own spacing. A `patch => spacing` pair overrides that
+patch; unlisted patches fall back to `default`. A spacing value is either an
+`AbstractSpacing` or a bare `Unitful.Length` (wrapped in `ConstantSpacing`).
+
+```julia
+# fine walls on the immersed bodies, coarser on the enclosing domain
+boundary = PointBoundary(tri, :body1 => 3mm, :body2 => 3mm; default = 6mm)
+```
+
+Throws if a patch is neither listed nor covered by `default`, or if a pair names
+a patch absent from `tri`. Otherwise identical to the single-spacing method (see
+[`sample_surface`](@ref) for `kwargs`).
+"""
+function PointBoundary(tri::Triangulation, spacings::Pair...; default = nothing, kwargs...)
+    lut = LittleDict{Symbol, AbstractSpacing}(n => _as_spacing(s) for (n, s) in spacings)
+    for name in keys(lut)
+        name in patches(tri) ||
+            throw(ArgumentError("no patch :$name in triangulation (patches: $(join(patches(tri), ", ")))"))
+    end
+    def = isnothing(default) ? nothing : _as_spacing(default)
+    pairs = map(patches(tri)) do name
+        s = get(lut, name, def)
+        isnothing(s) &&
+            throw(ArgumentError("no spacing for patch :$name — pass :$name => spacing or default=..."))
+        name => _sample_surface(tri.index, patch_range(tri, name), s; kwargs...)
+    end
+    M = manifold(first(pairs).second)
+    C = crs(first(pairs).second)
+    return PointBoundary(LittleDict{Symbol, PointSurface{M, C}}(pairs))
+end
