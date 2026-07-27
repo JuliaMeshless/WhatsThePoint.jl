@@ -81,8 +81,8 @@ cloud = discretize(boundary, spacing; alg, max_points=100_000)
 alg = Octree(mesh; min_ratio=1e-3, spacing, alpha=1.0)
 
 # Multi-STL: one merged triangulation (see `load_triangulation`)
-tri = load_triangulation(:tank => ("tank.stl", :container),
-                         :impeller => ("impeller.stl", :obstacle); units = u"mm")
+tri = load_triangulation(:domain => ("domain.stl", :container),
+                         :body1 => ("body1.stl", :obstacle); units = u"mm")
 alg = Octree(tri; spacing)
 ```
 """

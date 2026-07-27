@@ -33,8 +33,8 @@ inlet/outlet/wall files) is unsupported by design — concatenating open patches
 leaves unwelded seam vertices, which corrupts the angle-weighted pseudonormals
 right where sign queries are least robust (`split_surface!` already covers BC
 tagging on a single closed shell). Obstacles must not *cross* the container
-wall, but an obstacle resting **flush** on the container (e.g. an impeller
-sitting on the tank floor — coincident surfaces) is supported:
+wall, but an obstacle resting **flush** on the container (e.g. an immersed
+body resting on the domain floor — coincident surfaces) is supported:
 [`TriangleOctree`](@ref) detects such seams at build and vetoes the
 container's ambiguous fluid vote there in favor of the obstacle.
 """
@@ -100,11 +100,15 @@ oriented [`Triangulation`](@ref).
 
 Multi-part form — each pair is `name => (filepath, role)`:
 
+Naming follows the immersed-boundary convention — `:domain` is the enclosing
+fluid domain, `:body1`/`:body2`/... the solids immersed in it — but any patch
+names work; only the roles (`:container` / `:obstacle`) are load-bearing.
+
 ```julia
 tri = load_triangulation(
-    :tank     => ("tank.stl",     :container),   # normals as-is
-    :impeller => ("impeller.stl", :obstacle),    # winding reversed
-    :baffles  => ("baffles.stl",  :obstacle);
+    :domain => ("domain.stl", :container),   # normals as-is
+    :body1  => ("body1.stl",  :obstacle),    # winding reversed
+    :body2  => ("body2.stl",  :obstacle);
     units = u"mm",
 )
 ```
@@ -116,8 +120,8 @@ tri = load_triangulation("part.stl"; units = u"mm")
 ```
 
 Roles orient the merged normals so they all point **out of the fluid domain**:
-a `:container` (the tank/vessel) keeps its outward-facing normals; an
-`:obstacle` (impeller, baffles) has its triangle winding reversed. Every patch
+a `:container` (the enclosing fluid domain) keeps its outward-facing normals; an
+`:obstacle` (a solid immersed in the domain) has its triangle winding reversed. Every patch
 must be a closed solid with outward-facing normals as stored — the per-patch
 signed-volume guard rejects an open or inside-out surface, naming the offending
 patch (obstacles are checked *before* their flip). Machine types are promoted to
@@ -264,7 +268,7 @@ end
 Build the geometry-adaptive octree over a triangulation's merged index.
 
 Multi-patch addition: coincident container/obstacle **seams** — an obstacle
-resting flush on the container (e.g. an impeller sitting on the tank floor) —
+resting flush on the container (e.g. an immersed body sitting on the domain floor) —
 are detected once at build and stored as a [`SeamVeto`](@ref): container
 triangles within `seam_tolerance_relative` (of the bbox diagonal) of any
 obstacle surface are flagged, and signed-distance queries cross-check them

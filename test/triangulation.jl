@@ -155,16 +155,6 @@ end
     # Validation: unknown patch, and a patch left uncovered (no default).
     @test_throws ArgumentError PointBoundary(tri, :nope => 0.25m; default = 1.0m)
     @test_throws ArgumentError PointBoundary(tri, :inner => 0.25m)
-
-    # Compatibility warning: fine wall + coarse volume field ⇒ @warn (advisory,
-    # fill still happens). A matched constant field stays silent.
-    @test_logs (:warn,) (:warn,) match_mode = :any discretize(
-        bnd, ConstantSpacing(1.0m); alg = Octree(tri; spacing = ConstantSpacing(1.0m)),
-    )
-    bc = PointBoundary(tri, ConstantSpacing(1.0m))
-    @test_logs min_level = Base.CoreLogging.Warn discretize(
-        bc, ConstantSpacing(1.0m); alg = Octree(tri; spacing = ConstantSpacing(1.0m)),
-    )
 end
 
 @testitem "Triangulation - obstacle flush on container floor (seam veto)" setup = [

@@ -102,6 +102,21 @@ Meshes.boundingbox
 Meshes.centroid
 ```
 
+## Multi-STL Triangulations
+
+Load one or more STL surfaces as named, role-tagged patches (`:container` /
+`:obstacle`), merged into a single consistently-oriented triangle set that
+`TriangleOctree`, `isinside`, and `discretize` consume.
+
+```@docs
+Triangulation
+load_triangulation
+patches
+npatches
+patch_range
+role
+```
+
 ## Node Repulsion
 
 Point distribution optimization.
