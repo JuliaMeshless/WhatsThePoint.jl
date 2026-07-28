@@ -52,18 +52,22 @@ Identify distinct geometric faces (walls, inlets, outlets) so you can apply diff
 4. Each connected component becomes a new named surface
 
 ```julia
-split_surface!(boundary, 75°)
-
-# Check the result
-names(boundary)  # e.g. [:surface1, :surface2, :surface3]
+# Returns the new names, in component order
+parts = split_surface!(boundary, 75°)  # e.g. [:surface1_1, :surface1_2, :surface1_3]
 ```
+
+Sub-surfaces are named after the surface they came from, so splitting a boundary sampled
+from a multi-STL [`Triangulation`](@ref) keeps each patch's identity: `split_surface!(boundary,
+:tank, 75°)` yields `:tank_1`, `:tank_2`, … while `:impeller` and `:baffles` stay untouched.
+The parent name is the provenance — `:tank_2` came from `:tank` — which is what you rename to
+a physical role before assigning boundary conditions.
 
 ## Surface Combining
 
 Merge multiple named surfaces back into one:
 
 ```julia
-combine_surfaces!(boundary, :surface1, :surface2)
+combine_surfaces!(boundary, :surface1_1, :surface1_2)
 ```
 
 The first name is kept and the second surface is merged into it.

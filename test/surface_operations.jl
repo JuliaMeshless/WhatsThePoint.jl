@@ -87,6 +87,55 @@ end
     @test length(boundary) == 24780
 end
 
+@testitem "split_surface! - sub-surface names derive from the parent" setup = [
+    TestData, CommonImports,
+] begin
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
+
+    new_names = split_surface!(boundary, :surface1, 80°)
+
+    # Returned names are exactly the surfaces that now exist, in component order.
+    @test new_names isa Vector{Symbol}
+    @test length(new_names) > 1
+    @test new_names == WhatsThePoint.names(boundary)
+
+    # Every child carries its parent's name, so provenance survives the split.
+    @test all(startswith(string(n), "surface1_") for n in new_names)
+    @test !hassurface(boundary, :surface1)
+end
+
+@testitem "split_surface! - sibling surfaces keep their names and points" setup = [
+    TestData, CommonImports,
+] begin
+    # A patch-named boundary (as sampled from a Triangulation): splitting one
+    # patch must not touch, rename, or collide with the others.
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
+    surf = boundary[:surface1]
+    delete!(boundary, :surface1)
+    # Sibling built from the same surface so machine type and CRS match exactly.
+    sibling = PointSurface(points(surf)[1:10], normal(surf)[1:10], area(surf)[1:10])
+    boundary[:tank] = PointSurface(points(surf)[11:end], normal(surf)[11:end], area(surf)[11:end])
+    boundary[:impeller] = sibling
+    total = length(boundary)
+
+    new_names = split_surface!(boundary, :tank, 80°)
+
+    @test all(startswith(string(n), "tank_") for n in new_names)
+    @test hassurface(boundary, :impeller)
+    @test length(boundary[:impeller]) == 10
+    @test length(boundary) == total
+end
+
+@testitem "split_surface! - custom prefix" setup = [TestData, CommonImports] begin
+    boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
+    surf = boundary[:surface1]
+    delete!(boundary, :surface1)
+
+    new_names = split_surface!(boundary, surf, 80°; prefix = :wall)
+
+    @test all(startswith(string(n), "wall_") for n in new_names)
+end
+
 @testitem "split_surface! - by PointSurface object" setup = [TestData, CommonImports] begin
     boundary = PointBoundary(TestData.BIFURCATION_PATH, u"m")
     surf = boundary[:surface1]

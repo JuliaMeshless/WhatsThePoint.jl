@@ -27,8 +27,8 @@ function combine_surfaces!(boundary::PointBoundary, surfs...)
 end
 
 """
-    split_surface!(cloud, angle; k=10)
-    split_surface!(cloud, target_surf, angle; k=10)
+    split_surface!(cloud, angle; k=10) -> Vector{Symbol}
+    split_surface!(cloud, target_surf, angle; k=10) -> Vector{Symbol}
 
 Split a surface into sub-surfaces based on normal angle discontinuities. Builds a k-nearest
 neighbor graph, removes edges where adjacent normals differ by more than `angle`, and labels
@@ -36,6 +36,15 @@ each connected component as a separate named surface.
 
 When called on a cloud/boundary with a single surface, that surface is split automatically.
 When multiple surfaces exist, specify `target_surf` by name.
+
+Sub-surfaces are named after the surface they came from — splitting `:tank` yields
+`:tank_1`, `:tank_2`, … — so a boundary sampled from a [`Triangulation`](@ref) keeps
+each patch's identity through the split. Returns the new names in component order, ready
+for renaming to physical roles:
+
+```julia
+parts = split_surface!(boundary, :tank, 75°)   # [:tank_1, :tank_2, :tank_3]
+```
 """
 function split_surface!(cloud::Union{PointCloud, PointBoundary}, angle::Angle; k::Int = 10)
     @assert length(namedsurfaces(cloud)) == 1 "More than 1 surface in this cloud. Please specify a target surface."
@@ -52,7 +61,7 @@ function split_surface!(
     @assert hassurface(cloud, target_surf) "Target surface not found in cloud."
     surf = cloud[target_surf]
     delete!(namedsurfaces(boundary(cloud)), target_surf)
-    return split_surface!(cloud, surf, angle; k = k)
+    return split_surface!(cloud, surf, angle; k = k, prefix = target_surf)
 end
 
 function split_surface!(
@@ -60,6 +69,7 @@ function split_surface!(
         surf::PointSurface,
         angle::Angle;
         k::Int = 10,
+        prefix::Symbol = :surface,
     )
     pts = points(surf)
     normals = normal(surf)
@@ -82,22 +92,26 @@ function split_surface!(
     many_permute!(normals, connec, ranges)
     many_permute!(areas, connec, ranges)
 
+    new_names = Vector{Symbol}(undef, length(ranges))
     for (i, ids) in enumerate(ranges)
-        name = _generate_surface_name(cloud, i)
+        name = _generate_surface_name(cloud, prefix, i)
         cloud[name] = PointSurface(pts[ids], normals[ids], areas[ids])
+        new_names[i] = name
     end
 
-    return cloud
+    return new_names
 
     # TODO orient normals again because you will not include points around sharp edges where
     # it is another surface, improving the normal estimation
 end
 
-function _generate_surface_name(cloud, i::Int)
-    new_name = Symbol("surface" * string(i))
+# Sub-surface names derive from their parent (`:tank` → `:tank_1`, …) so a split
+# preserves patch provenance. `i` advances past any name already in use.
+function _generate_surface_name(cloud, prefix::Symbol, i::Int)
+    new_name = Symbol(prefix, :_, i)
     return if !hassurface(boundary(cloud), new_name)
         new_name
     else
-        _generate_surface_name(cloud, i + 1)
+        _generate_surface_name(cloud, prefix, i + 1)
     end
 end

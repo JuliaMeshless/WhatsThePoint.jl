@@ -64,15 +64,15 @@ area(surf)     # element areas
 Identify distinct geometric faces (walls, inlets, outlets) so you can apply different boundary conditions to each. Split surfaces at normal angle discontinuities:
 
 ```julia
-split_surface!(boundary, 75°)
+parts = split_surface!(boundary, 75°)   # e.g. [:surface1_1, :surface1_2]
 ```
 
-This builds a k-nearest neighbor graph on the surface, removes edges where adjacent normals differ by more than the threshold angle, and labels each connected component as a separate named surface. See the [Boundary & Normals](boundary_normals.md) page for details on normals, splitting, shadow points, and more.
+This builds a k-nearest neighbor graph on the surface, removes edges where adjacent normals differ by more than the threshold angle, and labels each connected component as a separate named surface. Sub-surfaces are named after their parent, so splitting one patch of a multi-STL boundary leaves the other patches untouched. See the [Boundary & Normals](boundary_normals.md) page for details on normals, splitting, shadow points, and more.
 
 Combine multiple surfaces back into one:
 
 ```julia
-combine_surfaces!(boundary, :surface1, :surface2)
+combine_surfaces!(boundary, :surface1_1, :surface1_2)
 ```
 
 ## Shadow Points (Optional)
