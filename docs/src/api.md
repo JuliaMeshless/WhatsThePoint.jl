@@ -55,6 +55,7 @@ Volume point generation algorithms and spacing types.
 
 ```@docs
 discretize
+refine
 AbstractNodeGenerationAlgorithm
 AbstractSpacing
 SlakKosec
@@ -155,6 +156,7 @@ geometry_info
 
 ```@docs
 sample_surface
+surface_areas
 ```
 
 ## Visualization

@@ -73,7 +73,8 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 - `isinside.jl` - Point-in-polygon/volume tests (2D: winding number, 3D: Green's function)
 - `shadow.jl` - Shadow point generation
 - `surface_operations.jl` - Split, combine, add surfaces to boundaries
-- `surface_sampling.jl` - Graded Poisson-disk sampling of triangle-mesh surfaces (`sample_surface`, `PointBoundary(mesh, spacing)`)
+- `surface_sampling.jl` - Graded Poisson-disk sampling of triangle-mesh surfaces (`sample_surface`, `PointBoundary(mesh, spacing)`, `PointBoundary(tri::Triangulation, spacing)`, and per-patch `PointBoundary(tri, :patch => spacing, ...; default)` for a distinct wall spacing on each STL)
+- `geometry/triangulation.jl` - `Triangulation`: one or more named, role-tagged (`:container`/`:obstacle`) STL surfaces merged into a single consistently-oriented `TriangleIndex` (`load_triangulation`, per-patch signed-volume orientation guard, obstacle winding reversal). Scope: closed watertight shells only; obstacles must not touch the container.
 
 ### Octree Spatial Indexing (`src/octree/`)
 - `spatial_octree.jl` - Core octree data structure with adaptive subdivision and 2:1 balancing
@@ -204,6 +205,39 @@ cloud = discretize(boundary, spacing;
                    max_points=100_000)
 ```
 
+### Creating a Point Cloud from multiple STLs (container + obstacles)
+
+```julia
+# Load several closed STL solids as named, role-tagged patches, merged into one
+# consistently-oriented triangulation (obstacle windings are reversed so every
+# normal points out of the fluid). The pipeline is generic: any number of STLs,
+# one `:container` enclosing any number of `:obstacle` bodies (immersed-boundary
+# naming — `:domain` is the fluid domain, `:body1`/`:body2`/... the solids in it).
+tri = load_triangulation(:domain => ("domain.stl", :container),
+                         :body1  => ("body1.stl",  :obstacle),
+                         :body2  => ("body2.stl",  :obstacle);
+                         units = u"mm")
+
+# Per-patch Poisson-disk sampling into named surfaces (patch name → surface
+# name, so BCs stay taggable)
+spacing = ConstantSpacing(1mm)
+boundary = PointBoundary(tri, spacing)
+
+# ...or a distinct wall spacing per patch (values: AbstractSpacing or a bare
+# Length; `default` covers unlisted patches, else every patch must be named):
+boundary = PointBoundary(tri, :body1 => 0.5mm; default = 1mm)
+
+# Interior classification comes from the merged octree — no CSG
+cloud = discretize(boundary, spacing; alg=Octree(tri; spacing))
+```
+
+Each patch must be a closed, outward-oriented solid (open-patch assembly is
+unsupported by design), and obstacles must not cross the container wall.
+Obstacles resting *flush* on the container (coincident surfaces, e.g. an
+immersed body resting on the domain floor) are supported: `TriangleOctree(tri)` detects such
+seams at build and vetoes the container's ambiguous fluid vote in favor of
+the obstacle.
+
 ### Surface Splitting by Normal Angle
 
 ```julia
@@ -265,6 +299,7 @@ visualize(boundary; markersize=0.15)
 ## Key Functions Reference
 
 - `suggest_spacing` - Probe a geometry and recommend a baseline spacing (the "step 0" before discretize)
+- `load_triangulation` - Load one or more STLs as named, role-tagged patches into a merged `Triangulation` (multi-STL geometry for `PointBoundary(tri, spacing)`, `Octree(tri)`, `TriangleOctree(tri)`)
 - `discretize` - Generate volume points from boundary (returns new cloud)
 - `sample_surface` / `PointBoundary(mesh, spacing)` - Poisson-disk surface sampling at a prescribed spacing
 - `split_surface!` - Split boundary surfaces by normal angle threshold
@@ -317,6 +352,7 @@ test/
 ├── octree_spacing_criterion.jl  # Octree spacing criterion tests
 ├── octree_triangle_octree.jl    # TriangleOctree tests
 ├── octree_regression_curvature.jl # Octree curvature regression tests
+├── triangulation.jl             # Triangulation (multi-STL) tests: load/merge/orient, PointBoundary(tri, spacing), Octree(tri), box-in-box e2e
 └── data/
     ├── bifurcation.stl          # Test data (24,780 points)
     ├── box.stl                  # Test data
