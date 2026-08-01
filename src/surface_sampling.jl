@@ -65,6 +65,7 @@ function _sample_surface(
         factor::Real = 0.75,
         max_points::Int = 10_000_000,
         stall_limit::Int = 2000,
+        seeds::Union{Nothing, PointSurface} = nothing,
     ) where {T <: Real}
     factor > 0 || throw(ArgumentError("factor must be positive"))
     stall_limit > 0 || throw(ArgumentError("stall_limit must be positive"))
@@ -94,6 +95,23 @@ function _sample_surface(
     rs = T[]
     tri_of = Int[]
 
+    # Seeded refinement (`seeds !== nothing`): the existing points occupy the
+    # grid at the CURRENT — finer — radius, so every new dart keeps the new
+    # separation from them and the union is blue-noise at the new spacing. As in
+    # the volume sampler, seeds are never tested against each other (they are
+    # already valid at their own, coarser, spacing) and are not returned.
+    n_seeds = 0
+    if seeds !== nothing
+        for p in points(seeds)
+            c = _extract_vertex(T, p)
+            push!(pts, c)
+            push!(rs, f * _spacing_value(T, spacing, c))
+            push!(tri_of, 0)                # never dereferenced: seeds aren't returned
+            _grid_insert!(grid, c)
+        end
+        n_seeds = length(pts)
+    end
+
     misses = 0
     while length(pts) < max_points && misses < stall_limit
         tri = tri_range[clamp(searchsortedfirst(cum_areas, rand(T) * total_area), 1, n_tri)]
@@ -113,18 +131,38 @@ function _sample_surface(
             misses += 1
         end
     end
-    isempty(pts) && throw(ArgumentError("surface sampling produced no points — check spacing vs mesh size"))
+    new = (n_seeds + 1):length(pts)
+    isempty(new) && n_seeds == 0 &&
+        throw(ArgumentError("surface sampling produced no points — check spacing vs mesh size"))
     length(pts) >= max_points &&
         @warn "Surface sampling truncated by max_points before saturation — the surface is under-sampled" max_points
 
     len_unit = index.len_unit
-    sample_points = [Point((c .* len_unit)...) for c in pts]
-    sample_normals = [@inbounds index.face[t] for t in tri_of]
-    # Total-area-preserving shares, proportional to the local disk area.
-    w = rs .^ 2
-    sample_areas = (total_area / sum(w)) .* w .* len_unit^2
+    sample_points = [Point((pts[i] .* len_unit)...) for i in new]
+    sample_normals = [@inbounds index.face[tri_of[i]] for i in new]
 
-    return PointSurface(sample_points, sample_normals, sample_areas)
+    return PointSurface(
+        sample_points, sample_normals,
+        surface_areas(sample_points, spacing, total_area * len_unit^2),
+    )
+end
+
+"""
+    surface_areas(points, spacing, total_area) -> Vector
+
+Total-area-preserving per-point areas for a surface point set: shares
+proportional to `spacing(x)²`, scaled to sum to `total_area`.
+
+Kept separate from sampling so the same code applies to any point set — one
+sampling, a [`refine`](@ref) increment, or the union of the two. That matters
+because an increment on its own is *not* a partition of the surface: its areas
+sum to the whole patch and would double-count against the seeds'. If you need a
+partition over the union, call this on the union.
+"""
+function surface_areas(points, spacing::AbstractSpacing, total_area)
+    T = CoordRefSystems.mactype(crs(first(points)))
+    w = [_spacing_value(T, spacing, _extract_vertex(T, p))^2 for p in points]
+    return (total_area / sum(w)) .* w
 end
 
 """
@@ -165,6 +203,42 @@ function PointBoundary(tri::Triangulation, spacing::AbstractSpacing; kwargs...)
     M = manifold(first(pairs).second)
     C = crs(first(pairs).second)
     return PointBoundary(LittleDict{Symbol, PointSurface{M, C}}(pairs))
+end
+
+"""
+    refine(bnd::PointBoundary, tri::Triangulation, spacing; kwargs...) -> PointBoundary
+
+Continue the Poisson-disk sampling of `bnd` at a finer `spacing`, returning
+**only the points that were added**. The result nests: `bnd` and the increment
+are disjoint and their union is blue-noise at the new spacing, because the
+existing points seed the dart-throwing grid at the new radius.
+
+Patch names are preserved, so the increment can be tagged and grouped exactly
+like the original.
+
+The increment's areas are shares over the increment alone — it is a set of
+evaluation sites, not a partition of the surface, and `bnd` keeps its own valid
+areas. For a partition over the union, call [`surface_areas`](@ref) on it.
+
+Used to build an oversampled least-squares system whose unknowns are `bnd` and
+whose extra equations sit at the increment. Pair with [`refine`](@ref) on a
+`PointCloud` for the volume.
+"""
+function refine(
+        bnd::PointBoundary, tri::Triangulation, spacing::AbstractSpacing; kwargs...
+    )
+    pairs = map(patches(tri)) do name
+        name => _sample_surface(
+            tri.index, patch_range(tri, name), spacing; seeds = bnd[name], kwargs...
+        )
+    end
+    M = manifold(first(pairs).second)
+    C = crs(first(pairs).second)
+    return PointBoundary(LittleDict{Symbol, PointSurface{M, C}}(pairs))
+end
+
+function refine(bnd::PointBoundary, tri::Triangulation, spacing::Unitful.Length; kwargs...)
+    return refine(bnd, tri, ConstantSpacing(spacing); kwargs...)
 end
 
 _as_spacing(s::AbstractSpacing) = s

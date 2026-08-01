@@ -888,6 +888,7 @@ function _discretize_volume(
         spacing::AbstractSpacing,
         alg::Octree{<:Manifold, <:CRS, T};
         max_points::Union{Int, Nothing} = nothing,
+        seed_volume::Bool = false,
     ) where {C, T}
     # Bridson is empty when the spacing is too coarse for the domain to host an
     # interior. Clamp (loudly) before the node octree is built — its resolution
@@ -928,8 +929,19 @@ function _discretize_volume(
     # :bridson is a single global pass — no per-leaf allocation, candidate
     # filtering, or deficit fill (each would break the separation guarantee).
     if alg.placement == :bridson
+        # `seed_volume` turns this into a REFINEMENT pass: the existing volume
+        # points join the wall seeds, so new points keep the new separation from
+        # them and the union nests. `_generate_bridson` already returns only the
+        # points it added, so the increment needs no bookkeeping here.
         seeds = [_extract_vertex(T, pt) for pt in points(boundary(_cloud))]
-        print("  Bridson sampling ($(length(seeds)) boundary seeds)...")
+        n_wall = length(seeds)
+        if seed_volume
+            append!(seeds, (_extract_vertex(T, pt) for pt in points(volume(_cloud))))
+        end
+        print(
+            "  Bridson sampling ($n_wall boundary" *
+                (seed_volume ? " + $(length(seeds) - n_wall) volume" : "") * " seeds)..."
+        )
         t3 = @elapsed vol_points = _generate_bridson(
             node_tree, classification, alg.triangle_octree, spacing_used, seeds, max_points;
             factor = alg.bridson_factor,
@@ -938,7 +950,10 @@ function _discretize_volume(
         # Never return a silently-empty cloud: the coarse-spacing guard clamps
         # the common case, so reaching zero here means a degenerate/non-watertight
         # domain the probe could not catch.
-        isempty(vol_points) && throw(
+        # Zero new points is degenerate for a fresh fill, but a legitimate
+        # result when refining — it just means the volume is already saturated
+        # at the new spacing.
+        isempty(vol_points) && !seed_volume && throw(
             ArgumentError(
                 "Bridson produced 0 interior points even after coarse-spacing guarding. " *
                     "The domain may be degenerate or non-watertight. " *

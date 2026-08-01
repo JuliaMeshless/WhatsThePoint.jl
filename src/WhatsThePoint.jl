@@ -22,7 +22,7 @@ using Distances: Euclidean
 using Unitful
 
 import Meshes: Manifold, Domain
-import Meshes: centroid, boundingbox, discretize, to, crs
+import Meshes: centroid, boundingbox, discretize, refine, to, crs
 import Meshes: elements, nelements, lentype, normal, area
 # Point, coords, centroid, boundingbox from Meshes.jl; isinside and points defined locally
 export Point, coords, isinside, centroid, boundingbox, points
@@ -85,10 +85,10 @@ export AbstractSpacing, ConstantSpacing, LogLike, BoundaryLayerSpacing
 
 include("discretization/discretization.jl")
 export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, Octree
-export discretize, suggest_spacing
+export discretize, suggest_spacing, refine
 
 include("surface_sampling.jl")
-export sample_surface
+export sample_surface, surface_areas
 
 include("repel_forces.jl")
 export RepelForceModel, InverseDistanceForce, SpacingEquilibriumForce, StrongSpacingForce,

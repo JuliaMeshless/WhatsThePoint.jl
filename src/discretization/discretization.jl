@@ -111,3 +111,34 @@ function discretize(
     )
     return discretize(cloud, ConstantSpacing(spacing); kwargs...)
 end
+
+"""
+    refine(cloud::PointCloud, spacing; alg::Octree, max_points=nothing) -> PointVolume
+
+Continue the volume fill of `cloud` at a finer `spacing`, returning **only the
+points that were added**. The result nests: `cloud` and the increment are
+disjoint and their union is blue-noise at the new spacing, because the existing
+boundary *and* volume points seed the advancing front at the new radius.
+
+Only `Octree` supports this — it is the algorithm whose Bridson pass is seeded.
+
+Pair with [`refine`](@ref) on a `PointBoundary` for the surface. Together they
+build an oversampled least-squares system whose unknowns are `cloud` and whose
+extra equations sit at the increment: every unknown keeps an equation centred on
+itself, so the assembled matrix is the square system with rows appended and
+`σ_min` can only improve.
+"""
+function refine(
+        cloud::PointCloud{𝔼{3}},
+        spacing::AbstractSpacing;
+        alg::Octree,
+        max_points::Union{Int, Nothing} = nothing,
+    )
+    return _discretize_volume(
+        cloud, spacing, alg; max_points = max_points, seed_volume = true
+    )
+end
+
+function refine(cloud::PointCloud, spacing::Unitful.Length; kwargs...)
+    return refine(cloud, ConstantSpacing(spacing); kwargs...)
+end
