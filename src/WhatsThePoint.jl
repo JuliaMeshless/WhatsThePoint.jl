@@ -82,6 +82,7 @@ export isinside
 
 include("discretization/spacings.jl")
 export AbstractSpacing, ConstantSpacing, LogLike, BoundaryLayerSpacing
+export PatchLayerSpacing, MinSpacing, ScaledSpacing
 
 include("discretization/discretization.jl")
 export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, Octree

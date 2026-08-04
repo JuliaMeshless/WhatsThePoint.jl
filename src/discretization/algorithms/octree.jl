@@ -293,6 +293,23 @@ function _extract_min_spacing(spacing::BoundaryLayerSpacing)
     return float(ustrip(spacing.at_wall))
 end
 
+# Attained at the seeds, where d = 0.
+function _extract_min_spacing(spacing::PatchLayerSpacing)
+    return float(ustrip(spacing.at_wall))
+end
+
+# The min of the parts' minima, ignoring parts that cannot report one. Still a
+# valid lower bound: an unknown part can only push the pointwise min down.
+function _extract_min_spacing(spacing::MinSpacing)
+    known = filter(!isnothing, map(_extract_min_spacing, spacing.parts))
+    return isempty(known) ? nothing : minimum(known)
+end
+
+function _extract_min_spacing(spacing::ScaledSpacing)
+    im = _extract_min_spacing(spacing.inner)
+    return isnothing(im) ? nothing : im * spacing.factor
+end
+
 # Fallback for other spacing types: return nothing to indicate unknown
 _extract_min_spacing(::AbstractSpacing) = nothing
 
