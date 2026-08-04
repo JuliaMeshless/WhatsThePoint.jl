@@ -71,6 +71,17 @@ Poisson-disk sampling — ≈ 50% fewer points than `1/h³`, which starts `repel
 spacing-equilibrium force in its attractive branch and degrades rather than
 polishes the seeding (measured on the cavity gate).
 
+`wall_clearance` (default 0, off) rejects a volume candidate lying closer than
+`wall_clearance · h(x)` to the *triangulation*. The separation test above
+measures distance to existing **points**, so the wall constrains volume points
+only through its samples: between them a candidate may sit arbitrarily close to
+the surface, and such a node carries a necessarily one-sided stencil. Keep it
+below `bridson_factor` — separation already guarantees `bridson_factor·h` from
+the nearest boundary sample, and distance-to-surface ≤ distance-to-sample, so
+any value `≤ bridson_factor` bites only where the point test is blind. Larger
+values carve a node-free shell against the wall instead. `0.3`–`0.5` is
+reasonable. Costs one bounded-radius octree descent per surviving candidate.
+
 # Examples
 ```julia
 # Automatic (recommended)
@@ -94,6 +105,7 @@ struct Octree{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgor
     node_min_ratio::T  # Node octree minimum box size ratio (can be much finer than triangle octree)
     bridson_factor::T  # Poisson-disk radius relative to h(x) (placement = :bridson only)
     max_growth::T  # Lipschitz cap on |∇h| (0 = off); steep-but-smooth grading
+    wall_clearance::T  # Minimum distance to the triangulation, in units of h(x) (0 = off)
 end
 
 # Constructor — the single entry point: takes the Meshes.jl object at the
@@ -110,6 +122,7 @@ function Octree(
         alpha::Real = 2.0,
         bridson_factor::Real = 0.75,
         max_growth::Real = 0.0,
+        wall_clearance::Real = 0.0,
         verify_orientation::Bool = true,
     ) where {M, C}
     boundary_oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive"))
@@ -118,6 +131,7 @@ function Octree(
     alpha > 0 || throw(ArgumentError("alpha must be positive"))
     bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
     max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
+    wall_clearance >= 0 || throw(ArgumentError("wall_clearance must be ≥ 0 (0 disables the test)"))
     T = CoordRefSystems.mactype(C)
 
     # Triangle octree: geometry-based or user override
@@ -166,6 +180,7 @@ function Octree(
         node_ratio,
         T(bridson_factor),
         T(max_growth),
+        T(wall_clearance),
     )
 end
 
@@ -200,6 +215,7 @@ function Octree(
         alpha::Real = 2.0,
         bridson_factor::Real = 0.75,
         max_growth::Real = 0.0,
+        wall_clearance::Real = 0.0,
         verify_orientation::Bool = false,
     ) where {T <: Real}
     boundary_oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive"))
@@ -208,6 +224,7 @@ function Octree(
     alpha > 0 || throw(ArgumentError("alpha must be positive"))
     bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
     max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
+    wall_clearance >= 0 || throw(ArgumentError("wall_clearance must be ≥ 0 (0 disables the test)"))
 
     # Triangle octree over the merged index: geometry-based or user override
     geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, num_triangles(tri)) : T(min_ratio)
@@ -259,6 +276,7 @@ function Octree(
         node_ratio,
         T(bridson_factor),
         T(max_growth),
+        T(wall_clearance),
     )
 end
 
@@ -563,6 +581,31 @@ are rejected.
 end
 
 """
+    _bridson_clear_of_wall!(state, c, tri_octree, clearance) -> Bool
+
+Distance-to-triangulation test for a Bridson candidate: `true` when no triangle
+lies within `clearance` of `c`. `_bridson_separated` measures distance to
+existing *points* only, so between wall samples a candidate may sit arbitrarily
+close to the surface — a node whose stencil is then necessarily one-sided.
+
+Bounded-radius, not a nearest-triangle query: seeding `best_dist_sq` with
+`clearance²` makes `_nearest_triangle_octree!`'s branch-and-bound prune every
+box farther than that, so a candidate out in the bulk costs a handful of
+box-distance evaluations and touches no triangle. `state` is reused across
+candidates — the Bridson front is serial, and a fresh mutable per dart would
+allocate once per attempt.
+"""
+@inline function _bridson_clear_of_wall!(
+        state::NearestTriangleState{T}, c::SVector{3, T}, tri_octree, clearance::T,
+    ) where {T}
+    clearance <= 0 && return true
+    state.best_dist_sq = clearance * clearance
+    state.closest_idx = 0
+    _nearest_triangle_octree!(c, tri_octree.tree, tri_octree.index, 1, state)
+    return state.closest_idx == 0
+end
+
+"""
     _non_exterior_leaves(node_tree, classification) -> Vector{Int}
 
 Indices of every leaf that is not classified `LEAF_EXTERIOR` (interior +
@@ -798,7 +841,7 @@ end
 
 """
     _generate_bridson(node_tree, classification, tri_octree, spacing, seeds,
-                      max_points; factor=0.75, k_attempts=30)
+                      max_points; factor=0.75, wall_clearance=0, k_attempts=30)
         -> Vector{SVector{3,T}}
 
 Graded Bridson Poisson-disk sampling of the domain volume with disk radius
@@ -808,14 +851,24 @@ background grid so volume points keep their distance from the wall, but are
 not returned. The front runs until saturation or until `max_points` volume
 points exist; truncation warns because it leaves the far side of the front
 unfilled.
+
+`wall_clearance > 0` additionally rejects candidates within
+`wall_clearance · h(x)` of the triangulation itself — the seeds constrain the
+wall only where they sample it. Seeds are never tested (they lie on the
+surface by definition), and the test consumes no randomness, so
+`wall_clearance = 0` reproduces the untested front exactly for a given seed.
 """
 function _generate_bridson(
         node_tree, classification, tri_octree, spacing,
         seeds::Vector{SVector{3, T}}, max_points::Int;
         factor::Real = 0.75,
+        wall_clearance::Real = 0,
         k_attempts::Int = 30,
     ) where {T <: Real}
     f = T(factor)
+    wc = T(wall_clearance)
+    # Reused across every candidate: see `_bridson_clear_of_wall!`.
+    wall_state = NearestTriangleState{T}(zero(SVector{3, T}))
     r_min = f * _bridson_h_min(node_tree, classification, spacing)
     grid = _BridsonGrid(tri_octree.index.bbox_min, tri_octree.index.bbox_max, r_min)
 
@@ -853,9 +906,13 @@ function _generate_bridson(
             ρ = rs[a] * (1 + rand(T))
             d = randn(SVector{3, T})
             c = pts[a] + ρ * (d / norm(d))
+            # Cheapest test first: the grid separation rejects most darts, so
+            # the octree descent runs only on what survives it.
             _bridson_inside(c, node_tree, classification, tri_octree) || continue
-            r_c = f * _spacing_value(T, spacing, c)
+            h_c = _spacing_value(T, spacing, c)
+            r_c = f * h_c
             _bridson_separated(grid, pts, rs, c, r_c) || continue
+            _bridson_clear_of_wall!(wall_state, c, tri_octree, wc * h_c) || continue
             push!(pts, c)
             push!(rs, r_c)
             _grid_insert!(grid, c)
@@ -884,8 +941,10 @@ function _generate_bridson(
             d = randn(SVector{3, T})
             c = pts[a] + ρ * (d / norm(d))
             _bridson_inside(c, node_tree, classification, tri_octree) || continue
-            r_c = f * _spacing_value(T, spacing, c)
+            h_c = _spacing_value(T, spacing, c)
+            r_c = f * h_c
             _bridson_separated(grid, pts, rs, c, r_c) || continue
+            _bridson_clear_of_wall!(wall_state, c, tri_octree, wc * h_c) || continue
             truncated = true
             break
         end
@@ -961,7 +1020,7 @@ function _discretize_volume(
         )
         t3 = @elapsed vol_points = _generate_bridson(
             node_tree, classification, alg.triangle_octree, spacing_used, seeds, max_points;
-            factor = alg.bridson_factor,
+            factor = alg.bridson_factor, wall_clearance = alg.wall_clearance,
         )
         println(" done ($(length(vol_points)) points, $(round(t3, digits = 2))s)")
         # Never return a silently-empty cloud: the coarse-spacing guard clamps
