@@ -35,7 +35,7 @@ function SpacingCriterion(spacing, diagonal::Real; alpha = 2, min_ratio = 1.0e-6
     return SpacingCriterion{T, typeof(spacing)}(spacing, T(alpha), T(diagonal) * T(min_ratio))
 end
 
-@inline function _spacing_value(::Type{T}, spacing, p::SVector{3, T}) where {T}
+@inline function _spacing_value(::Type{T}, spacing, p::SVector{N, T}) where {N, T}
     return T(ustrip(spacing(Point(p...))))
 end
 
@@ -85,50 +85,73 @@ node_tree = build_node_octree(tri_octree, spacing, 1.0, 1e-6)
 ```
 """
 function build_node_octree(
-        triangle_octree::TriangleOctree{T}, spacing, alpha, node_min_ratio
-    ) where {T}
-    bbox_min, bbox_max = bounding_box(triangle_octree.tree)
-    node_tree = SpatialOctree{Int, T}(bbox_min, triangle_octree.tree.root_size; initial_capacity = 1000)
+        geometry::AbstractGeometryIndex, spacing, alpha, node_min_ratio
+    )
+    geo_tree = geometry.tree
+    bbox_min, bbox_max = bounding_box(geo_tree)
+    node_tree = _node_tree_like(geo_tree)
 
     diagonal = norm(bbox_max - bbox_min)
     criterion = SpacingCriterion(spacing, diagonal; alpha, min_ratio = node_min_ratio)
 
-    _subdivide_node_octree!(node_tree, 1, criterion, triangle_octree)
+    _subdivide_node_octree!(node_tree, 1, criterion, geometry)
     balance_octree!(node_tree, criterion)
 
     return node_tree
 end
 
-@inline function _mesh_geometry_query(pt::SVector{3, T}, tol, octree) where {T}
-    return _classify_point_octree(pt, octree; tol = T(tol))
-end
+"Empty node tree spanning the same root box as the geometry tree."
+_node_tree_like(t::SpatialTree{N, <:Any, T}) where {N, T} =
+    SpatialTree{N, Int, T}(t.origin, t.root_size; initial_capacity = 1000)
 
 function _box_may_contain_interior(
-        node_tree::SpatialOctree{<:Any, T}, box_idx, triangle_octree
-    ) where {T}
+        node_tree::SpatialTree{N, <:Any, T}, box_idx, geometry
+    ) where {N, T}
     bbox_min, bbox_max = box_bounds(node_tree, box_idx)
     h = box_size(node_tree, box_idx)
     tol = max(T(_CLASSIFY_TOLERANCE_ABS), h * T(_CLASSIFY_TOLERANCE_REL))
 
-    center = box_center(node_tree, box_idx)
+    for pt in _box_probe_points(bbox_min, bbox_max)
+        classify_point(geometry, pt, tol) != LEAF_EXTERIOR && return true
+    end
+
+    # Probe sampling still misses thin/elongated domains inside large boxes
+    # when every sample falls outside the geometry. Fall back to a spatial
+    # descent of the geometry tree for O(log L) overlap detection.
+    geo_cls = geometry.leaf_classification
+    predicate = if isnothing(geo_cls)
+        _ -> true
+    else
+        leaf_idx -> geo_cls[leaf_idx] != LEAF_EXTERIOR
+    end
+    return any_leaf_overlapping(geometry.tree, bbox_min, bbox_max, predicate)
+end
+
+"""
+    _box_probe_points(bbox_min, bbox_max)
+
+Deterministic point probes covering a box: center, corners, and midpoints of
+faces/edges — 27 points in 3D, 9 in 2D (center + 4 corners + 4 edge midpoints).
+"""
+@inline function _box_probe_points(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
+    center = (bbox_min + bbox_max) / 2
     corners = _box_corners(bbox_min, bbox_max)
     faces = _box_face_centers(bbox_min, bbox_max)
     edges = _box_edge_midpoints(bbox_min, bbox_max)
+    return (center, corners..., faces..., edges...)
+end
 
-    for pt in (center, corners..., faces..., edges...)
-        _mesh_geometry_query(pt, tol, triangle_octree) != LEAF_EXTERIOR && return true
-    end
-
-    # 27-point sampling still misses thin/elongated domains inside large cubic
-    # boxes when every sample falls outside the geometry. Fall back to a spatial
-    # descent of the triangle octree for O(log L) overlap detection.
-    tri_cls = triangle_octree.leaf_classification
-    predicate = if isnothing(tri_cls)
-        _ -> true
-    else
-        leaf_idx -> tri_cls[leaf_idx] != LEAF_EXTERIOR
-    end
-    return any_leaf_overlapping(triangle_octree.tree, bbox_min, bbox_max, predicate)
+@inline function _box_probe_points(bbox_min::SVector{2, T}, bbox_max::SVector{2, T}) where {T}
+    cx = (bbox_min[1] + bbox_max[1]) / 2
+    cy = (bbox_min[2] + bbox_max[2]) / 2
+    return (
+        SVector{2, T}(cx, cy),
+        _box_corners(bbox_min, bbox_max)...,
+        SVector{2, T}(cx, bbox_min[2]),
+        SVector{2, T}(cx, bbox_max[2]),
+        SVector{2, T}(bbox_min[1], cy),
+        SVector{2, T}(bbox_max[1], cy),
+    )
 end
 
 @inline function _box_face_centers(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
@@ -162,30 +185,30 @@ end
     )
 end
 
-function _subdivide_node_octree!(node_tree, box_idx, criterion, triangle_octree)
+function _subdivide_node_octree!(node_tree, box_idx, criterion, geometry)
     should_subdivide(criterion, node_tree, box_idx) || return
-    _box_may_contain_interior(node_tree, box_idx, triangle_octree) || return
+    _box_may_contain_interior(node_tree, box_idx, geometry) || return
 
     subdivide!(node_tree, box_idx)
     for child_idx in children(node_tree, box_idx)
-        _subdivide_node_octree!(node_tree, child_idx, criterion, triangle_octree)
+        _subdivide_node_octree!(node_tree, child_idx, criterion, geometry)
     end
     return
 end
 
 """
-    classify_node_octree(node_tree, triangle_octree)
+    classify_node_octree(node_tree, geometry)
 
-Classify node octree leaves as interior, boundary, or exterior using the
-triangle octree's geometry query. Correctness of downstream sampling
-(skipping `isinside` on `LEAF_INTERIOR` points) relies on the mesh-bbox
-early return inside `_mesh_geometry_query`, which prevents sign-vote flips
-from promoting far-exterior leaves into `LEAF_INTERIOR`.
+Classify node tree leaves as interior, boundary, or exterior using the
+geometry index's `classify_point` seam method. Correctness of downstream
+sampling (skipping `isinside` on `LEAF_INTERIOR` points) relies on the
+geometry-bbox early return inside `classify_point`, which prevents sign-vote
+flips from promoting far-exterior leaves into `LEAF_INTERIOR`.
 
 # Returns
-Vector of `Int8` classifications indexed by node-octree box index.
+Vector of `Int8` classifications indexed by node-tree box index.
 """
-function classify_node_octree(node_tree, triangle_octree)
-    query(pt, tol) = _mesh_geometry_query(pt, tol, triangle_octree)
+function classify_node_octree(node_tree, geometry)
+    query(pt, tol) = classify_point(geometry, pt, tol)
     return classify_leaves!(node_tree, query)
 end

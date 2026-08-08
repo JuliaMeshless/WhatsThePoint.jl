@@ -188,11 +188,11 @@ end
 # own, so the boundary minimum is misleadingly optimistic. The interior grid
 # reflects what the bulk of the volume actually demands; if even its finest
 # sample is too coarse, the interior is unfillable and we clamp.
-function _probe_min_spacing(spacing, bmin::SVector{3, T}, bmax::SVector{3, T}; n::Int = 5) where {T}
+function _probe_min_spacing(spacing, bmin::SVector{N, T}, bmax::SVector{N, T}; n::Int = 5) where {N, T}
     ext = bmax - bmin
     hmin = typemax(T)
-    for i in 0:(n - 1), j in 0:(n - 1), k in 0:(n - 1)
-        t = SVector{3, T}(2i + 1, 2j + 1, 2k + 1) / (2n)
+    for ci in CartesianIndices(ntuple(_ -> n, Val(N)))
+        t = SVector{N, T}(ntuple(d -> 2 * (ci[d] - 1) + 1, Val(N))) / (2n)
         h = _spacing_value(T, spacing, bmin + t .* ext)
         h < hmin && (hmin = h)
     end
@@ -200,7 +200,7 @@ function _probe_min_spacing(spacing, bmin::SVector{3, T}, bmax::SVector{3, T}; n
 end
 
 """
-    _guard_coarse_spacing(spacing, tri_octree, bridson_factor) -> spacing
+    _guard_coarse_spacing(spacing, geometry, bridson_factor) -> spacing
 
 Bridson safety net. When the finest prescribed spacing over the domain is at or
 above the Poisson-disk ceiling `L_min/(2·bridson_factor)` — i.e. a saturated
@@ -209,9 +209,8 @@ front would leave the interior empty — emit a loud `@warn` and return a
 still yields a cloud. Otherwise returns `spacing` unchanged (the request is
 viable and is respected).
 """
-function _guard_coarse_spacing(spacing, tri_octree, bridson_factor)
-    bmin = tri_octree.index.bbox_min
-    bmax = tri_octree.index.bbox_max
+function _guard_coarse_spacing(spacing, geometry, bridson_factor)
+    bmin, bmax = domain_bounds(geometry)
     Lmin = minimum(bmax - bmin)
     h_ceiling = Lmin / (2 * bridson_factor)
     hmin_domain = _probe_min_spacing(spacing, bmin, bmax)

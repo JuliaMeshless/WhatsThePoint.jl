@@ -40,7 +40,7 @@ end
     cloud = discretize(bnd, spacing; alg, max_points = 100)
 
     # All points should be inside via octree check
-    octree = alg.triangle_octree
+    octree = alg.geometry
     for pt in WhatsThePoint.volume(cloud)
         c = to(pt)
         sv = SVector{3, Float64}(c[1] / m, c[2] / m, c[3] / m)
@@ -80,7 +80,7 @@ end
 
     # Every volume point must pass the geometry check, not just the
     # near-surface candidates that happened to be filtered.
-    octree = alg.triangle_octree
+    octree = alg.geometry
     for pt in WhatsThePoint.volume(cloud)
         c = to(pt)
         sv = SVector{3, Float64}(c[1] / m, c[2] / m, c[3] / m)
@@ -164,9 +164,9 @@ end
     # The estimator returns a positive Int, and its 1.1× pad keeps the cap
     # above the saturated count (so the front saturates, not truncates).
     node_tree = WhatsThePoint.build_node_octree(
-        alg.triangle_octree, spacing, alg.alpha, alg.node_min_ratio,
+        alg.geometry, spacing, alg.alpha, alg.node_min_ratio,
     )
-    classification = WhatsThePoint.classify_node_octree(node_tree, alg.triangle_octree)
+    classification = WhatsThePoint.classify_node_octree(node_tree, alg.geometry)
     est = WhatsThePoint._estimate_volume_points(node_tree, classification, spacing)
     @test est isa Int
     @test est > length(vol)
@@ -364,7 +364,7 @@ end
     # Test construction from an imported mesh
     alg2 = Octree(import_mesh(TestData.BOX_PATH, u"m"))
     @test alg2 isa Octree
-    @test alg2.triangle_octree isa WhatsThePoint.TriangleOctree
+    @test alg2.geometry isa WhatsThePoint.TriangleOctree
 end
 
 @testitem "Octree discretization preserves and promotes mactype" setup = [TestData, CommonImports] begin
@@ -391,7 +391,7 @@ end
     @test alg32.boundary_oversampling isa Float32
     @test alg32.bridson_factor isa Float32
     @test alg32.max_growth isa Float32
-    @test eltype(alg32.triangle_octree.index.bbox_min) === Float32
+    @test eltype(alg32.geometry.index.bbox_min) === Float32
     cloud32 = discretize(bnd, ConstantSpacing(3.0f0m); alg = alg32, max_points = 50)
     @test cloud32 isa PointCloud
     @test length(WhatsThePoint.volume(cloud32)) > 0

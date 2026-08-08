@@ -56,8 +56,12 @@ function discretize(
         alg::AbstractNodeGenerationAlgorithm = FornbergFlyer(),
         max_points::Union{Int, Nothing} = nothing,
     )
-    alg isa FornbergFlyer ||
-        throw(ArgumentError("FornbergFlyer is the only 2D discretization algorithm; pass `alg=FornbergFlyer()` (the default) or omit `alg`."))
+    alg isa Union{FornbergFlyer, Octree} || throw(
+        ArgumentError(
+            "2D discretization supports FornbergFlyer (the default) and Octree " *
+                "(pass `alg = Octree(bnd; spacing)`)."
+        )
+    )
     cloud = PointCloud(bnd)
     new_volume =
         _discretize_volume(cloud, spacing, alg; max_points = max_points)

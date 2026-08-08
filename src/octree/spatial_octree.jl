@@ -234,6 +234,97 @@ Leaf box containing `point`, O(log n) from root.
 end
 
 #=============================================================================
+Nearest-Element Search (generic branch-and-bound)
+=============================================================================#
+
+"Squared distance from `point` to the axis-aligned box `[bbox_min, bbox_max]`."
+@inline function _point_box_distance_sq(
+        point::SVector{N, T},
+        bbox_min::SVector{N, T},
+        bbox_max::SVector{N, T},
+    ) where {N, T <: Real}
+    d2 = zero(T)
+    @inbounds for d in 1:N
+        δ = point[d] < bbox_min[d] ? (bbox_min[d] - point[d]) :
+            (point[d] > bbox_max[d] ? (point[d] - bbox_max[d]) : zero(T))
+        d2 += δ * δ
+    end
+    return d2
+end
+
+"""
+    NearestElementState{N,T}
+
+Mutable traversal state for [`_nearest_element_tree!`](@ref): the best squared
+distance found so far, the winning element id, the closest point on it, and the
+feature code of that closest point (element interior / edge / vertex — the
+codes are geometry-specific, see `geometric_utils.jl`).
+"""
+mutable struct NearestElementState{N, T <: Real}
+    best_dist_sq::T
+    closest_idx::Int
+    closest_pt::SVector{N, T}
+    closest_feature::Int8
+end
+
+NearestElementState(point::SVector{N, T}) where {N, T <: Real} =
+    NearestElementState{N, T}(typemax(T), 0, point, Int8(0))
+
+"""
+    _nearest_element_tree!(point, tree, box_idx, state, update!)
+
+Generic branch-and-bound nearest-element descent: prunes boxes farther than
+`state.best_dist_sq`, visits children nearest-first, and calls
+`update!(element_id)` for every element of each surviving leaf. `update!` is a
+callable (typically a small struct, not a closure, to stay allocation-free)
+that tightens `state` when the element beats the current best. Shared by the
+3D triangle and 2D segment indexes.
+"""
+function _nearest_element_tree!(
+        point::SVector{N, T},
+        tree::SpatialTree{N, Int, T},
+        box_idx::Int,
+        state::NearestElementState{N, T},
+        update!::F,
+    ) where {N, T <: Real, F}
+    bbox_min, bbox_max = box_bounds(tree, box_idx)
+    _point_box_distance_sq(point, bbox_min, bbox_max) > state.best_dist_sq && return
+
+    if is_leaf(tree, box_idx)
+        @inbounds for el in tree.element_lists[box_idx]
+            update!(el)
+        end
+        return
+    end
+
+    # Visit children nearest-first (insertion sort into fixed 8-slot buffers —
+    # sized for the widest case, 2^3; a quadtree simply uses the first 4).
+    kids = children(tree, box_idx)
+    dists = MVector{8, T}(ntuple(_ -> typemax(T), Val(8)))
+    idxs = MVector{8, Int}(ntuple(_ -> 0, Val(8)))
+    n_valid = 0
+    @inbounds for child_idx in kids
+        cmin, cmax = box_bounds(tree, child_idx)
+        d2 = _point_box_distance_sq(point, cmin, cmax)
+        if d2 <= state.best_dist_sq
+            n_valid += 1
+            pos = n_valid
+            while pos > 1 && d2 < dists[pos - 1]
+                dists[pos] = dists[pos - 1]
+                idxs[pos] = idxs[pos - 1]
+                pos -= 1
+            end
+            dists[pos] = d2
+            idxs[pos] = child_idx
+        end
+    end
+
+    return @inbounds for i in 1:n_valid
+        _nearest_element_tree!(point, tree, idxs[i], state, update!)
+    end
+end
+
+#=============================================================================
 Neighbour Finding
 =============================================================================#
 
@@ -373,12 +464,19 @@ function needs_balancing(t::SpatialTree{N}, box::Int) where {N}
 end
 
 """
-    balance_octree!(tree, criterion::SubdivisionCriterion)
+    balance_octree!(tree, criterion::SubdivisionCriterion; redistribute! = nothing)
 
 Enforce the 2:1 balance constraint across the tree (dimension-agnostic).
 Uses `can_subdivide` (physical limits only), not `should_subdivide`.
+
+`subdivide!` does not move a leaf's `element_lists` entries into the new
+children — queries only scan leaves, so elements of a balance-subdivided box
+would vanish from the queryable tree. Callers whose queries read element
+lists (e.g. `TriangleOctree`'s nearest-triangle search) must pass
+`redistribute!(tree, box_idx)`, invoked right after each forced subdivision
+to push the parent's elements into the intersecting children.
 """
-function balance_octree!(t::SpatialTree, criterion::SubdivisionCriterion)
+function balance_octree!(t::SpatialTree, criterion::SubdivisionCriterion; redistribute! = nothing)
     max_iterations = 100
     iteration = 0
     while iteration < max_iterations
@@ -390,6 +488,7 @@ function balance_octree!(t::SpatialTree, criterion::SubdivisionCriterion)
             if needs_balancing(t, box) && can_subdivide(criterion, t, box)
                 subdivide!(t, box)
                 subdivided_any = true
+                redistribute! !== nothing && redistribute!(t, box)
             end
         end
         subdivided_any || break
@@ -460,6 +559,23 @@ The `2^N` corners of a box, in bit order (bit `d-1` selects `hi[d]`).
         mm = m - 1
         SVector{N, T}(ntuple(d -> ((mm >> (d - 1)) & 1) == 1 ? hi[d] : lo[d], N))
     end
+end
+
+"""
+    _force_occupied_boundary!(classification, tree)
+
+Demote every leaf that holds boundary elements to `LEAF_BOUNDARY`, whatever the
+point-sample classification said — downstream sampling trusts `LEAF_INTERIOR`
+leaves to need no exact inside test, so a leaf overlapping geometry must never
+keep that label. Shared by the triangle and segment indexes.
+"""
+function _force_occupied_boundary!(classification, t::SpatialTree)
+    for leaf_idx in all_leaves(t)
+        if !isempty(t.element_lists[leaf_idx])
+            classification[leaf_idx] = LEAF_BOUNDARY
+        end
+    end
+    return classification
 end
 
 """

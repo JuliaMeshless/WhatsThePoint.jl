@@ -40,8 +40,10 @@ include("geometry.jl")
 include("octree/spatial_octree.jl")
 include("octree/geometric_utils.jl")
 include("octree/triangle_octree.jl")
+include("octree/segment_quadtree.jl")
 include("octree/spacing_criterion.jl")
 export TriangleOctree, num_leaves, num_triangles, has_consistent_normals
+export SegmentQuadtree, num_segments
 
 include("points.jl")
 

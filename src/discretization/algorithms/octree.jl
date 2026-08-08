@@ -79,10 +79,15 @@ cloud = discretize(boundary, spacing; alg, max_points=100_000)
 
 # Manual geometry resolution
 alg = Octree(mesh; min_ratio=1e-3, spacing, alpha=1.0)
+
+# 2D: closed loop(s) of ordered boundary points (SegmentQuadtree inside)
+bnd = PointBoundary(loop_points)
+alg = Octree(bnd; spacing)
+cloud = discretize(bnd, spacing; alg)
 ```
 """
-struct Octree{M <: Manifold, C <: CRS, T <: Real} <: AbstractNodeGenerationAlgorithm
-    triangle_octree::TriangleOctree{T}
+struct Octree{M <: Manifold, C <: CRS, T <: Real, G <: AbstractGeometryIndex{M}} <: AbstractNodeGenerationAlgorithm
+    geometry::G  # TriangleOctree{T} (3D) or SegmentQuadtree{T} (2D)
     boundary_oversampling::T
     placement::Symbol
     alpha::T  # Subdivision aggressiveness: boxes are at most alpha*h_local
@@ -153,8 +158,94 @@ function Octree(
         geometry_min_ratio
     end
 
-    return Octree{M, C, T}(
+    return Octree{M, C, T, typeof(triangle_octree)}(
         triangle_octree,
+        T(boundary_oversampling),
+        placement,
+        T(alpha),
+        node_ratio,
+        T(bridson_factor),
+        T(max_growth),
+    )
+end
+
+"""
+    SegmentQuadtree(bnd::PointBoundary{𝔼{2}}; kwargs...)
+
+Build the 2D geometry index from a `PointBoundary`: each surface is taken as
+one closed loop of points ordered around the loop (any orientation). Multiple
+surfaces describe multiply-connected domains — outer boundary plus holes,
+resolved automatically by nesting parity.
+"""
+function SegmentQuadtree(bnd::PointBoundary{𝔼{2}, C}; kwargs...) where {C}
+    T = CoordRefSystems.mactype(C)
+    loops = [[_extract_vertex(T, p) for p in points(surf)] for surf in surfaces(bnd)]
+    return SegmentQuadtree(loops; len_unit = Unitful.unit(lentype(C)), kwargs...)
+end
+
+"""
+    Octree(bnd::PointBoundary{𝔼{2}}; kwargs...)
+
+Build the spacing-driven discretization algorithm over a 2D boundary — the
+[`SegmentQuadtree`](@ref) counterpart of `Octree(mesh)`. Each surface of `bnd`
+must be a closed loop of points ordered around the loop (any orientation);
+multiple surfaces describe multiply-connected domains (outer boundary plus
+holes). Same keywords as the 3D constructor, minus `verify_orientation`
+(loop orientation is normalized during construction).
+"""
+function Octree(
+        bnd::PointBoundary{𝔼{2}, C};
+        spacing::Union{Nothing, AbstractSpacing} = nothing,
+        min_ratio::Union{Nothing, Real} = nothing,
+        node_min_ratio::Union{Nothing, Real} = nothing,
+        tolerance_relative::Real = 1.0e-6,
+        boundary_oversampling::Real = 2.0,
+        placement::Symbol = :bridson,
+        alpha::Real = 2.0,
+        bridson_factor::Real = 0.75,
+        max_growth::Real = 0.0,
+    ) where {C}
+    boundary_oversampling > 0 || throw(ArgumentError("boundary_oversampling must be positive"))
+    placement in (:random, :jittered, :lattice, :bridson) ||
+        throw(ArgumentError("placement must be :random, :jittered, :lattice, or :bridson"))
+    alpha > 0 || throw(ArgumentError("alpha must be positive"))
+    bridson_factor > 0 || throw(ArgumentError("bridson_factor must be positive"))
+    max_growth >= 0 || throw(ArgumentError("max_growth must be ≥ 0 (0 disables the limiter)"))
+    T = CoordRefSystems.mactype(C)
+
+    # Segment quadtree: geometry-based or user override
+    n_segments_est = sum(s -> length(points(s)), surfaces(bnd))
+    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, n_segments_est) : T(min_ratio)
+    quadtree = SegmentQuadtree(
+        bnd;
+        tolerance_relative,
+        min_ratio = geometry_min_ratio,
+        classify_leaves = true,
+    )
+
+    # Node quadtree: spacing-aware automatic or user override (same logic as
+    # the 3D constructor)
+    node_ratio = if !isnothing(node_min_ratio)
+        T(node_min_ratio)
+    elseif !isnothing(spacing)
+        h_min = _extract_min_spacing(spacing)
+        if !isnothing(h_min)
+            bmin, bmax = domain_bounds(quadtree)
+            max_extent = maximum(bmax - bmin)
+
+            # Node quadtree must resolve features alpha times smaller than
+            # minimum spacing to capture spacing variations across the domain
+            min_resolvable_size = h_min / T(alpha)
+            T(min_resolvable_size) / max_extent
+        else
+            geometry_min_ratio
+        end
+    else
+        geometry_min_ratio
+    end
+
+    return Octree{𝔼{2}, C, T, typeof(quadtree)}(
+        quadtree,
         T(boundary_oversampling),
         placement,
         T(alpha),
@@ -167,6 +258,9 @@ end
 # ============================================================================
 # Helper functions
 # ============================================================================
+
+"Spatial dimension of a Euclidean manifold type (`𝔼{2}` → 2, `𝔼{3}` → 3)."
+@inline _manifold_dim(::Type{𝔼{Dim}}) where {Dim} = Dim
 
 """
     _auto_min_ratio(::Type{T}, mesh) where {T}
@@ -203,8 +297,8 @@ _extract_min_spacing(::AbstractSpacing) = nothing
 
 Generate a random point uniformly distributed in a bounding box.
 """
-@inline function _rand_point_in_box(bbox_min::SVector{3, T}, bbox_max::SVector{3, T}) where {T}
-    return bbox_min + rand(SVector{3, T}) .* (bbox_max - bbox_min)
+@inline function _rand_point_in_box(bbox_min::SVector{N, T}, bbox_max::SVector{N, T}) where {N, T}
+    return bbox_min + rand(SVector{N, T}) .* (bbox_max - bbox_min)
 end
 
 """
@@ -265,24 +359,26 @@ end
 Generate `n` points: `:random`, `:jittered` (stratified), or `:lattice` (grid).
 """
 function _generate_points_in_box(
-        bbox_min::SVector{3, T},
-        bbox_max::SVector{3, T},
+        bbox_min::SVector{N, T},
+        bbox_max::SVector{N, T},
         n::Int,
         placement::Symbol,
-    ) where {T <: Real}
-    n <= 0 && return SVector{3, T}[]
+    ) where {N, T <: Real}
+    n <= 0 && return SVector{N, T}[]
     placement == :random && return [_rand_point_in_box(bbox_min, bbox_max) for _ in 1:n]
 
     # For :jittered and :lattice, use regular grid structure
-    grid_divisions = ceil(Int, cbrt(n))  # n > 0 guaranteed by early return above
+    grid_divisions = ceil(Int, n^(1 / N))  # n > 0 guaranteed by early return above
+    # Undo floating-point overshoot on exact N-th roots (e.g. 27^(1/3) > 3).
+    grid_divisions > 1 && (grid_divisions - 1)^N >= n && (grid_divisions -= 1)
     cell_size = (bbox_max - bbox_min) / T(grid_divisions)
-    pts = SVector{3, T}[]
+    pts = SVector{N, T}[]
     sizehint!(pts, n)
 
-    for k in 0:(grid_divisions - 1), j in 0:(grid_divisions - 1), i in 0:(grid_divisions - 1)
+    for ci in CartesianIndices(ntuple(_ -> grid_divisions, Val(N)))
         length(pts) >= n && break
-        cell_min = bbox_min + SVector{3, T}(T(i), T(j), T(k)) .* cell_size
-        pt = placement == :lattice ? cell_min + cell_size / T(2) : cell_min + rand(SVector{3, T}) .* cell_size
+        cell_min = bbox_min + SVector{N, T}(ntuple(d -> T(ci[d] - 1), Val(N))) .* cell_size
+        pt = placement == :lattice ? cell_min + cell_size / T(2) : cell_min + rand(SVector{N, T}) .* cell_size
         push!(pts, pt)
     end
 
@@ -302,8 +398,8 @@ struct LeafGroup{T <: Real}
 end
 
 function _collect_weighted_leaves(
-        node_tree::SpatialOctree{<:Any, T}, classification, spacing
-    ) where {T}
+        node_tree::SpatialTree{N, <:Any, T}, classification, spacing
+    ) where {N, T}
     interior, near_surface = LeafGroup(Int[], T[]), LeafGroup(Int[], T[])
 
     for leaf_idx in all_leaves(node_tree)
@@ -314,9 +410,10 @@ function _collect_weighted_leaves(
             h_local_raw = _spacing_value(T, spacing, center)
             h_local = max(h_local_raw, sqrt(eps(T)))
 
-            # Weight by volume-to-spacing ratio: larger boxes or finer spacing get more points
-            box_volume = box_size(node_tree, leaf_idx)^3
-            spacing_volume = h_local^3
+            # Weight by measure-to-spacing ratio: larger boxes or finer spacing
+            # get more points (box_size^N — volume in 3D, area in 2D)
+            box_volume = box_size(node_tree, leaf_idx)^N
+            spacing_volume = h_local^N
             weight = box_volume / spacing_volume
 
             group = cls == LEAF_INTERIOR ? interior : near_surface
@@ -328,10 +425,12 @@ function _collect_weighted_leaves(
     return interior, near_surface
 end
 
-function _generate_from_leaves(leaves::LeafGroup{T}, tree, n_points, placement) where {T}
+function _generate_from_leaves(
+        leaves::LeafGroup{T}, tree::SpatialTree{N}, n_points, placement
+    ) where {T, N}
     counts = _allocate_counts_by_volume(leaves.weights, n_points)
 
-    points = SVector{3, T}[]
+    points = SVector{N, T}[]
     sizehint!(points, n_points)
 
     for (leaf_idx, n) in zip(leaves.indices, counts)
@@ -357,16 +456,16 @@ end
 # seeds may be mutually closer than h (only candidates are tested, never the
 # seeds against each other).
 
-struct _BridsonGrid{T <: Real}
-    gmin::SVector{3, T}
+struct _BridsonGrid{N, T <: Real}
+    gmin::SVector{N, T}
     cell::T
-    dims::NTuple{3, Int}
+    dims::NTuple{N, Int}
     head::Vector{Int32}  # per-cell index of the most recent point, 0 = empty
     nxt::Vector{Int32}   # per-point link to the previous point in its cell
 end
 
-function _BridsonGrid(gmin::SVector{3, T}, gmax::SVector{3, T}, h_min::T) where {T}
-    cell = h_min / sqrt(T(3))
+function _BridsonGrid(gmin::SVector{N, T}, gmax::SVector{N, T}, h_min::T) where {N, T}
+    cell = h_min / sqrt(T(N))
     extent = gmax - gmin
     # Memory guard: coarsen the grid if the domain is huge relative to h_min.
     # Correctness is unaffected (buckets hold multiple points); only the
@@ -374,19 +473,25 @@ function _BridsonGrid(gmin::SVector{3, T}, gmax::SVector{3, T}, h_min::T) where 
     max_cells = 1 << 27
     n_est = prod(max(ceil(x / cell), 1.0) for x in extent)
     if n_est > max_cells
-        cell *= T(cbrt(n_est / max_cells))
+        cell *= T((n_est / max_cells)^(1 / N))
     end
-    dims = ntuple(d -> max(ceil(Int, extent[d] / cell), 1), 3)
-    return _BridsonGrid{T}(gmin, cell, dims, zeros(Int32, prod(dims)), Int32[])
+    dims = ntuple(d -> max(ceil(Int, extent[d] / cell), 1), N)
+    return _BridsonGrid{N, T}(gmin, cell, dims, zeros(Int32, prod(dims)), Int32[])
 end
 
-@inline function _grid_cell(g::_BridsonGrid{T}, p::SVector{3, T}) where {T}
-    return ntuple(3) do d
+@inline function _grid_cell(g::_BridsonGrid{N, T}, p::SVector{N, T}) where {N, T}
+    return ntuple(N) do d
         clamp(floor(Int, (p[d] - g.gmin[d]) / g.cell) + 1, 1, g.dims[d])
     end
 end
 
-@inline _grid_lin(g::_BridsonGrid, i, j, k) = i + g.dims[1] * ((j - 1) + g.dims[2] * (k - 1))
+@inline function _grid_lin(g::_BridsonGrid{N}, cell::NTuple{N, Int}) where {N}
+    l = cell[N] - 1
+    for d in (N - 1):-1:1
+        l = l * g.dims[d] + (cell[d] - 1)
+    end
+    return l + 1
+end
 
 """
     _grid_insert!(grid, p)
@@ -394,8 +499,8 @@ end
 Insert the point with the next sequential index into its bucket. Points must be
 inserted in index order (1, 2, …) — the link vector grows by one per call.
 """
-function _grid_insert!(g::_BridsonGrid{T}, p::SVector{3, T}) where {T}
-    l = _grid_lin(g, _grid_cell(g, p)...)
+function _grid_insert!(g::_BridsonGrid{N, T}, p::SVector{N, T}) where {N, T}
+    l = _grid_lin(g, _grid_cell(g, p))
     push!(g.nxt, g.head[l])
     g.head[l] = Int32(length(g.nxt))
     return nothing
@@ -409,16 +514,14 @@ away from every accepted point `q`. Any rejecting point lies within `r_c` of
 `c`, so scanning buckets within `r_c` suffices.
 """
 function _bridson_separated(
-        g::_BridsonGrid{T}, pts::Vector{SVector{3, T}}, rs::Vector{T},
-        c::SVector{3, T}, r_c::T,
-    ) where {T}
-    ci, cj, ck = _grid_cell(g, c)
+        g::_BridsonGrid{N, T}, pts::Vector{SVector{N, T}}, rs::Vector{T},
+        c::SVector{N, T}, r_c::T,
+    ) where {N, T}
+    cc = _grid_cell(g, c)
     m = ceil(Int, r_c / g.cell)
-    @inbounds for k in max(1, ck - m):min(g.dims[3], ck + m),
-            j in max(1, cj - m):min(g.dims[2], cj + m),
-            i in max(1, ci - m):min(g.dims[1], ci + m)
-
-        idx = g.head[_grid_lin(g, i, j, k)]
+    ranges = ntuple(d -> max(1, cc[d] - m):min(g.dims[d], cc[d] + m), Val(N))
+    @inbounds for ci in CartesianIndices(ranges)
+        idx = g.head[_grid_lin(g, Tuple(ci))]
         while idx != 0
             r = min(r_c, rs[idx])
             sum(abs2, c - pts[idx]) < r * r && return false
@@ -429,21 +532,21 @@ function _bridson_separated(
 end
 
 """
-    _bridson_inside(c, node_tree, classification, tri_octree) -> Bool
+    _bridson_inside(c, node_tree, classification, geometry) -> Bool
 
 Domain test for a Bridson candidate, mirroring the trust rules of the per-leaf
-path: interior node-octree leaves are accepted outright, boundary leaves get an
-exact `isinside` check, exterior leaves (and anything outside the mesh bbox)
-are rejected.
+path: interior node-tree leaves are accepted outright, boundary leaves get an
+exact `isinside` check, exterior leaves (and anything outside the geometry
+bbox) are rejected.
 """
 @inline function _bridson_inside(
-        c::SVector{3, T}, node_tree, classification, tri_octree,
-    ) where {T}
-    (any(c .<= tri_octree.index.bbox_min) || any(c .>= tri_octree.index.bbox_max)) &&
-        return false
+        c::SVector{N, T}, node_tree, classification, geometry,
+    ) where {N, T}
+    gmin, gmax = domain_bounds(geometry)
+    (any(c .<= gmin) || any(c .>= gmax)) && return false
     cls = classification[find_leaf(node_tree, c)]
     cls == LEAF_INTERIOR && return true
-    cls == LEAF_BOUNDARY && return isinside(c, tri_octree)
+    cls == LEAF_BOUNDARY && return isinside(c, geometry)
     return false
 end
 
@@ -470,7 +573,7 @@ Minimum spacing over non-exterior leaf centers — sets the background grid
 resolution for graded spacing. `T` is the node tree's coordinate type.
 """
 function _bridson_h_min(
-        node_tree::SpatialOctree{<:Any, T}, classification, spacing
+        node_tree::SpatialTree{<:Any, <:Any, T}, classification, spacing
     ) where {T}
     leaves = _non_exterior_leaves(node_tree, classification)
     isempty(leaves) && throw(ArgumentError("no non-exterior leaves: cannot run Bridson sampling"))
@@ -501,13 +604,13 @@ headroom for the super-`1/h³` saturated Poisson-disk packing density (see
 [`_estimate_volume_points`](@ref)). It is a non-truncating ceiling, not a target.
 """
 function _estimate_volume_points(
-        node_tree::SpatialOctree{<:Any, T}, classification, spacing
-    ) where {T}
+        node_tree::SpatialTree{N, <:Any, T}, classification, spacing
+    ) where {N, T}
     leaves = _non_exterior_leaves(node_tree, classification)
     isempty(leaves) && return 0
     integral = tmapreduce(+, leaves) do idx
         h = max(_spacing_value(T, spacing, box_center(node_tree, idx)), sqrt(eps(T)))
-        box_size(node_tree, idx)^3 / h^3
+        box_size(node_tree, idx)^N / h^N
     end
     return ceil(Int, _BRIDSON_CAP_HEADROOM * integral)
 end
@@ -613,7 +716,7 @@ struct _LeafSpacing{T, NT, S, U} <: AbstractSpacing
     len_unit::U
 end
 
-@inline function _spacing_value(::Type{T}, s::_LeafSpacing, c::SVector{3, T}) where {T}
+@inline function _spacing_value(::Type{T}, s::_LeafSpacing, c::SVector{N, T}) where {N, T}
     leaf = find_leaf(s.node_tree, c)
     if leaf >= 1 && leaf <= length(s.field) && s.field[leaf] > 0
         return s.field[leaf]
@@ -622,12 +725,13 @@ end
 end
 
 function (s::_LeafSpacing{T})(p::Point) where {T}
-    c = SVector{3, T}(ustrip.(Meshes.to(p))...)
+    cc = Meshes.to(p)
+    c = SVector{length(cc), T}(ustrip.(cc)...)
     return _spacing_value(T, s, c) * s.len_unit
 end
 
 """
-    _apply_gradient_limit(node_tree, classification, spacing, alg, tri_octree)
+    _apply_gradient_limit(node_tree, classification, spacing, alg, geometry)
         -> (node_tree, classification, spacing_used)
 
 Gradient-limit the spacing on the node-octree leaves with `alg.max_growth`, and
@@ -637,12 +741,12 @@ refreshed classification, and a `_LeafSpacing` that serves the limited field.
 A no-op tree-wise when `h₀` is already `g`-smooth.
 """
 function _apply_gradient_limit(
-        node_tree::SpatialOctree{<:Any, T}, classification, spacing, alg, tri_octree
+        node_tree::SpatialTree{<:Any, <:Any, T}, classification, spacing, alg, geometry
     ) where {T}
     g = T(alg.max_growth)
     leaves0 = _non_exterior_leaves(node_tree, classification)
     isempty(leaves0) && return node_tree, classification, spacing
-    bbox_min, bbox_max = bounding_box(tri_octree.tree)
+    bbox_min, bbox_max = bounding_box(geometry.tree)
     diagonal = norm(bbox_max - bbox_min)
     criterion = SpacingCriterion(spacing, diagonal; alpha = alg.alpha, min_ratio = alg.node_min_ratio)
     len_unit = Unitful.unit(spacing(Point(box_center(node_tree, leaves0[1])...)))
@@ -675,16 +779,16 @@ function _apply_gradient_limit(
             subdivide!(node_tree, idx)
         end
         balance_octree!(node_tree, criterion)
-        classification = classify_node_octree(node_tree, tri_octree)
+        classification = classify_node_octree(node_tree, geometry)
     end
 
     return node_tree, classification, _LeafSpacing(node_tree, h_field, spacing, len_unit)
 end
 
 """
-    _generate_bridson(node_tree, classification, tri_octree, spacing, seeds,
+    _generate_bridson(node_tree, classification, geometry, spacing, seeds,
                       max_points; factor=0.75, k_attempts=30)
-        -> Vector{SVector{3,T}}
+        -> Vector{SVector{N,T}}
 
 Graded Bridson Poisson-disk sampling of the domain volume with disk radius
 `factor · h(x)` (see the `Octree` docstring for the choice of `factor`).
@@ -695,14 +799,15 @@ points exist; truncation warns because it leaves the far side of the front
 unfilled.
 """
 function _generate_bridson(
-        node_tree, classification, tri_octree, spacing,
-        seeds::Vector{SVector{3, T}}, max_points::Int;
+        node_tree, classification, geometry, spacing,
+        seeds::Vector{SVector{N, T}}, max_points::Int;
         factor::Real = 0.75,
         k_attempts::Int = 30,
-    ) where {T <: Real}
+    ) where {N, T <: Real}
     f = T(factor)
     r_min = f * _bridson_h_min(node_tree, classification, spacing)
-    grid = _BridsonGrid(tri_octree.index.bbox_min, tri_octree.index.bbox_max, r_min)
+    gmin, gmax = domain_bounds(geometry)
+    grid = _BridsonGrid(gmin, gmax, r_min)
 
     pts = copy(seeds)
     rs = [f * _spacing_value(T, spacing, p) for p in pts]
@@ -719,14 +824,14 @@ function _generate_bridson(
             cls = classification[leaf_idx]
             (want_interior ? cls == LEAF_INTERIOR : cls == LEAF_BOUNDARY) || continue
             c = box_center(node_tree, leaf_idx)
-            _bridson_inside(c, node_tree, classification, tri_octree) || continue
+            _bridson_inside(c, node_tree, classification, geometry) || continue
             push!(pts, c)
             push!(rs, f * _spacing_value(T, spacing, c))
             _grid_insert!(grid, c)
             push!(active, length(pts))
             break
         end
-        isempty(active) && return SVector{3, T}[]
+        isempty(active) && return SVector{N, T}[]
     end
 
     n_generated = length(pts) - n_seeds
@@ -736,9 +841,9 @@ function _generate_bridson(
         found = false
         for _ in 1:k_attempts
             ρ = rs[a] * (1 + rand(T))
-            d = randn(SVector{3, T})
+            d = randn(SVector{N, T})
             c = pts[a] + ρ * (d / norm(d))
-            _bridson_inside(c, node_tree, classification, tri_octree) || continue
+            _bridson_inside(c, node_tree, classification, geometry) || continue
             r_c = f * _spacing_value(T, spacing, c)
             _bridson_separated(grid, pts, rs, c, r_c) || continue
             push!(pts, c)
@@ -766,9 +871,9 @@ function _generate_bridson(
         for _ in 1:200
             a = active[rand(1:length(active))]
             ρ = rs[a] * (1 + rand(T))
-            d = randn(SVector{3, T})
+            d = randn(SVector{N, T})
             c = pts[a] + ρ * (d / norm(d))
-            _bridson_inside(c, node_tree, classification, tri_octree) || continue
+            _bridson_inside(c, node_tree, classification, geometry) || continue
             r_c = f * _spacing_value(T, spacing, c)
             _bridson_separated(grid, pts, rs, c, r_c) || continue
             truncated = true
@@ -786,26 +891,26 @@ end
 # ============================================================================
 
 function _discretize_volume(
-        _cloud::PointCloud{𝔼{3}, C},
+        _cloud::PointCloud{M, C},
         spacing::AbstractSpacing,
-        alg::Octree{<:Manifold, <:CRS, T};
+        alg::Octree{M, <:CRS, T};
         max_points::Union{Int, Nothing} = nothing,
-    ) where {C, T}
+    ) where {M <: Manifold, C, T}
     # Bridson is empty when the spacing is too coarse for the domain to host an
     # interior. Clamp (loudly) before the node octree is built — its resolution
     # is spacing-driven, so the clamp must precede subdivision.
     if alg.placement == :bridson
-        spacing = _guard_coarse_spacing(spacing, alg.triangle_octree, alg.bridson_factor)
+        spacing = _guard_coarse_spacing(spacing, alg.geometry, alg.bridson_factor)
     end
 
     # Build and classify node octree (using infrastructure from src/octree/spacing_criterion.jl)
     print("  Building node octree...")
-    t1 = @elapsed node_tree = build_node_octree(alg.triangle_octree, spacing, alg.alpha, alg.node_min_ratio)
+    t1 = @elapsed node_tree = build_node_octree(alg.geometry, spacing, alg.alpha, alg.node_min_ratio)
     n_leaves = length(collect(all_leaves(node_tree)))
     println(" done ($(n_leaves) leaves, $(round(t1, digits = 2))s)")
 
     print("  Classifying node octree leaves...")
-    t2 = @elapsed classification = classify_node_octree(node_tree, alg.triangle_octree)
+    t2 = @elapsed classification = classify_node_octree(node_tree, alg.geometry)
     println(" done ($(round(t2, digits = 2))s)")
 
     # Gradient-limit the spacing (steep-but-smooth grading) when requested. This
@@ -815,7 +920,7 @@ function _discretize_volume(
     if alg.max_growth > 0
         print("  Gradient-limiting spacing (max_growth=$(alg.max_growth))...")
         t_g = @elapsed (node_tree, classification, spacing_used) =
-            _apply_gradient_limit(node_tree, classification, spacing, alg, alg.triangle_octree)
+            _apply_gradient_limit(node_tree, classification, spacing, alg, alg.geometry)
         n_leaves_g = length(collect(all_leaves(node_tree)))
         println(" done ($(n_leaves_g) leaves, $(round(t_g, digits = 2))s)")
     end
@@ -833,7 +938,7 @@ function _discretize_volume(
         seeds = [_extract_vertex(T, pt) for pt in points(boundary(_cloud))]
         print("  Bridson sampling ($(length(seeds)) boundary seeds)...")
         t3 = @elapsed vol_points = _generate_bridson(
-            node_tree, classification, alg.triangle_octree, spacing_used, seeds, max_points;
+            node_tree, classification, alg.geometry, spacing_used, seeds, max_points;
             factor = alg.bridson_factor,
         )
         println(" done ($(length(vol_points)) points, $(round(t3, digits = 2))s)")
@@ -858,7 +963,7 @@ function _discretize_volume(
     interior_total_weight = sum(interior.weights; init = zero(T))
     near_surface_total_weight = sum(near_surface.weights; init = zero(T))
     total_weight = interior_total_weight + near_surface_total_weight
-    total_weight <= zero(T) && return PointVolume(Point{𝔼{3}, C}[])
+    total_weight <= zero(T) && return PointVolume(Point{M, C}[])
 
     interior_ratio = interior_total_weight / total_weight
     n_interior = round(Int, max_points * interior_ratio)
@@ -869,7 +974,7 @@ function _discretize_volume(
     # demotes any leaf overlapping a triangle-octree boundary leaf, so samples
     # drawn from LEAF_INTERIOR (and the deficit fill, which pulls from the same
     # pool) do not need a per-point isinside check.
-    raw_points = SVector{3, T}[]
+    raw_points = SVector{_manifold_dim(M), T}[]
     sizehint!(raw_points, max_points)
 
     print("  Generating interior points...")
@@ -884,7 +989,7 @@ function _discretize_volume(
 
     print("  Filtering candidates (isinside check)...")
     t6 = @elapsed begin
-        inside_mask = isinside(candidates, alg.triangle_octree)
+        inside_mask = isinside(candidates, alg.geometry)
         target = n_interior + n_near_surface
         for i in eachindex(candidates)
             length(raw_points) >= target && break
