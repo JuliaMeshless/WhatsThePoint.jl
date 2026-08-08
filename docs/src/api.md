@@ -94,8 +94,10 @@ Point-in-volume testing, octree acceleration, and spatial utilities.
 ```@docs
 isinside
 TriangleOctree
+SegmentQuadtree
 num_leaves
 num_triangles
+num_segments
 has_consistent_normals
 emptyspace
 Meshes.boundingbox

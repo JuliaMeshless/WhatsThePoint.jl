@@ -21,18 +21,18 @@ Not sure what spacing the geometry can host? Run [`suggest_spacing`](@ref) first
 | [`SlakKosec`](@ref) | 3D | Yes | Sphere-based candidate generation |
 | [`VanDerSandeFornberg`](@ref) | 3D | Yes (`ConstantSpacing` only) | Grid projection with sphere packing |
 | [`FornbergFlyer`](@ref) | 2D | Yes (`ConstantSpacing` only) | 1D projection with height-field fill |
-| [`Octree`](@ref) | 3D | Yes (variable-friendly) | Octree-guided adaptive fill; default `:bridson` placement is a global graded Poisson-disk front |
+| [`Octree`](@ref) | 2D/3D | Yes (variable-friendly) | Tree-guided adaptive fill (octree in 3D, quadtree in 2D); default `:bridson` placement is a global graded Poisson-disk front |
 
 ### Choosing an Algorithm
 
-- **2D problems:** Use [`FornbergFlyer`](@ref) — it is the only 2D algorithm and is selected by default for 2D boundaries.
+- **2D problems:** Use [`FornbergFlyer`](@ref) (the default for 2D boundaries) for quick constant-spacing fills, or [`Octree`](@ref) for graded spacing and Poisson-disk quality — build it from the boundary with `Octree(bnd; spacing)`.
 - **3D with variable spacing:** Use [`Octree`](@ref) with [`BoundaryLayerSpacing`](@ref) for strong near-wall refinement, or [`SlakKosec`](@ref) with `LogLike` for simpler variable spacing.
 - **3D with uniform spacing:** [`SlakKosec`](@ref) (default) or [`VanDerSandeFornberg`](@ref) both work. SlakKosec is more general; VanDerSandeFornberg can be faster for simple geometries.
 - **Large 3D meshes:** Use [`Octree`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Octree](isinside_octree.md) page.
 
 ## Octree Algorithm
 
-Adaptive 3D octree-based algorithm that uses the provided spacing function to decide local point density. This makes it suitable for boundary-layer-style discretizations.
+Adaptive tree-based algorithm (octree in 3D, quadtree in 2D) that uses the provided spacing function to decide local point density. This makes it suitable for boundary-layer-style discretizations.
 
 The default placement mode is `:bridson` — a single global advancing-front Poisson-disk pass (Bridson 2007), graded to the spacing field and seeded from the boundary points, so every generated point keeps its distance from every other point *and* the wall by construction. The front stops on its own once the domain is saturated, so `max_points` can be left unset (it becomes a non-truncating cap estimated from the spacing integral). Per-leaf `:random`, `:jittered`, and `:lattice` placements remain available.
 
@@ -99,7 +99,7 @@ Requires `ConstantSpacing`. Uses `isinside` (Green's function) for filtering gen
 cloud = discretize(boundary, ConstantSpacing(0.1mm); alg=FornbergFlyer())
 ```
 
-This is the default (and only) algorithm for 2D boundaries.
+This is the default algorithm for 2D boundaries; for graded spacing in 2D, use [`Octree`](@ref) instead.
 
 ## Spacing Types
 
