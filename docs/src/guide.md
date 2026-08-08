@@ -122,11 +122,14 @@ octree = TriangleOctree(mesh; min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
 
-### 2D Algorithm
+### 2D Algorithms
 
 ```julia
-# FornbergFlyer (default and only option for 2D)
+# FornbergFlyer (the 2D default; requires ConstantSpacing)
 cloud = discretize(boundary, spacing; alg=FornbergFlyer())
+
+# Octree (graded spacing + Poisson-disk quality in 2D)
+cloud = discretize(boundary, spacing; alg=Octree(boundary; spacing))
 ```
 
 ### Spacing Types
