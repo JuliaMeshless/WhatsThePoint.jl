@@ -33,6 +33,8 @@ Fields:
 - `vertex_normal`: per-vertex pseudonormal (sum of the two adjacent segment
   normals) — the sign-exact feature normal for signed-distance queries.
 - `bbox_min`/`bbox_max`: boundary bounding box.
+- `len_tol`: absolute length below which a segment is degenerate — scaled to
+  the boundary (see [`_segment_len_tol`](@ref)), never an absolute `eps`.
 - `len_unit`: the unit stripped from coordinates, re-attached at exits.
 """
 struct SegmentIndex{T <: Real}
@@ -42,6 +44,7 @@ struct SegmentIndex{T <: Real}
     vertex_normal::Vector{SVector{2, T}}
     bbox_min::SVector{2, T}
     bbox_max::SVector{2, T}
+    len_tol::T
     len_unit::Unitful.Units
 end
 
@@ -58,15 +61,60 @@ end
 
 _compute_bbox(index::SegmentIndex{T}) where {T} = (index.bbox_min, index.bbox_max)
 
-"Shoelace signed area of a closed loop (positive = counter-clockwise)."
+"""
+    _segment_len_tol(diagonal)
+
+Absolute length below which a segment counts as degenerate. `b - a` carries an
+absolute round-off of order `eps(T)` times the coordinate magnitudes, so the
+floor must scale with the boundary's bbox diagonal: an absolute `eps(T)` would
+declare every segment of a finely-sampled Float32 loop degenerate (zeroed
+normals, endpoint snapping), and would miss true duplicates far from the origin.
+"""
+@inline _segment_len_tol(diagonal::T) where {T <: Real} =
+    max(T(8) * eps(T) * diagonal, floatmin(T))
+
+"""
+Shoelace signed area of a closed loop (positive = counter-clockwise).
+
+The sum is centered on `loop[1]` and accumulated over differences: on absolute
+coordinates, a small loop far from the origin loses the whole area to
+cancellation (each term is `O(|x|²)` while the result is `O(area)`), and the
+sign — which decides the loop orientation, hence which side of the boundary is
+inside — becomes round-off noise.
+"""
 function _loop_signed_area(loop::Vector{SVector{2, T}}) where {T}
     sa = zero(T)
     n = length(loop)
+    o = @inbounds loop[1]
     @inbounds for i in 1:n
-        a, b = loop[i], loop[mod1(i + 1, n)]
+        a = loop[i] - o
+        b = loop[mod1(i + 1, n)] - o
         sa += a[1] * b[2] - b[1] * a[2]
     end
     return sa / 2
+end
+
+"""
+Drop vertices coincident (within `len_tol`) with their predecessor, including
+the seam duplicate of the explicitly-closed convention `[p₁, …, pₙ, p₁]`.
+
+A zero-length segment has no direction: it contributes a zeroed normal, and the
+two coincident seam vertices each accumulate only one of their two adjacent
+segment normals, so the pseudonormal at the seam is half-built and points the
+wrong way over an angular sector — stray exterior points classify interior at
+convex corners, interior candidates get rejected at reflex ones.
+"""
+function _dedup_loop(loop::Vector{SVector{2, T}}, len_tol::T) where {T}
+    out = SVector{2, T}[]
+    sizehint!(out, length(loop))
+    for v in loop
+        (isempty(out) || norm(v - out[end]) > len_tol) && push!(out, v)
+    end
+    # The closing segment out[end] → out[1] is a segment like any other.
+    while length(out) > 1 && norm(out[end] - out[1]) <= len_tol
+        pop!(out)
+    end
+    return out
 end
 
 "Even-odd crossing test of `p` against a closed loop (loop vertices ordered)."
@@ -85,9 +133,11 @@ end
 """
     SegmentIndex(T, loops, len_unit)
 
-Build a `SegmentIndex` from closed loops of stripped 2D vertices. Validates
-each loop (≥ 3 vertices, non-degenerate signed area) and normalizes loop
-orientation by nesting parity so normals point out of the domain.
+Build a `SegmentIndex` from closed loops of stripped 2D vertices. Duplicated
+consecutive vertices are dropped (so the explicitly-closed convention
+`[p₁, …, pₙ, p₁]` is accepted), each loop is validated (≥ 3 distinct vertices,
+non-degenerate signed area) and loop orientation is normalized by nesting
+parity so normals point out of the domain.
 """
 function SegmentIndex(
         ::Type{T},
@@ -95,24 +145,48 @@ function SegmentIndex(
         len_unit::Unitful.Units,
     ) where {T <: Real}
     isempty(loops) && throw(ArgumentError("SegmentIndex requires at least one boundary loop"))
+    for (li, loop) in enumerate(loops)
+        length(loop) >= 3 || throw(
+            ArgumentError(
+                "boundary loop $li has $(length(loop)) vertices; a closed loop needs at least 3"
+            )
+        )
+    end
+
+    # Degeneracy scales with the boundary, not with the origin: round-off in
+    # every difference below is relative to the coordinate magnitudes.
+    lo_all = reduce((a, b) -> min.(a, b), Iterators.flatten(loops))
+    hi_all = reduce((a, b) -> max.(a, b), Iterators.flatten(loops))
+    len_tol = _segment_len_tol(norm(hi_all - lo_all))
+
+    cleaned = [_dedup_loop(loop, len_tol) for loop in loops]
 
     # Validate and orient: outer loops CCW, holes CW (by nesting parity).
-    oriented = Vector{Vector{SVector{2, T}}}(undef, length(loops))
-    for (li, loop) in enumerate(loops)
+    oriented = Vector{Vector{SVector{2, T}}}(undef, length(cleaned))
+    for (li, loop) in enumerate(cleaned)
         n = length(loop)
-        n >= 3 || throw(ArgumentError("boundary loop $li has $n vertices; a closed loop needs at least 3"))
+        n >= 3 || throw(
+            ArgumentError(
+                "boundary loop $li has $n distinct vertices after dropping duplicates; " *
+                    "a closed loop needs at least 3"
+            )
+        )
         sa = _loop_signed_area(loop)
         lo = reduce((a, b) -> min.(a, b), loop)
         hi = reduce((a, b) -> max.(a, b), loop)
         bbox_area = (hi[1] - lo[1]) * (hi[2] - lo[2])
-        abs(sa) < T(1.0e-10) * max(bbox_area, eps(T)) && throw(
+        # Two floors: a relative one on the loop's own bbox area, and the
+        # round-off noise of the shoelace sum itself (~n·eps·diag²), which
+        # dominates for a collinear loop in a low-precision machine type.
+        noise = T(n) * eps(T) * sum(abs2, hi - lo)
+        abs(sa) < max(T(1.0e-10) * bbox_area, T(4) * noise) && throw(
             ArgumentError(
                 "boundary loop $li has (near-)zero signed area — its vertices are " *
                     "collinear or not ordered sequentially around the loop"
             )
         )
         depth = count(
-            lj -> lj != li && _point_in_loop(loop[1], loops[lj]), eachindex(loops)
+            lj -> lj != li && _point_in_loop(loop[1], cleaned[lj]), eachindex(cleaned)
         )
         want_ccw = iseven(depth)
         oriented[li] = (sa > 0) == want_ccw ? loop : reverse(loop)
@@ -139,7 +213,7 @@ function SegmentIndex(
             # Outward normal: edge direction rotated -90° — for a CCW outer
             # loop this points away from the enclosed area, and for a CW hole
             # loop into the hole (also away from the domain).
-            nrm = mag < eps(T) * 100 ? zero(SVector{2, T}) :
+            nrm = mag <= len_tol ? zero(SVector{2, T}) :
                 SVector{2, T}(d[2], -d[1]) / mag
             normal[vi] = nrm
             vertex_normal[vi] += nrm
@@ -150,7 +224,7 @@ function SegmentIndex(
 
     bbox_min, bbox_max = _compute_bbox_raw_2d(vertices)
     return SegmentIndex{T}(
-        vertices, segments, normal, vertex_normal, bbox_min, bbox_max, len_unit
+        vertices, segments, normal, vertex_normal, bbox_min, bbox_max, len_tol, len_unit
     )
 end
 
@@ -172,18 +246,24 @@ end
 # ============================================================================
 
 """
-    closest_point_on_segment_feature(p, a, b) -> (closest_point, feature)
+    closest_point_on_segment_feature(p, a, b, len_tol_sq=eps(T)) -> (closest_point, feature)
 
 Closest point on segment `a → b`, plus the feature it lies on:
 `FEATURE_FACE` (segment interior), `FEATURE_VERTEX_1` (`a`), or
 `FEATURE_VERTEX_2` (`b`).
+
+`len_tol_sq` is the *squared* length below which the segment is degenerate and
+`a` is returned; callers pass `index.len_tol^2` so the threshold tracks the
+boundary's scale (see [`_segment_len_tol`](@ref)). The default is a bare
+round-off guard against `0/0`, not a geometric tolerance.
 """
 @inline function closest_point_on_segment_feature(
-        p::SVector{2, T}, a::SVector{2, T}, b::SVector{2, T}
+        p::SVector{2, T}, a::SVector{2, T}, b::SVector{2, T},
+        len_tol_sq::T = eps(T),
     ) where {T <: Real}
     ab = b - a
     denom = dot(ab, ab)
-    denom < eps(T) && return a, FEATURE_VERTEX_1   # degenerate segment
+    denom <= len_tol_sq && return a, FEATURE_VERTEX_1   # degenerate segment
     t = dot(p - a, ab) / denom
     t <= zero(T) && return a, FEATURE_VERTEX_1
     t >= one(T) && return b, FEATURE_VERTEX_2
@@ -318,11 +398,15 @@ struct _SegmentUpdater{T <: Real}
     point::SVector{2, T}
     index::SegmentIndex{T}
     state::NearestElementState{2, T}
+    len_tol_sq::T
 end
+
+_SegmentUpdater(point, index::SegmentIndex{T}, state) where {T} =
+    _SegmentUpdater(point, index, state, index.len_tol^2)
 
 @inline function (u::_SegmentUpdater{T})(seg_idx::Int) where {T}
     a, b = _get_segment_vertices(u.index, seg_idx)
-    cp, feature = closest_point_on_segment_feature(u.point, a, b)
+    cp, feature = closest_point_on_segment_feature(u.point, a, b, u.len_tol_sq)
     dvec = u.point - cp
     d2 = dot(dvec, dvec)
 

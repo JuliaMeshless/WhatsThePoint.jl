@@ -263,6 +263,18 @@ end
 @inline _manifold_dim(::Type{𝔼{Dim}}) where {Dim} = Dim
 
 """
+    _points_with_unit(raw, len_unit)
+
+Rebuild `Point`s from unit-stripped magnitudes, re-attaching the unit that was
+stripped on entry. `Point(pt...)` on bare numbers is *not* unit-agnostic —
+`Cartesian` attaches metres unconditionally — so a boundary in any other unit
+would exit numerically-in-its-own-unit but typed as metres, and `PointCloud`
+assembly would either throw on the CRS mismatch or mix coordinates 1000× apart.
+"""
+@inline _points_with_unit(raw::AbstractVector{<:SVector}, len_unit::Unitful.Units) =
+    [Point((pt .* len_unit)...) for pt in raw]
+
+"""
     _auto_min_ratio(::Type{T}, mesh) where {T}
 
 Default triangle octree resolution: `1 / (4 * cbrt(n_triangles))`.
@@ -896,6 +908,10 @@ function _discretize_volume(
         alg::Octree{M, <:CRS, T};
         max_points::Union{Int, Nothing} = nothing,
     ) where {M <: Manifold, C, T}
+    # The unit the boundary's coordinates were stripped of on entry
+    # (`_extract_vertex`); re-attached at every exit below.
+    len_unit = Unitful.unit(lentype(C))
+
     # Bridson is empty when the spacing is too coarse for the domain to host an
     # interior. Clamp (loudly) before the node octree is built — its resolution
     # is spacing-driven, so the clamp must precede subdivision.
@@ -952,7 +968,7 @@ function _discretize_volume(
                     "Inspect it with `suggest_spacing(mesh)`."
             ),
         )
-        return PointVolume([Point(pt...) for pt in vol_points])
+        return PointVolume(_points_with_unit(vol_points, len_unit))
     end
 
     print("  Collecting weighted leaves...")
@@ -1017,5 +1033,5 @@ function _discretize_volume(
     end
 
     # Convert to Point objects
-    return PointVolume([Point(pt...) for pt in raw_points])
+    return PointVolume(_points_with_unit(raw_points, len_unit))
 end

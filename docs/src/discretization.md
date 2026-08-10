@@ -25,7 +25,7 @@ Not sure what spacing the geometry can host? Run [`suggest_spacing`](@ref) first
 
 ### Choosing an Algorithm
 
-- **2D problems:** Use [`FornbergFlyer`](@ref) (the default for 2D boundaries) for quick constant-spacing fills, or [`Octree`](@ref) for graded spacing and Poisson-disk quality — build it from the boundary with `Octree(bnd; spacing)`.
+- **2D problems:** [`Octree`](@ref) is the default — omit `alg` and it is built from the boundary loops for you (`Octree(bnd; spacing)` if you want to configure it). [`FornbergFlyer`](@ref) remains available for the older height-field fill, but requires `ConstantSpacing` and gives no Poisson-disk guarantee.
 - **3D with variable spacing:** Use [`Octree`](@ref) with [`BoundaryLayerSpacing`](@ref) for strong near-wall refinement, or [`SlakKosec`](@ref) with `LogLike` for simpler variable spacing.
 - **3D with uniform spacing:** [`SlakKosec`](@ref) (default) or [`VanDerSandeFornberg`](@ref) both work. SlakKosec is more general; VanDerSandeFornberg can be faster for simple geometries.
 - **Large 3D meshes:** Use [`Octree`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Octree](isinside_octree.md) page.
@@ -99,7 +99,7 @@ Requires `ConstantSpacing`. Uses `isinside` (Green's function) for filtering gen
 cloud = discretize(boundary, ConstantSpacing(0.1mm); alg=FornbergFlyer())
 ```
 
-This is the default algorithm for 2D boundaries; for graded spacing in 2D, use [`Octree`](@ref) instead.
+Must be requested explicitly — [`Octree`](@ref) is the 2D default, and the only 2D option for graded spacing.
 
 ## Spacing Types
 

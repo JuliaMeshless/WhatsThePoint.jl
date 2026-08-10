@@ -26,6 +26,29 @@
     @test length(WhatsThePoint.volume(cloud)) > 0
 end
 
+@testitem "suggest_spacing works on a 2D boundary" setup = [CommonImports] begin
+    using Unitful: m, ustrip
+
+    # The docs make suggest_spacing step 0 of every workflow, so the 2D path
+    # must not trip over a hardcoded 3-vector (or a cubed measure).
+    bnd = PointBoundary(Point.([(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0)]))
+    g = suggest_spacing(bnd; verbose = false)
+
+    @test length(g.extent) == 2
+    @test ustrip(g.min_extent) ≈ 1.0
+    @test ustrip(g.volume) ≈ 2.0 rtol = 1.0e-6          # bbox *area* in 2D
+    @test Unitful.dimension(g.volume) == Unitful.𝐋^2
+    @test ustrip(g.h_ceiling) ≈ 1 / 1.5 rtol = 1.0e-6
+    @test g.h_baseline < g.h_ceiling
+    # Counts must come from area/h², not volume/h³
+    @test g.n_baseline ≈ ustrip(g.volume) / ustrip(g.h_baseline)^2 rtol = 0.01
+    @test suggest_spacing(bnd; n_points = 200, verbose = false).n_baseline ≈ 200 rtol = 0.05
+
+    # The headline promise, in 2D as well
+    cloud = discretize(bnd, g.h_baseline)
+    @test length(volume(cloud)) > 0
+end
+
 @testitem "suggest_spacing budget mode targets a point count" setup = [
     CommonImports, OctreeTestData,
 ] begin

@@ -30,11 +30,12 @@ along `L_min` has width `L_min − 2r`, so it is empty once
 - `h_ceiling` — coarsest spacing that still hosts *any* interior; spacings at or
   above it yield an empty bridson cloud. **Stay well below this.**
 - `h_baseline` — recommended starting point: ≈10 points across the shortest
-  axis (or, when `n_points` is given, `cbrt(volume / n_points)` capped to stay
+  axis (or, when `n_points` is given, `(volume / n_points)^(1/N)` capped to stay
   fillable). Good enough to run a first simulation, then refine where needed.
 - `h_fine` — `h_baseline/2`, a second rung for resolving features.
 
-`n_baseline`/`n_fine` are rough volume-point counts (`volume / h³`).
+`n_baseline`/`n_fine` are rough volume-point counts (`volume / hᴺ`). In 2D the
+reported `volume` is an area and `N = 2` throughout.
 
 Returns a `NamedTuple` with `extent`, `min_extent`, `max_extent`, `diagonal`,
 `volume`, `n_triangles`, `bridson_factor`, `h_ceiling`, `h_baseline`, `h_fine`,
@@ -78,7 +79,8 @@ function suggest_spacing(
     pts = points(bnd)
     isempty(pts) && throw(ArgumentError("boundary has no points"))
     lu = unit(Meshes.to(first(pts))[1])
-    coords = [SVector{3, T}(ustrip.(Meshes.to(p))...) for p in pts]
+    N = _manifold_dim(M)
+    coords = [SVector{N, T}(ustrip.(Meshes.to(p))...) for p in pts]
     bmin = reduce((a, b) -> min.(a, b), coords)
     bmax = reduce((a, b) -> max.(a, b), coords)
     ext = bmax - bmin
@@ -103,9 +105,9 @@ end
 # Core recommendation math, shared by all entry points. `ext`/`V` are stripped
 # (in coordinate units), `lu` is the length unit used to re-attach units.
 function _spacing_guidance(
-        ext::SVector{3, T}, V::T, n_facets::Integer, lu;
+        ext::SVector{N, T}, V::T, n_facets::Integer, lu;
         n_points, bridson_factor, verbose, name, exact_volume, count_label,
-    ) where {T}
+    ) where {N, T}
     Lmin = minimum(ext)
     Lmax = maximum(ext)
     Lmin > 0 || throw(ArgumentError("degenerate geometry: zero-width bounding box ($(ext .* lu))"))
@@ -113,19 +115,21 @@ function _spacing_guidance(
     f = T(bridson_factor)
 
     h_ceiling = Lmin / (2f)                 # interior empty at/above this
-    raw_baseline = isnothing(n_points) ? Lmin / 10 : cbrt(V / T(n_points))
+    # `V` is the domain measure in N dimensions (a volume in 3D, an area in 2D),
+    # so the budget → spacing inversion is its Nth root, not always a cube root.
+    raw_baseline = isnothing(n_points) ? Lmin / 10 : (V / T(n_points))^(one(T) / N)
     # Keep the baseline comfortably under the ceiling (≤ L_min/3 for f=0.75),
     # so even a budget-driven request stays fillable.
     h_baseline = min(raw_baseline, h_ceiling / 2)
     h_fine = h_baseline / 2
-    nfun(h) = round(Int, V / h^3)
+    nfun(h) = round(Int, V / h^N)
 
     res = (
         extent = ext .* lu,
         min_extent = Lmin * lu,
         max_extent = Lmax * lu,
         diagonal = diag * lu,
-        volume = V * lu^3,
+        volume = V * lu^N,
         n_triangles = n_facets,
         bridson_factor = f,
         h_ceiling = h_ceiling * lu,
@@ -140,11 +144,12 @@ end
 
 function _print_guidance(g, name, exact_volume, count_label)
     rnd(x) = round(ustrip(x); sigdigits = 3) * unit(x)
-    vlabel = exact_volume ? "volume       " : "volume (bbox)"
+    measure = length(g.extent) == 2 ? "area" : "volume"
+    vlabel = rpad(exact_volume ? measure : "$measure (bbox)", 13)
     e = ustrip.(g.extent)
     u = unit(g.min_extent)
     println("geometry: $name")
-    println("  extent        $(round(e[1]; sigdigits = 3)) × $(round(e[2]; sigdigits = 3)) × $(round(e[3]; sigdigits = 3)) $u   (min axis $(rnd(g.min_extent)))")
+    println("  extent        $(join((round(x; sigdigits = 3) for x in e), " × ")) $u   (min axis $(rnd(g.min_extent)))")
     println("  $vlabel ≈ $(rnd(g.volume))")
     println("  $(rpad(count_label, 13)) $(g.n_triangles)")
     println("  ── spacing (bridson_factor $(g.bridson_factor)) ─────────────")

@@ -125,11 +125,14 @@ cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ### 2D Algorithms
 
 ```julia
-# FornbergFlyer (the 2D default; requires ConstantSpacing)
-cloud = discretize(boundary, spacing; alg=FornbergFlyer())
+# Octree is the 2D default — built from the boundary loops automatically
+cloud = discretize(boundary, spacing)
 
-# Octree (graded spacing + Poisson-disk quality in 2D)
-cloud = discretize(boundary, spacing; alg=Octree(boundary; spacing))
+# ...or configured explicitly (graded spacing, placement, max_growth, ...)
+cloud = discretize(boundary, spacing; alg=Octree(boundary; spacing, max_growth=0.15))
+
+# FornbergFlyer: the older height-field fill (requires ConstantSpacing)
+cloud = discretize(boundary, spacing; alg=FornbergFlyer())
 ```
 
 ### Spacing Types

@@ -65,10 +65,12 @@ by construction.*
 
 ## 2D Domains
 
-The same algorithm runs on 2D boundaries: a `SegmentQuadtree` indexes the
+The same algorithm runs on 2D boundaries — and is the 2D default, so
+`discretize(bnd, spacing)` already uses it. A `SegmentQuadtree` indexes the
 segments of one or more closed loops, and the node tree, leaf classification,
 and Bridson front work exactly as in 3D. A boundary is just an ordered loop of
-points — build it, and the familiar three lines apply:
+points — build it, and the familiar three lines apply (passing `alg` explicitly
+here only to show where the geometry index comes from):
 
 ```julia
 using WhatsThePoint

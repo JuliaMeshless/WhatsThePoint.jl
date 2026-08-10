@@ -57,16 +57,16 @@ using Unitful: m
 r = @. 1 + 0.2 * sin(5θ)
 boundary = PointBoundary(Point.(r .* cos.(θ), r .* sin.(θ)))
 
-# 2. Discretize with FornbergFlyer (2D algorithm)
+# 2. Discretize — 2D defaults to the Octree (quadtree) Poisson-disk fill
 spacing = ConstantSpacing(0.05m)
-cloud = discretize(boundary, spacing; alg=FornbergFlyer())
+cloud = discretize(boundary, spacing)
 
 # 3. Optimize and connect
 cloud = repel(cloud, spacing)
 cloud = set_topology(cloud, KNNTopology, 9)
 ```
 
-Any closed, ordered polygon works — the starfish is a standard test domain in the RBF-FD literature this package grew out of. For graded (non-constant) spacing in 2D, use the [`Octree`](@ref) algorithm instead of FornbergFlyer — see the [Octree Algorithm](octree.md) page:
+Any closed, ordered polygon works — the starfish is a standard test domain in the RBF-FD literature this package grew out of. The same [`Octree`](@ref) algorithm handles graded (non-constant) spacing in 2D; pass it explicitly to configure it — see the [Octree Algorithm](octree.md) page:
 
 ![2D discretization of a starfish domain](assets/2d-discretization.png)
 

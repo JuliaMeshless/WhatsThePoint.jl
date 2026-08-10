@@ -98,7 +98,9 @@ save(joinpath(@__DIR__, "quadtree_2d_boxes.png"), fig)
 # it had to keep empty: radius r = bridson_factor · h(x). The candidate is
 # picked in the coarse core so the circle is large enough to read.
 hs = [ustrip(spacing(p)) for p in vol]
-ci = argmax(hs[1:(2 * length(hs) ÷ 3)])   # coarsest accepted point so far
+isempty(hs) && error("no interior points to illustrate — coarsen the knobs at the top")
+# `2n÷3` is an empty range for n < 2 (coarsened knobs), and argmax throws on it.
+ci = argmax(@view hs[1:max(1, 2 * length(hs) ÷ 3)])   # coarsest accepted point so far
 rc = alg.bridson_factor * hs[ci]
 cx, cy = vx[ci], vy[ci]
 
