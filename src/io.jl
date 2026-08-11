@@ -21,7 +21,7 @@ metadata (GeoIO's default of meters is discarded). Topology and coordinate
 machine type (`Float32` stays `Float32`) are preserved.
 
 This is the single gateway for file geometry: the returned mesh feeds
-[`PointBoundary`](@ref), [`TriangleOctree`](@ref), and [`Octree`](@ref).
+[`PointBoundary`](@ref), [`TriangleOctree`](@ref), and [`Orthtree`](@ref).
 Use [`geometry_info`](@ref) to probe the raw extents when unsure of the unit.
 """
 function import_mesh(filepath::AbstractString, unit::Unitful.Units)

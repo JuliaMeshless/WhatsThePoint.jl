@@ -60,7 +60,7 @@ AbstractSpacing
 SlakKosec
 VanDerSandeFornberg
 FornbergFlyer
-Octree
+Orthtree
 ConstantSpacing
 BoundaryLayerSpacing
 LogLike
@@ -89,13 +89,15 @@ generate_shadows
 
 ## Geometry and Queries
 
-Point-in-volume testing, octree acceleration, and spatial utilities.
+Point-in-volume testing, orthtree acceleration, and spatial utilities.
 
 ```@docs
 isinside
 TriangleOctree
+SegmentQuadtree
 num_leaves
 num_triangles
+num_segments
 has_consistent_normals
 emptyspace
 Meshes.boundingbox

@@ -35,18 +35,84 @@ end
 
 The query interface that node-generation code (`build_node_octree`, `repel`)
 uses to consult boundary geometry, parameterized by the manifold `M`. Because
-every seam method dispatches on `M`, discretization is generic over `Manifold`
-— the mechanism a 2D reimplementation slots into. Implementations:
-`TriangleOctree{T} <: AbstractGeometryIndex{𝔼{3}}` (today), and a future
-`SegmentQuadtree{T} <: AbstractGeometryIndex{𝔼{2}}`.
+every seam method dispatches on `M`, discretization is generic over `Manifold`.
+Implementations: `TriangleOctree{T} <: AbstractGeometryIndex{𝔼{3}}` (3D) and
+`SegmentQuadtree{T} <: AbstractGeometryIndex{𝔼{2}}` (2D).
 
-Seam contract:
+Seam contract — what an implementation provides (the accessors have
+field-backed defaults covering the standard `tree`/`leaf_classification`
+layout):
+- `geometry_tree(g)`            → the index's spatial subdivision tree
+- `leaf_classes(g)`             → per-leaf classification cache, or `nothing`
+- `_signed_distance(g, p)`      → signed distance to the boundary (negative inside)
 - `domain_bounds(g)`            → `(min, max)::NTuple{2,SVector{N,T}}`
+- `project_to_boundary(g, p, offset)` → `(SVector{N,T}, element_id::Int)`
+
+Provided generically on top of that contract (do not reimplement per index —
+tolerance and fast-path fixes must not fork between dimensions):
 - `classify_point(g, p, tol)`   → `LEAF_INTERIOR` / `LEAF_BOUNDARY` / `LEAF_EXTERIOR`
 - `isinside(p, g)`              → `Bool`
-- `project_to_boundary(g, p, offset)` → `(SVector{N,T}, element_id::Int)`
 """
 abstract type AbstractGeometryIndex{M <: Manifold} end
+
+"Spatial subdivision tree of a geometry index."
+geometry_tree(g::AbstractGeometryIndex) = g.tree
+
+"Per-leaf classification cache of a geometry index (`nothing` if not built)."
+leaf_classes(g::AbstractGeometryIndex) = g.leaf_classification
+
+"""
+Shared classification of a point against a geometry index: bbox fast path,
+cached leaf classification for INTERIOR/EXTERIOR dispatch, exact signed
+distance only for BOUNDARY leaves. `tol` expands the bounding box for the
+exterior fast path (0 for exact bbox checks, positive for conservative
+classification). Implementations plug in through `_signed_distance`.
+"""
+@inline function classify_point(
+        g::AbstractGeometryIndex{𝔼{N}}, point::SVector{N, <:Real}, tol
+    ) where {N}
+    bbox_min, bbox_max = domain_bounds(g)
+    T = eltype(bbox_min)
+    # Seam policy: convert a foreign-precision query once at the entry point;
+    # everything below runs strictly in the index machine type T.
+    p = SVector{N, T}(point)
+    t = T(tol)
+    if any(p .< bbox_min .- t) || any(p .> bbox_max .+ t)
+        return LEAF_EXTERIOR
+    end
+    cache = leaf_classes(g)
+    if !isnothing(cache)
+        leaf_idx = find_leaf(geometry_tree(g), p)
+        cls = cache[leaf_idx]
+        cls != LEAF_BOUNDARY && return cls
+    end
+    sd = _signed_distance(g, p)
+    tol_val = isnothing(cache) ? zero(T) : t
+    return _leaf_class_from_signed_distance(sd, tol_val)
+end
+
+"""
+Fast interior/exterior test using a geometry index.
+"""
+function isinside(point::SVector{N, T}, g::AbstractGeometryIndex{𝔼{N}}) where {N, T <: Real}
+    return classify_point(g, point, zero(T)) == LEAF_INTERIOR
+end
+
+function isinside(points::Vector{SVector{N, T}}, g::AbstractGeometryIndex{𝔼{N}}) where {N, T <: Real}
+    return tmap(p -> isinside(p, g), points)
+end
+
+function isinside(point::Point{𝔼{N}}, g::AbstractGeometryIndex{𝔼{N}}) where {N}
+    bbox_min, _ = domain_bounds(g)
+    return isinside(_extract_vertex(eltype(bbox_min), point), g)
+end
+
+function isinside(
+        points::AbstractVector{<:Point{𝔼{N}}},
+        g::AbstractGeometryIndex{𝔼{N}},
+    ) where {N}
+    return tmap(p -> isinside(p, g), points)
+end
 
 """
 Octree spatial index for triangle mesh queries. Accelerates isinside(),
@@ -63,9 +129,9 @@ end
 "Axis-aligned bounds of the boundary geometry."
 domain_bounds(g::TriangleOctree) = (g.index.bbox_min, g.index.bbox_max)
 
-"Classify a query point against the domain (INTERIOR / BOUNDARY / EXTERIOR)."
-@inline classify_point(g::TriangleOctree{T}, p::SVector{3, <:Real}, tol) where {T} =
-    _classify_point_octree(p, g; tol = T(tol))
+"Signed distance from `p` to the mesh (negative inside)."
+@inline _signed_distance(g::TriangleOctree{T}, p::SVector{3, T}) where {T} =
+    _compute_signed_distance_octree(p, g.index, g.tree)
 
 "Project `p` onto the boundary, returning (projected point, boundary element id).
 Delegates to the `repel` projection kernel (defined later in the module)."
@@ -100,19 +166,22 @@ function VertexResolutionCriterion(
     return VertexResolutionCriterion(tolerance_sq, absolute_min)
 end
 
+# Generic over the geometry index: `_element_vertices(index, el)` yields the
+# element's vertices (triangle → 3, segment → 2), so the same criterion drives
+# both the 3D triangle octree and the 2D segment quadtree.
 function should_subdivide(
         c::VertexResolutionCriterion{T},
-        tree,
+        tree::SpatialTree{N, <:Any, T},
         box_idx,
-        index::TriangleIndex{T}
-    ) where {T}
+        index,
+    ) where {N, T}
     box_size(tree, box_idx) <= c.absolute_min && return false
     isempty(tree.element_lists[box_idx]) && return false
 
     bbox_min, bbox_max = box_bounds(tree, box_idx)
-    found = SVector{3, T}[]
+    found = SVector{N, T}[]
 
-    for tri_idx in tree.element_lists[box_idx], v in _get_triangle_vertices(index, tri_idx)
+    for el_idx in tree.element_lists[box_idx], v in _element_vertices(index, el_idx)
         all(bbox_min .<= v .<= bbox_max) || continue
         all(sum(abs2, v - existing) >= c.tolerance_sq for existing in found) || continue
         push!(found, v)
@@ -126,15 +195,12 @@ function can_subdivide(c::VertexResolutionCriterion, tree, box_idx)
     return box_size(tree, box_idx) > c.absolute_min
 end
 
-mutable struct NearestTriangleState{T <: Real}
-    best_dist_sq::T
-    closest_idx::Int
-    closest_pt::SVector{3, T}
-    closest_feature::Int8
-end
+# The historical 3D name — the state itself is the dimension-generic
+# `NearestElementState` from spatial_octree.jl.
+const NearestTriangleState{T} = NearestElementState{3, T}
 
 NearestTriangleState{T}(point::SVector{3, T}) where {T <: Real} =
-    NearestTriangleState{T}(typemax(T), 0, point, FEATURE_FACE)
+    NearestElementState{3, T}(typemax(T), 0, point, FEATURE_FACE)
 
 @inline function _extract_vertex(::Type{T}, vert) where {T}
     coords = Meshes.to(vert)
@@ -145,6 +211,10 @@ end
     t = @inbounds index.triangles[tri_idx]
     @inbounds return index.vertices[t[1]], index.vertices[t[2]], index.vertices[t[3]]
 end
+
+# Geometry-index seam for `VertexResolutionCriterion` (see `should_subdivide`).
+@inline _element_vertices(index::TriangleIndex, el_idx::Int) =
+    _get_triangle_vertices(index, el_idx)
 
 num_triangles(index::TriangleIndex) = length(index.triangles)
 
@@ -314,28 +384,33 @@ function _signed_volume(index::TriangleIndex{T}) where {T <: Real}
     return vol / 6
 end
 
-function _create_root_octree(index::TriangleIndex{T}) where {T}
-    n_triangles = num_triangles(index)
-    bbox_min, bbox_max = _compute_bbox(index)
-
+# Dimension-generic root tree over an expanded geometry bbox, with every
+# element registered on the root. Shared by the triangle and segment indexes.
+function _create_root_tree(
+        ::Val{N}, bbox_min::SVector{N, T}, bbox_max::SVector{N, T}, n_elements::Int
+    ) where {N, T}
     bbox_sz = bbox_max - bbox_min
     bbox_center = (bbox_min + bbox_max) * T(0.5)
-    expansion_factor = T(_BBOX_EXPANSION)
-    expanded_half_size = (bbox_sz * T(0.5)) * expansion_factor
+    expanded_half_size = (bbox_sz * T(0.5)) * T(_BBOX_EXPANSION)
     bbox_min = bbox_center - expanded_half_size
     bbox_max = bbox_center + expanded_half_size
 
     root_size = maximum(bbox_max - bbox_min)
 
-    estimated_boxes = max(1000, n_triangles * 2)
-    tree = SpatialOctree{Int, T}(bbox_min, root_size; initial_capacity = estimated_boxes)
+    estimated_boxes = max(1000, n_elements * 2)
+    tree = SpatialTree{N, Int, T}(bbox_min, root_size; initial_capacity = estimated_boxes)
 
     root_elements = tree.element_lists[1]
-    for tri_idx in 1:n_triangles
-        push!(root_elements, tri_idx)
+    for el_idx in 1:n_elements
+        push!(root_elements, el_idx)
     end
 
     return tree
+end
+
+function _create_root_octree(index::TriangleIndex{T}) where {T}
+    bbox_min, bbox_max = _compute_bbox(index)
+    return _create_root_tree(Val(3), bbox_min, bbox_max, num_triangles(index))
 end
 
 """
@@ -394,59 +469,64 @@ function TriangleOctree(
     )
 
     tree = _create_root_octree(index)
-    _subdivide_triangle_octree!(tree, index, 1, criterion)
-    balance_octree!(tree, criterion)
+    _subdivide_geometry_tree!(tree, index, 1, criterion)
+    # 2:1 balancing subdivides occupied leaves too; without redistribution
+    # their triangles would vanish from the queryable tree (queries only scan
+    # leaves), corrupting nearest-triangle search.
+    balance_octree!(
+        tree, criterion;
+        redistribute! = (t, box_idx) -> _redistribute_elements!(t, index, box_idx),
+    )
     classification = classify_leaves ? _classify_leaves(tree, index) : nothing
 
     return TriangleOctree{T}(tree, index, classification)
 end
 
-function _subdivide_triangle_octree!(
-        tree::SpatialOctree{Int, T},
-        index::TriangleIndex{T},
+# Geometry-driven subdivision recursion, generic over the geometry index —
+# `_redistribute_elements!` dispatches on the index type (triangles, segments).
+function _subdivide_geometry_tree!(
+        tree::SpatialTree{N, Int, T},
+        index,
         box_idx::Int,
         criterion::VertexResolutionCriterion,
-    ) where {T <: Real}
+    ) where {N, T <: Real}
     if !should_subdivide(criterion, tree, box_idx, index)
         return
     end
 
+    isempty(tree.element_lists[box_idx]) && return
+
+    subdivide!(tree, box_idx)
+    _redistribute_elements!(tree, index, box_idx)
+
+    for child_idx in children(tree, box_idx)
+        _subdivide_geometry_tree!(tree, index, child_idx, criterion)
+    end
+    return
+end
+
+# Push a just-subdivided box's triangles into the children they intersect.
+# Every subdivision — geometry-driven or balance-forced — must be followed by
+# this, else the parent's triangles vanish from the queryable tree.
+function _redistribute_elements!(
+        tree::SpatialOctree{Int, T},
+        index::TriangleIndex{T},
+        box_idx::Int,
+    ) where {T <: Real}
     parent_triangles = tree.element_lists[box_idx]
     isempty(parent_triangles) && return
 
-    subdivide!(tree, box_idx)
     kids = children(tree, box_idx)
-
     for tri_idx in parent_triangles
         v1, v2, v3 = _get_triangle_vertices(index, tri_idx)
-
         for child_idx in kids
             child_min, child_max = box_bounds(tree, child_idx)
-
             if triangle_box_intersection(v1, v2, v3, child_min, child_max)
                 push!(tree.element_lists[child_idx], tri_idx)
             end
         end
     end
-
-    for child_idx in kids
-        _subdivide_triangle_octree!(tree, index, child_idx, criterion)
-    end
     return
-end
-
-@inline function _point_box_distance_sq(
-        point::SVector{3, T},
-        bbox_min::SVector{3, T},
-        bbox_max::SVector{3, T},
-    ) where {T <: Real}
-    dx = point[1] < bbox_min[1] ? (bbox_min[1] - point[1]) :
-        (point[1] > bbox_max[1] ? (point[1] - bbox_max[1]) : zero(T))
-    dy = point[2] < bbox_min[2] ? (bbox_min[2] - point[2]) :
-        (point[2] > bbox_max[2] ? (point[2] - bbox_max[2]) : zero(T))
-    dz = point[3] < bbox_min[3] ? (bbox_min[3] - point[3]) :
-        (point[3] > bbox_max[3] ? (point[3] - bbox_max[3]) : zero(T))
-    return dx * dx + dy * dy + dz * dz
 end
 
 @inline function _update_closest_triangle!(
@@ -470,6 +550,17 @@ end
     return nothing
 end
 
+# Callable struct (not a closure) so the per-query traversal stays
+# allocation-free; see `_nearest_element_tree!`.
+struct _TriangleUpdater{T <: Real}
+    point::SVector{3, T}
+    index::TriangleIndex{T}
+    state::NearestElementState{3, T}
+end
+
+@inline (u::_TriangleUpdater)(tri_idx::Int) =
+    _update_closest_triangle!(u.point, u.index, tri_idx, u.state)
+
 function _nearest_triangle_octree!(
         point::SVector{3, T},
         tree::SpatialOctree{Int, T},
@@ -477,39 +568,9 @@ function _nearest_triangle_octree!(
         box_idx::Int,
         state::NearestTriangleState{T},
     ) where {T <: Real}
-    bbox_min, bbox_max = box_bounds(tree, box_idx)
-    _point_box_distance_sq(point, bbox_min, bbox_max) > state.best_dist_sq && return
-
-    if is_leaf(tree, box_idx)
-        @inbounds for tri_idx in tree.element_lists[box_idx]
-            _update_closest_triangle!(point, index, tri_idx, state)
-        end
-        return
-    end
-
-    kids = children(tree, box_idx)
-    dists = MVector{8, T}(ntuple(_ -> typemax(T), Val(8)))
-    idxs = MVector{8, Int}(ntuple(_ -> 0, Val(8)))
-    n_valid = 0
-    @inbounds for child_idx in kids
-        cmin, cmax = box_bounds(tree, child_idx)
-        d2 = _point_box_distance_sq(point, cmin, cmax)
-        if d2 <= state.best_dist_sq
-            n_valid += 1
-            pos = n_valid
-            while pos > 1 && d2 < dists[pos - 1]
-                dists[pos] = dists[pos - 1]
-                idxs[pos] = idxs[pos - 1]
-                pos -= 1
-            end
-            dists[pos] = d2
-            idxs[pos] = child_idx
-        end
-    end
-
-    return @inbounds for i in 1:n_valid
-        _nearest_triangle_octree!(point, tree, index, idxs[i], state)
-    end
+    return _nearest_element_tree!(
+        point, tree, box_idx, state, _TriangleUpdater(point, index, state)
+    )
 end
 
 """
@@ -563,15 +624,7 @@ function _classify_leaves(
         return _leaf_class_from_signed_distance(sd, tol)
     end
 
-    classification = classify_leaves!(tree, mesh_query)
-
-    for leaf_idx in all_leaves(tree)
-        if !isempty(tree.element_lists[leaf_idx])
-            classification[leaf_idx] = LEAF_BOUNDARY
-        end
-    end
-
-    return classification
+    return _force_occupied_boundary!(classify_leaves!(tree, mesh_query), tree)
 end
 
 Base.length(octree::TriangleOctree) = num_triangles(octree.index)
@@ -590,57 +643,6 @@ Return the number of triangles indexed by the octree.
 """
 num_triangles(octree::TriangleOctree) = num_triangles(octree.index)
 
-"""
-    _classify_point_octree(point, octree; tol=0) -> Int8
-
-Shared classification of a point against a TriangleOctree. Returns
-`LEAF_INTERIOR`, `LEAF_EXTERIOR`, or `LEAF_BOUNDARY`. Uses the cached leaf
-classification for fast INTERIOR/EXTERIOR dispatch; only BOUNDARY probes
-fall through to the full signed-distance computation.
-
-`tol` expands the mesh bounding box for the exterior fast-path (set to 0 for
-exact bbox checks, or a positive tolerance for conservative classification).
-"""
-@inline function _classify_point_octree(
-        point::SVector{3, <:Real}, octree::TriangleOctree{T}; tol::Real = zero(T)
-    ) where {T}
-    # Seam policy: convert a foreign-precision query once at the entry point;
-    # everything below runs strictly in the octree's machine type T.
-    p = SVector{3, T}(point)
-    t = T(tol)
-    if any(p .< octree.index.bbox_min .- t) || any(p .> octree.index.bbox_max .+ t)
-        return LEAF_EXTERIOR
-    end
-    tri_cls = octree.leaf_classification
-    if !isnothing(tri_cls)
-        leaf_idx = find_leaf(octree.tree, p)
-        cls = tri_cls[leaf_idx]
-        cls != LEAF_BOUNDARY && return cls
-    end
-    sd = _compute_signed_distance_octree(p, octree.index, octree.tree)
-    tol_val = isnothing(tri_cls) ? zero(T) : t
-    return _leaf_class_from_signed_distance(sd, tol_val)
-end
-
-"""
-Fast interior/exterior test using octree spatial index.
-"""
-function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
-    return _classify_point_octree(point, octree) == LEAF_INTERIOR
-end
-
-function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}
-    return tmap(p -> isinside(p, octree), points)
-end
-
-function isinside(point::Point{𝔼{3}}, octree::TriangleOctree{T}) where {T}
-    sv = _extract_vertex(T, point)
-    return isinside(sv, octree)
-end
-
-function isinside(
-        points::AbstractVector{<:Point{𝔼{3}}},
-        octree::TriangleOctree,
-    )
-    return tmap(p -> isinside(p, octree), points)
-end
+# Point classification and `isinside` are provided generically over
+# `AbstractGeometryIndex` (see the seam at the top of this file); this index
+# only supplies `_signed_distance`.

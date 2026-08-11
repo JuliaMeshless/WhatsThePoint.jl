@@ -1,5 +1,56 @@
 # Basic tests for generic spatial octree implementation
 
+@testitem "balance_octree! redistributes elements on forced subdivision" setup = [
+    CommonImports,
+] begin
+    using WhatsThePoint: SpatialTree, VertexResolutionCriterion, subdivide!, children,
+        all_leaves, balance_octree!, needs_balancing
+
+    # A 2-level imbalance: one root child subdivided twice over, so a sibling
+    # leaf violates the 2:1 constraint and balancing must force-split it.
+    # Queries only scan leaves, so elements of a force-split box must be
+    # pushed into its children (the redistribute! hook) or they silently
+    # vanish from the queryable tree.
+    function imbalanced_tree()
+        t = SpatialTree{2, Int, Float64}(SVector(0.0, 0.0), 1.0; initial_capacity = 64)
+        kids = collect(subdivide!(t, 1))
+        deep = kids[1]
+        for c in collect(subdivide!(t, deep))
+            subdivide!(t, c)
+        end
+        victim = first(k for k in kids[2:end] if needs_balancing(t, k))
+        push!(t.element_lists[victim], 99)
+        return t, victim
+    end
+
+    leaf_elements(t) =
+        reduce(union!, (Set(t.element_lists[l]) for l in all_leaves(t)); init = Set{Int}())
+
+    crit = VertexResolutionCriterion(0.0, 1.0e-6)
+
+    # With the hook (as the geometry-index constructors pass it): the forced
+    # subdivision invokes it and the element stays reachable from leaves.
+    t1, victim = imbalanced_tree()
+    calls = Int[]
+    balance_octree!(
+        t1, crit;
+        redistribute! = (t, b) -> begin
+            push!(calls, b)
+            for c in children(t, b)
+                append!(t.element_lists[c], t.element_lists[b])
+            end
+        end,
+    )
+    @test victim in calls
+    @test 99 in leaf_elements(t1)
+
+    # Without the hook (the pre-fix behavior): the element vanishes from the
+    # queryable tree — the corruption the hook exists to prevent.
+    t2, _ = imbalanced_tree()
+    balance_octree!(t2, crit)
+    @test 99 ∉ leaf_elements(t2)
+end
+
 @testitem "SpatialOctree Construction" setup = [CommonImports] begin
     using WhatsThePoint: SpatialOctree, is_leaf, has_children
 

@@ -23,9 +23,9 @@ makedocs(;
         "Manual" => [
             "Concepts" => "concepts.md",
             "Discretization" => "discretization.md",
-            "Octree Algorithm" => "octree.md",
+            "Orthtree Algorithm" => "orthtree.md",
             "Boundary & Normals" => "boundary_normals.md",
-            "Point-in-Volume & Octree" => "isinside_octree.md",
+            "Point-in-Volume & Orthtree" => "isinside_orthtree.md",
             "Node Repulsion" => "repel.md",
         ],
         "API Reference" => "api.md",

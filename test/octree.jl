@@ -1,6 +1,6 @@
-# Tests for Octree discretization algorithm
+# Tests for Orthtree discretization algorithm
 
-@testitem "Octree with different spacing types" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree with different spacing types" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(42)
 
@@ -8,7 +8,7 @@
     bnd = PointBoundary(mesh)
 
     # Test ConstantSpacing
-    alg = Octree(mesh)
+    alg = Orthtree(mesh)
     cloud = discretize(bnd, ConstantSpacing(1m); alg, max_points = 100)
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
@@ -21,14 +21,14 @@
         bulk = 5.0m,
         layer_thickness = 2.0m
     )
-    alg = Octree(mesh)
+    alg = Orthtree(mesh)
     cloud = discretize(bnd, spacing; alg, max_points = 100)
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
     @test length(WhatsThePoint.volume(cloud)) <= 100
 end
 
-@testitem "Octree points are inside" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree points are inside" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(123)
 
@@ -36,11 +36,11 @@ end
     bnd = PointBoundary(mesh)
     spacing = ConstantSpacing(1.0m)
 
-    alg = Octree(mesh)
+    alg = Orthtree(mesh)
     cloud = discretize(bnd, spacing; alg, max_points = 100)
 
     # All points should be inside via octree check
-    octree = alg.triangle_octree
+    octree = alg.geometry
     for pt in WhatsThePoint.volume(cloud)
         c = to(pt)
         sv = SVector{3, Float64}(c[1] / m, c[2] / m, c[3] / m)
@@ -48,7 +48,7 @@ end
     end
 end
 
-@testitem "Octree points are inside (high-aspect-ratio domain, #76)" setup = [CommonImports] begin
+@testitem "Orthtree points are inside (high-aspect-ratio domain, #76)" setup = [CommonImports] begin
     using Random
     using Meshes: SimpleMesh, connect, Triangle, Point
     Random.seed!(76)
@@ -75,12 +75,12 @@ end
     bnd = PointBoundary(mesh)
     spacing = ConstantSpacing(0.5m)
 
-    alg = Octree(mesh; spacing)
+    alg = Orthtree(mesh; spacing)
     cloud = discretize(bnd, spacing; alg, max_points = 500)
 
     # Every volume point must pass the geometry check, not just the
     # near-surface candidates that happened to be filtered.
-    octree = alg.triangle_octree
+    octree = alg.geometry
     for pt in WhatsThePoint.volume(cloud)
         c = to(pt)
         sv = SVector{3, Float64}(c[1] / m, c[2] / m, c[3] / m)
@@ -92,7 +92,7 @@ end
     @test length(WhatsThePoint.volume(cloud)) >= 450
 end
 
-@testitem "Octree with placement strategies" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree with placement strategies" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(456)
 
@@ -100,7 +100,7 @@ end
     bnd = PointBoundary(mesh)
 
     for placement in (:random, :jittered, :lattice)
-        alg = Octree(mesh; placement)
+        alg = Orthtree(mesh; placement)
         cloud = discretize(bnd, ConstantSpacing(1m); alg, max_points = 50)
 
         @test cloud isa PointCloud
@@ -109,7 +109,7 @@ end
     end
 end
 
-@testitem "Octree :bridson placement enforces global separation" setup = [
+@testitem "Orthtree :bridson placement enforces global separation" setup = [
     CommonImports, OctreeTestData,
 ] begin
     using Random
@@ -121,7 +121,7 @@ end
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
     spacing = ConstantSpacing(0.15m)
-    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
+    alg = Orthtree(mesh; spacing, alpha = 1.0, placement = :bridson)
     cloud = discretize(bnd, spacing; alg, max_points = 2000)
 
     vol = points(WhatsThePoint.volume(cloud))
@@ -140,7 +140,7 @@ end
     @test min_sep >= 0.75 * 0.15 - 1.0e-9
 end
 
-@testitem "Octree auto-estimates max_points when unset" setup = [
+@testitem "Orthtree auto-estimates max_points when unset" setup = [
     CommonImports, OctreeTestData,
 ] begin
     using Random
@@ -149,9 +149,9 @@ end
     mesh = OctreeTestData.unit_cube_mesh()
     spacing = ConstantSpacing(0.15m)
     bnd = PointBoundary(mesh, spacing)
-    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
+    alg = Orthtree(mesh; spacing, alpha = 1.0, placement = :bridson)
 
-    # max_points unset → the Octree algorithm estimates the cap from the
+    # max_points unset → the Orthtree algorithm estimates the cap from the
     # spacing integral instead of erroring on `nothing` (regression: the
     # default path was previously unreachable and crashed with a MethodError).
     cloud = discretize(bnd, spacing; alg)
@@ -164,15 +164,15 @@ end
     # The estimator returns a positive Int, and its 1.1× pad keeps the cap
     # above the saturated count (so the front saturates, not truncates).
     node_tree = WhatsThePoint.build_node_octree(
-        alg.triangle_octree, spacing, alg.alpha, alg.node_min_ratio,
+        alg.geometry, spacing, alg.alpha, alg.node_min_ratio,
     )
-    classification = WhatsThePoint.classify_node_octree(node_tree, alg.triangle_octree)
+    classification = WhatsThePoint.classify_node_octree(node_tree, alg.geometry)
     est = WhatsThePoint._estimate_volume_points(node_tree, classification, spacing)
     @test est isa Int
     @test est > length(vol)
 end
 
-@testitem "Octree :bridson placement with graded spacing" setup = [
+@testitem "Orthtree :bridson placement with graded spacing" setup = [
     CommonImports, OctreeTestData,
 ] begin
     using Random
@@ -186,7 +186,7 @@ end
     spacing = BoundaryLayerSpacing(
         points(bnd); at_wall = 0.1m, bulk = 0.25m, layer_thickness = 0.2m,
     )
-    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson, bridson_factor = 1.0)
+    alg = Orthtree(mesh; spacing, alpha = 1.0, placement = :bridson, bridson_factor = 1.0)
     cloud = discretize(bnd, spacing; alg, max_points = 2000)
 
     vol = points(WhatsThePoint.volume(cloud))
@@ -205,14 +205,14 @@ end
     @test ok
 end
 
-@testitem "Octree bridson warns on truncation" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree bridson warns on truncation" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(999)
 
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
     spacing = ConstantSpacing(0.15m)
-    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
+    alg = Orthtree(mesh; spacing, alpha = 1.0, placement = :bridson)
 
     # A tiny max_points forces truncation: the front has room to grow but is
     # capped early. The truncation probe should find acceptable candidates and
@@ -223,25 +223,25 @@ end
     @test length(WhatsThePoint.volume(cloud)) == 5
 end
 
-@testitem "Octree invalid placement throws" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree invalid placement throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
 
-    @test_throws ArgumentError Octree(mesh; placement = :invalid)
+    @test_throws ArgumentError Orthtree(mesh; placement = :invalid)
 end
 
-@testitem "Octree invalid oversampling throws" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree invalid oversampling throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
 
-    @test_throws ArgumentError Octree(mesh; boundary_oversampling = -1.0)
+    @test_throws ArgumentError Orthtree(mesh; boundary_oversampling = -1.0)
 end
 
-@testitem "Octree invalid max_growth throws" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree invalid max_growth throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
 
-    @test_throws ArgumentError Octree(mesh; max_growth = -0.1)
+    @test_throws ArgumentError Orthtree(mesh; max_growth = -0.1)
 end
 
-@testitem "Octree max_growth smooths steep spacing gradients" setup = [
+@testitem "Orthtree max_growth smooths steep spacing gradients" setup = [
     CommonImports, OctreeTestData,
 ] begin
     using Random
@@ -271,8 +271,8 @@ end
     )
     bnd = PointBoundary(mesh, spacing)
 
-    alg_raw = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
-    alg_lim = Octree(mesh; spacing, alpha = 1.0, placement = :bridson, max_growth = 0.15)
+    alg_raw = Orthtree(mesh; spacing, alpha = 1.0, placement = :bridson)
+    alg_lim = Orthtree(mesh; spacing, alpha = 1.0, placement = :bridson, max_growth = 0.15)
 
     cloud_raw = discretize(bnd, spacing; alg = alg_raw)
     cloud_lim = discretize(bnd, spacing; alg = alg_lim)
@@ -289,7 +289,7 @@ end
     @test length(WhatsThePoint.volume(cloud_lim)) >= length(WhatsThePoint.volume(cloud_raw))
 end
 
-@testitem "Octree octree subdivision behavior" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree octree subdivision behavior" setup = [CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(789)
 
@@ -317,7 +317,7 @@ end
     @test length(WhatsThePoint.all_leaves(node_tree_coarse)) >= 1
 end
 
-@testitem "Octree node octree classification works" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree node octree classification works" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
     tri_octree = TriangleOctree(mesh; classify_leaves = true)
     spacing = ConstantSpacing(0.2m)
@@ -342,7 +342,7 @@ end
 end
 
 
-@testitem "Octree constructors" setup = [TestData, CommonImports, OctreeTestData] begin
+@testitem "Orthtree constructors" setup = [TestData, CommonImports, OctreeTestData] begin
     using Random
     Random.seed!(606)
 
@@ -355,19 +355,19 @@ end
         bulk = 3.0m,
         layer_thickness = 1.5m
     )
-    alg = Octree(mesh; spacing, alpha = 1.5)
+    alg = Orthtree(mesh; spacing, alpha = 1.5)
     cloud = discretize(bnd, spacing; alg, max_points = 50)
     @test cloud isa PointCloud
     @test length(WhatsThePoint.volume(cloud)) > 0
     @test alg.node_min_ratio < 1.0
 
     # Test construction from an imported mesh
-    alg2 = Octree(import_mesh(TestData.BOX_PATH, u"m"))
-    @test alg2 isa Octree
-    @test alg2.triangle_octree isa WhatsThePoint.TriangleOctree
+    alg2 = Orthtree(import_mesh(TestData.BOX_PATH, u"m"))
+    @test alg2 isa Orthtree
+    @test alg2.geometry isa WhatsThePoint.TriangleOctree
 end
 
-@testitem "Octree discretization preserves and promotes mactype" setup = [TestData, CommonImports] begin
+@testitem "Orthtree discretization preserves and promotes mactype" setup = [TestData, CommonImports] begin
     # GeoIO's output mactype is version-dependent (newer Meshes/CoordRefSystems
     # promote binary STL to Float64 on load), so we explicitly rebuild the mesh
     # at a known mactype to pin both paths regardless of the resolved
@@ -386,12 +386,12 @@ end
 
     # Type-consistent path: a Float32 mesh drives a Float32 algorithm, and the
     # whole pipeline stays Float32 — no silent promotion to Float64.
-    alg32 = Octree(mesh_f32)
+    alg32 = Orthtree(mesh_f32)
     @test alg32.alpha isa Float32
     @test alg32.boundary_oversampling isa Float32
     @test alg32.bridson_factor isa Float32
     @test alg32.max_growth isa Float32
-    @test eltype(alg32.triangle_octree.index.bbox_min) === Float32
+    @test eltype(alg32.geometry.index.bbox_min) === Float32
     cloud32 = discretize(bnd, ConstantSpacing(3.0f0m); alg = alg32, max_points = 50)
     @test cloud32 isa PointCloud
     @test length(WhatsThePoint.volume(cloud32)) > 0
@@ -401,7 +401,7 @@ end
     # algorithm still assembles — the PointCloud constructor promotes boundary
     # and volume to their common type (Float32 + Float64 -> Float64).
     mesh_f64 = rebuild(Float64, mesh_raw)
-    cloud_mixed = discretize(bnd, ConstantSpacing(3.0m); alg = Octree(mesh_f64), max_points = 50)
+    cloud_mixed = discretize(bnd, ConstantSpacing(3.0m); alg = Orthtree(mesh_f64), max_points = 50)
     @test length(WhatsThePoint.volume(cloud_mixed)) > 0
     @test CoordRefSystems.mactype(Meshes.crs(first(points(cloud_mixed)))) === Float64
 
@@ -409,7 +409,7 @@ end
     @test names(WhatsThePoint.boundary(cloud_mixed)) == names(bnd)
     @test length(WhatsThePoint.boundary(cloud_mixed)) == length(bnd)
 
-    # Non-Octree algorithms are untouched: same Float32 boundary still works
+    # Non-Orthtree algorithms are untouched: same Float32 boundary still works
     # through SlakKosec.
     octree = TriangleOctree(import_mesh(TestData.BOX_PATH, u"m"); classify_leaves = true)
     cloud_sk = discretize(bnd, ConstantSpacing(3.0f0m); alg = SlakKosec(octree), max_points = 20)

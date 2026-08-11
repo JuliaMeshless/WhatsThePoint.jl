@@ -2,7 +2,9 @@
     FornbergFlyer <: AbstractNodeGenerationAlgorithm
 
 2D volume discretization algorithm using a height-field approach projected onto the x-axis.
-This is the default and only algorithm for 2D boundaries. Requires `ConstantSpacing`.
+Requires `ConstantSpacing` and offers no Poisson-disk guarantee, so it is no
+longer the 2D default — [`Orthtree`](@ref) is. Pass `alg = FornbergFlyer()`
+explicitly to use it.
 
 See: Fornberg, B. & Flyer, N. (2015). *Comput. Math. Appl.*, 69(7).
 """

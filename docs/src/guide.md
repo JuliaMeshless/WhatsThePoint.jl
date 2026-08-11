@@ -108,11 +108,11 @@ cloud = discretize(boundary, spacing; alg=SlakKosec())
 # VanDerSandeFornberg — grid projection with sphere packing
 cloud = discretize(boundary, spacing; alg=VanDerSandeFornberg(), max_points=100_000)
 
-# Octree — spacing-driven adaptive fill; the default :bridson placement is a
+# Orthtree — spacing-driven adaptive fill; the default :bridson placement is a
 # global graded Poisson-disk front, and max_points is auto-estimated when unset
 mesh = import_mesh("model.stl", u"m")
 bl_spacing = BoundaryLayerSpacing(points(boundary); at_wall=0.6m, bulk=4.0m, layer_thickness=8.0m)
-cloud = discretize(boundary, bl_spacing; alg=Octree(mesh))
+cloud = discretize(boundary, bl_spacing; alg=Orthtree(mesh))
 ```
 
 `SlakKosec` can also accept a `TriangleOctree` for accelerated point-in-volume queries:
@@ -122,10 +122,16 @@ octree = TriangleOctree(mesh; min_ratio=1e-6)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
 
-### 2D Algorithm
+### 2D Algorithms
 
 ```julia
-# FornbergFlyer (default and only option for 2D)
+# Orthtree is the 2D default — built from the boundary loops automatically
+cloud = discretize(boundary, spacing)
+
+# ...or configured explicitly (graded spacing, placement, max_growth, ...)
+cloud = discretize(boundary, spacing; alg=Orthtree(boundary; spacing, max_growth=0.15))
+
+# FornbergFlyer: the older height-field fill (requires ConstantSpacing)
 cloud = discretize(boundary, spacing; alg=FornbergFlyer())
 ```
 
@@ -144,7 +150,7 @@ After an initial discretization, you can use variable spacing for a second pass:
 # Variable spacing — denser near boundary, coarser in interior
 # Requires an existing PointCloud (uses boundary distances internally)
 spacing = LogLike(cloud, 0.5mm, 1.2)  # base_size, growth_rate
-cloud = discretize(boundary, spacing; alg=Octree(mesh))
+cloud = discretize(boundary, spacing; alg=Orthtree(mesh))
 ```
 
 See the [Discretization](discretization.md) page for detailed descriptions of each algorithm and spacing type.
@@ -153,7 +159,7 @@ For a complete runnable example, see
 
 ## Node Repulsion (Optional)
 
-The Octree algorithm's default Bridson placement delivers blue-noise quality by construction, so repulsion is optional polish there; for the other algorithms it refines approximate uniformity to minimize interpolation error in the meshless solver.
+The Orthtree algorithm's default Bridson placement delivers blue-noise quality by construction, so repulsion is optional polish there; for the other algorithms it refines approximate uniformity to minimize interpolation error in the meshless solver.
 
 ```julia
 # Volume-only — boundary points stay fixed, escaped volume points are removed

@@ -8,7 +8,7 @@ CurrentModule = WhatsThePoint
 
 Meshless PDE methods (RBF-FD, generalized finite differences) are sensitive to point distribution quality. Irregular spacing leads to poorly conditioned interpolation matrices and reduced accuracy. Node repulsion iteratively pushes points apart to achieve a more uniform distribution while respecting the domain boundary.
 
-With the [`Octree`](@ref) algorithm's default Bridson placement, the generated cloud already satisfies the Poisson-disk criterion, so repulsion is optional polish rather than a required pass — the default [`ClippedSpacingForce`](@ref) is built to preserve (never re-pack) such a cloud.
+With the [`Orthtree`](@ref) algorithm's default Bridson placement, the generated cloud already satisfies the Poisson-disk criterion, so repulsion is optional polish rather than a required pass — the default [`ClippedSpacingForce`](@ref) is built to preserve (never re-pack) such a cloud.
 
 ## Usage
 

@@ -1,10 +1,10 @@
-# Tests for Octree discretization algorithm helpers
+# Tests for Orthtree discretization algorithm helpers
 
-@testitem "Octree invalid alpha throws" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree invalid alpha throws" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
 
-    @test_throws ArgumentError Octree(mesh; alpha = -1.0)
-    @test_throws ArgumentError Octree(mesh; alpha = 0.0)
+    @test_throws ArgumentError Orthtree(mesh; alpha = -1.0)
+    @test_throws ArgumentError Orthtree(mesh; alpha = 0.0)
 end
 
 @testitem "_extract_min_spacing methods" setup = [CommonImports, OctreeTestData] begin
@@ -86,16 +86,16 @@ end
     @test isempty(_generate_points_in_box(bbox_min, bbox_max, -1, :random))
 end
 
-@testitem "Octree mesh constructor with spacing hint" setup = [CommonImports, OctreeTestData] begin
+@testitem "Orthtree mesh constructor with spacing hint" setup = [CommonImports, OctreeTestData] begin
     mesh = OctreeTestData.unit_cube_mesh()
 
     # With spacing hint: node_min_ratio computed from spacing
-    alg_with_spacing = Octree(mesh; spacing = ConstantSpacing(0.5m), alpha = 2.0)
+    alg_with_spacing = Orthtree(mesh; spacing = ConstantSpacing(0.5m), alpha = 2.0)
     @test alg_with_spacing.node_min_ratio > 0
     @test alg_with_spacing.alpha == 2.0
 
     # Without spacing: uses geometry default
-    alg_no_spacing = Octree(mesh)
+    alg_no_spacing = Orthtree(mesh)
     @test alg_no_spacing.node_min_ratio > 0
 
     # The spacing-derived ratio should differ from the geometry-only ratio

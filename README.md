@@ -42,7 +42,7 @@ split_surface!(boundary, 75°)
 
 # Generate volume points
 spacing = ConstantSpacing(1u"mm")
-cloud = discretize(boundary, spacing; alg=Octree(mesh))
+cloud = discretize(boundary, spacing; alg=Orthtree(mesh))
 
 # Optimize point distribution (optional)
 cloud = repel(cloud, spacing; β=0.2, max_iters=1000)
@@ -65,7 +65,7 @@ visualize(cloud; markersize=0.15)
 
 - **Spacing guidance** — `suggest_spacing` probes a geometry and recommends a baseline node spacing before you generate anything
 - **Surface import** from STL and other mesh formats via [GeoIO.jl](https://github.com/JuliaEarth/GeoIO.jl) with **explicit units** (mesh files carry none — `import_mesh("part.stl", u"mm")` says what the numbers mean), plus **Poisson-disk surface sampling** (`PointBoundary(mesh, spacing)`) at a prescribed spacing
-- **Volume discretization** with multiple algorithms: `SlakKosec` and `VanDerSandeFornberg` (3D), `FornbergFlyer` (2D), and `Octree` — spacing-driven adaptive fill with graded Poisson-disk fronts and automatic point budgeting
+- **Volume discretization** with multiple algorithms: `SlakKosec` and `VanDerSandeFornberg` (3D), `FornbergFlyer` (2D), and `Orthtree` (2D & 3D) — spacing-driven adaptive fill with graded Poisson-disk fronts and automatic point budgeting
 - **Normal computation and orientation** using PCA with MST+DFS consistent orientation (Hoppe 1992)
 
 **Optimize**
@@ -80,6 +80,6 @@ visualize(cloud; markersize=0.15)
 
 **Fast & Correct**
 
-- **Octree-accelerated spatial queries** via `TriangleOctree` for O(1) point-in-volume testing
+- **Orthtree-accelerated spatial queries** via `TriangleOctree` (3D) and `SegmentQuadtree` (2D) for O(1) point-in-volume testing
 - **Threaded operations** throughout via [OhMyThreads.jl](https://github.com/JuliaFolds2/OhMyThreads.jl)
 - **Full unit support** through [Unitful.jl](https://github.com/PainterQubits/Unitful.jl)

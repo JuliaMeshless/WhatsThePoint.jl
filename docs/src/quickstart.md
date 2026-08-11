@@ -26,7 +26,7 @@ split_surface!(boundary, 75°)
 
 # 3. Generate volume points
 spacing = ConstantSpacing(1mm)
-cloud = discretize(boundary, spacing; alg=Octree(mesh))
+cloud = discretize(boundary, spacing; alg=Orthtree(mesh))
 
 # 4. Optimize point distribution (optional — Bridson placement is already blue-noise)
 cloud = repel(cloud, spacing)
@@ -57,16 +57,16 @@ using Unitful: m
 r = @. 1 + 0.2 * sin(5θ)
 boundary = PointBoundary(Point.(r .* cos.(θ), r .* sin.(θ)))
 
-# 2. Discretize with FornbergFlyer (2D algorithm)
+# 2. Discretize — 2D defaults to the Orthtree (quadtree) Poisson-disk fill
 spacing = ConstantSpacing(0.05m)
-cloud = discretize(boundary, spacing; alg=FornbergFlyer())
+cloud = discretize(boundary, spacing)
 
 # 3. Optimize and connect
 cloud = repel(cloud, spacing)
 cloud = set_topology(cloud, KNNTopology, 9)
 ```
 
-Any closed, ordered polygon works — the starfish is a standard test domain in the RBF-FD literature this package grew out of:
+Any closed, ordered polygon works — the starfish is a standard test domain in the RBF-FD literature this package grew out of. The same [`Orthtree`](@ref) algorithm handles graded (non-constant) spacing in 2D; pass it explicitly to configure it — see the [Orthtree Algorithm](orthtree.md) page:
 
 ![2D discretization of a starfish domain](assets/2d-discretization.png)
 

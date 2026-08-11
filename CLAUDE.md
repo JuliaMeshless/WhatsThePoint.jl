@@ -75,20 +75,20 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 - `surface_operations.jl` - Split, combine, add surfaces to boundaries
 - `surface_sampling.jl` - Graded Poisson-disk sampling of triangle-mesh surfaces (`sample_surface`, `PointBoundary(mesh, spacing)`)
 
-### Octree Spatial Indexing (`src/octree/`)
-- `spatial_octree.jl` - Core octree data structure with adaptive subdivision and 2:1 balancing
-- `triangle_octree.jl` - `TriangleOctree` for mesh-aware spatial queries and leaf classification
-- `spacing_criterion.jl` - `SpacingCriterion` for spacing-driven octree subdivision
+### Orthtree Spatial Indexing (`src/octree/`)
+- `spatial_octree.jl` - Core dimension-generic `SpatialTree{N,E,T}` (octree in 3D, quadtree in 2D) with adaptive subdivision and 2:1 balancing
+- `triangle_octree.jl` - `TriangleOctree` for mesh-aware spatial queries and leaf classification; defines the `AbstractGeometryIndex{M}` seam both indexes implement
+- `segment_quadtree.jl` - `SegmentQuadtree`, the 2D (`𝔼{2}`) counterpart of `TriangleOctree`: indexes boundary loops for accelerated `isinside`/signed-distance queries, with multiply-connected domains resolved by nesting parity
+- `spacing_criterion.jl` - `SpacingCriterion` and `build_node_octree` for spacing-driven node-tree subdivision (2D & 3D)
 - `geometric_utils.jl` - Triangle-box intersection tests
-- `traits.jl` - Octree trait definitions
 
 ### Discretization (`src/discretization/`)
 Four algorithms available with **important 2D vs 3D considerations:**
 
-- **SlakKosec** (3D only, default) - `algorithms/slak_kosec.jl`
+- **SlakKosec** (3D only, 3D default) - `algorithms/slak_kosec.jl`
 - **VanDerSandeFornberg** (3D only) - `algorithms/vandersande_fornberg.jl`
-- **FornbergFlyer** (2D only) - `algorithms/fornberg_flyer.jl`
-- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill; default `:bridson` placement runs a global graded Poisson-disk front seeded from the boundary, with auto-estimated `max_points` and optional gradient-limited spacing (`max_growth`) (this is a discretization *algorithm*; not to be confused with `TriangleOctree`, a spatial *data structure*)
+- **FornbergFlyer** (2D only, `ConstantSpacing` only) - `algorithms/fornberg_flyer.jl`
+- **Orthtree** (2D & 3D, 2D default) - `algorithms/octree.jl` — dual-tree spacing-driven adaptive fill; default `:bridson` placement runs a global graded Poisson-disk front seeded from the boundary, with auto-estimated `max_points` and optional gradient-limited spacing (`max_growth`) (this is a discretization *algorithm*; not to be confused with `TriangleOctree`/`SegmentQuadtree`, spatial *data structures*)
 
 Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing (variable spacings require non-empty boundary points; KDTree-accelerated). `spacing_guidance.jl` provides `suggest_spacing` (geometry probe recommending h_ceiling/h_baseline/h_fine) and the bridson coarse-spacing clamp-and-warn guard.
 
@@ -122,8 +122,8 @@ WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and 
 
 ### 2D vs 3D Algorithm Differences
 The discretization algorithms are dimension-specific:
-- 2D geometries: Must use `FornbergFlyer()` (requires `ConstantSpacing`)
-- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()` (`ConstantSpacing` only), or `Octree()`
+- 2D geometries: `Orthtree(bnd; spacing)` (default; graded spacing OK) or `FornbergFlyer()` (`ConstantSpacing` only)
+- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()` (`ConstantSpacing` only), or `Orthtree(mesh; spacing)`
 
 ### Normal Orientation Strategy
 Normal computation and orientation uses a two-step process (Hoppe 1992):
@@ -134,7 +134,7 @@ This approach handles arbitrary surface topologies without requiring manifold as
 
 ### Point-in-Volume Testing
 Different algorithms for different dimensions:
-- **2D:** Winding number algorithm
+- **2D:** Winding number algorithm, or `SegmentQuadtree`-accelerated O(1) queries
 - **3D:** Green's function approach, or `TriangleOctree`-accelerated O(1) queries for large meshes
 
 ### Surface Import Behavior
@@ -309,14 +309,15 @@ test/
 ├── utils.jl                     # Utility function tests
 ├── io.jl                        # Import/export tests
 ├── indexing.jl                  # Index-space conversion tests
-├── octree.jl                    # Octree discretization algorithm tests
+├── octree.jl                    # Orthtree discretization algorithm tests
 ├── octree_basic.jl              # Octree data structure tests
-├── octree_discretization.jl     # Octree discretization tests
+├── octree_discretization.jl     # Orthtree discretization tests
 ├── octree_geometric.jl          # Octree geometry tests
 ├── octree_isinside.jl           # Octree-accelerated isinside tests
 ├── octree_spacing_criterion.jl  # Octree spacing criterion tests
 ├── octree_triangle_octree.jl    # TriangleOctree tests
 ├── octree_regression_curvature.jl # Octree curvature regression tests
+├── segment_quadtree.jl          # SegmentQuadtree and 2D Orthtree discretization tests (incl. discretize default/rejection)
 └── data/
     ├── bifurcation.stl          # Test data (24,780 points)
     ├── box.stl                  # Test data
