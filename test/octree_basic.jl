@@ -1,8 +1,8 @@
 # Basic tests for generic spatial octree implementation
 
 @testitem "balance_octree! redistributes elements on forced subdivision" setup = [
-        CommonImports,
-    ] begin
+    CommonImports,
+] begin
     using WhatsThePoint: SpatialTree, VertexResolutionCriterion, subdivide!, children,
         all_leaves, balance_octree!, needs_balancing
 
