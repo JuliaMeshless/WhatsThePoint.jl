@@ -40,13 +40,80 @@ every seam method dispatches on `M`, discretization is generic over `Manifold`
 `TriangleOctree{T} <: AbstractGeometryIndex{𝔼{3}}` (today), and a future
 `SegmentQuadtree{T} <: AbstractGeometryIndex{𝔼{2}}`.
 
-Seam contract:
+Seam contract — what an implementation provides (the accessors have
+field-backed defaults covering the standard `tree`/`leaf_classification`
+layout):
+- `geometry_tree(g)`            → the index's spatial subdivision tree
+- `leaf_classes(g)`             → per-leaf classification cache, or `nothing`
+- `_signed_distance(g, p)`      → signed distance to the boundary (negative inside)
 - `domain_bounds(g)`            → `(min, max)::NTuple{2,SVector{N,T}}`
+- `project_to_boundary(g, p, offset)` → `(SVector{N,T}, element_id::Int)`
+
+Provided generically on top of that contract (do not reimplement per index —
+tolerance and fast-path fixes must not fork between dimensions):
 - `classify_point(g, p, tol)`   → `LEAF_INTERIOR` / `LEAF_BOUNDARY` / `LEAF_EXTERIOR`
 - `isinside(p, g)`              → `Bool`
-- `project_to_boundary(g, p, offset)` → `(SVector{N,T}, element_id::Int)`
 """
 abstract type AbstractGeometryIndex{M <: Manifold} end
+
+"Spatial subdivision tree of a geometry index."
+geometry_tree(g::AbstractGeometryIndex) = g.tree
+
+"Per-leaf classification cache of a geometry index (`nothing` if not built)."
+leaf_classes(g::AbstractGeometryIndex) = g.leaf_classification
+
+"""
+Shared classification of a point against a geometry index: bbox fast path,
+cached leaf classification for INTERIOR/EXTERIOR dispatch, exact signed
+distance only for BOUNDARY leaves. `tol` expands the bounding box for the
+exterior fast path (0 for exact bbox checks, positive for conservative
+classification). Implementations plug in through `_signed_distance`.
+"""
+@inline function classify_point(
+        g::AbstractGeometryIndex{𝔼{N}}, point::SVector{N, <:Real}, tol
+    ) where {N}
+    bbox_min, bbox_max = domain_bounds(g)
+    T = eltype(bbox_min)
+    # Seam policy: convert a foreign-precision query once at the entry point;
+    # everything below runs strictly in the index machine type T.
+    p = SVector{N, T}(point)
+    t = T(tol)
+    if any(p .< bbox_min .- t) || any(p .> bbox_max .+ t)
+        return LEAF_EXTERIOR
+    end
+    cache = leaf_classes(g)
+    if !isnothing(cache)
+        leaf_idx = find_leaf(geometry_tree(g), p)
+        cls = cache[leaf_idx]
+        cls != LEAF_BOUNDARY && return cls
+    end
+    sd = _signed_distance(g, p)
+    tol_val = isnothing(cache) ? zero(T) : t
+    return _leaf_class_from_signed_distance(sd, tol_val)
+end
+
+"""
+Fast interior/exterior test using a geometry index.
+"""
+function isinside(point::SVector{N, T}, g::AbstractGeometryIndex{𝔼{N}}) where {N, T <: Real}
+    return classify_point(g, point, zero(T)) == LEAF_INTERIOR
+end
+
+function isinside(points::Vector{SVector{N, T}}, g::AbstractGeometryIndex{𝔼{N}}) where {N, T <: Real}
+    return tmap(p -> isinside(p, g), points)
+end
+
+function isinside(point::Point{𝔼{N}}, g::AbstractGeometryIndex{𝔼{N}}) where {N}
+    bbox_min, _ = domain_bounds(g)
+    return isinside(_extract_vertex(eltype(bbox_min), point), g)
+end
+
+function isinside(
+        points::AbstractVector{<:Point{𝔼{N}}},
+        g::AbstractGeometryIndex{𝔼{N}},
+    ) where {N}
+    return tmap(p -> isinside(p, g), points)
+end
 
 """
 Octree spatial index for triangle mesh queries. Accelerates isinside(),
@@ -63,9 +130,9 @@ end
 "Axis-aligned bounds of the boundary geometry."
 domain_bounds(g::TriangleOctree) = (g.index.bbox_min, g.index.bbox_max)
 
-"Classify a query point against the domain (INTERIOR / BOUNDARY / EXTERIOR)."
-@inline classify_point(g::TriangleOctree{T}, p::SVector{3, <:Real}, tol) where {T} =
-    _classify_point_octree(p, g; tol = T(tol))
+"Signed distance from `p` to the mesh (negative inside)."
+@inline _signed_distance(g::TriangleOctree{T}, p::SVector{3, T}) where {T} =
+    _compute_signed_distance_octree(p, g.index, g.tree)
 
 "Project `p` onto the boundary, returning (projected point, boundary element id).
 Delegates to the `repel` projection kernel (defined later in the module)."
@@ -577,57 +644,6 @@ Return the number of triangles indexed by the octree.
 """
 num_triangles(octree::TriangleOctree) = num_triangles(octree.index)
 
-"""
-    _classify_point_octree(point, octree; tol=0) -> Int8
-
-Shared classification of a point against a TriangleOctree. Returns
-`LEAF_INTERIOR`, `LEAF_EXTERIOR`, or `LEAF_BOUNDARY`. Uses the cached leaf
-classification for fast INTERIOR/EXTERIOR dispatch; only BOUNDARY probes
-fall through to the full signed-distance computation.
-
-`tol` expands the mesh bounding box for the exterior fast-path (set to 0 for
-exact bbox checks, or a positive tolerance for conservative classification).
-"""
-@inline function _classify_point_octree(
-        point::SVector{3, <:Real}, octree::TriangleOctree{T}; tol::Real = zero(T)
-    ) where {T}
-    # Seam policy: convert a foreign-precision query once at the entry point;
-    # everything below runs strictly in the octree's machine type T.
-    p = SVector{3, T}(point)
-    t = T(tol)
-    if any(p .< octree.index.bbox_min .- t) || any(p .> octree.index.bbox_max .+ t)
-        return LEAF_EXTERIOR
-    end
-    tri_cls = octree.leaf_classification
-    if !isnothing(tri_cls)
-        leaf_idx = find_leaf(octree.tree, p)
-        cls = tri_cls[leaf_idx]
-        cls != LEAF_BOUNDARY && return cls
-    end
-    sd = _compute_signed_distance_octree(p, octree.index, octree.tree)
-    tol_val = isnothing(tri_cls) ? zero(T) : t
-    return _leaf_class_from_signed_distance(sd, tol_val)
-end
-
-"""
-Fast interior/exterior test using octree spatial index.
-"""
-function isinside(point::SVector{3, T}, octree::TriangleOctree) where {T <: Real}
-    return _classify_point_octree(point, octree) == LEAF_INTERIOR
-end
-
-function isinside(points::Vector{SVector{3, T}}, octree::TriangleOctree) where {T <: Real}
-    return tmap(p -> isinside(p, octree), points)
-end
-
-function isinside(point::Point{𝔼{3}}, octree::TriangleOctree{T}) where {T}
-    sv = _extract_vertex(T, point)
-    return isinside(sv, octree)
-end
-
-function isinside(
-        points::AbstractVector{<:Point{𝔼{3}}},
-        octree::TriangleOctree,
-    )
-    return tmap(p -> isinside(p, octree), points)
-end
+# Point classification and `isinside` are provided generically over
+# `AbstractGeometryIndex` (see the seam at the top of this file); this index
+# only supplies `_signed_distance`.

@@ -491,57 +491,17 @@ end
 "Axis-aligned bounds of the boundary geometry."
 domain_bounds(g::SegmentQuadtree) = (g.index.bbox_min, g.index.bbox_max)
 
-"""
-Shared classification of a point against a SegmentQuadtree — mirrors
-`_classify_point_octree`: bbox fast path, cached leaf classification for
-INTERIOR/EXTERIOR dispatch, exact signed distance only for BOUNDARY leaves.
-"""
-@inline function classify_point(
-        g::SegmentQuadtree{T}, point::SVector{2, <:Real}, tol
-    ) where {T}
-    # Seam policy: convert a foreign-precision query once at the entry point;
-    # everything below runs strictly in the quadtree's machine type T.
-    p = SVector{2, T}(point)
-    t = T(tol)
-    if any(p .< g.index.bbox_min .- t) || any(p .> g.index.bbox_max .+ t)
-        return LEAF_EXTERIOR
-    end
-    seg_cls = g.leaf_classification
-    if !isnothing(seg_cls)
-        leaf_idx = find_leaf(g.tree, p)
-        cls = seg_cls[leaf_idx]
-        cls != LEAF_BOUNDARY && return cls
-    end
-    sd = _compute_signed_distance_quadtree(p, g.index, g.tree)
-    tol_val = isnothing(seg_cls) ? zero(T) : t
-    return _leaf_class_from_signed_distance(sd, tol_val)
-end
+"Signed distance from `p` to the boundary loops (negative inside)."
+@inline _signed_distance(g::SegmentQuadtree{T}, p::SVector{2, T}) where {T} =
+    _compute_signed_distance_quadtree(p, g.index, g.tree)
 
-"""
-Fast interior/exterior test using the quadtree spatial index.
-"""
-function isinside(point::SVector{2, T}, quadtree::SegmentQuadtree) where {T <: Real}
-    return classify_point(quadtree, point, zero(T)) == LEAF_INTERIOR
-end
-
-function isinside(points::Vector{SVector{2, T}}, quadtree::SegmentQuadtree) where {T <: Real}
-    return tmap(p -> isinside(p, quadtree), points)
-end
+# Point classification and `isinside` are provided generically over
+# `AbstractGeometryIndex` (see the seam in `triangle_octree.jl`); this index
+# only supplies `_signed_distance`.
 
 @inline function _extract_vertex(::Type{T}, point::Point{𝔼{2}}) where {T}
     coords = Meshes.to(point)
     return SVector{2, T}(ustrip(coords[1]), ustrip(coords[2]))
-end
-
-function isinside(point::Point{𝔼{2}}, quadtree::SegmentQuadtree{T}) where {T}
-    return isinside(_extract_vertex(T, point), quadtree)
-end
-
-function isinside(
-        points::AbstractVector{<:Point{𝔼{2}}},
-        quadtree::SegmentQuadtree,
-    )
-    return tmap(p -> isinside(p, quadtree), points)
 end
 
 Base.length(quadtree::SegmentQuadtree) = num_segments(quadtree.index)

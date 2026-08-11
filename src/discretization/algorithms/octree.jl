@@ -761,7 +761,7 @@ function _apply_gradient_limit(
     g = T(alg.max_growth)
     leaves0 = _non_exterior_leaves(node_tree, classification)
     isempty(leaves0) && return node_tree, classification, spacing
-    bbox_min, bbox_max = bounding_box(geometry.tree)
+    bbox_min, bbox_max = bounding_box(geometry_tree(geometry))
     diagonal = norm(bbox_max - bbox_min)
     criterion = SpacingCriterion(spacing, diagonal; alpha = alg.alpha, min_ratio = alg.node_min_ratio)
     len_unit = Unitful.unit(spacing(Point(box_center(node_tree, leaves0[1])...)))

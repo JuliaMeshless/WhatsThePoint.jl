@@ -87,7 +87,7 @@ node_tree = build_node_octree(tri_octree, spacing, 1.0, 1e-6)
 function build_node_octree(
         geometry::AbstractGeometryIndex, spacing, alpha, node_min_ratio
     )
-    geo_tree = geometry.tree
+    geo_tree = geometry_tree(geometry)
     bbox_min, bbox_max = bounding_box(geo_tree)
     node_tree = _node_tree_like(geo_tree)
 
@@ -118,13 +118,13 @@ function _box_may_contain_interior(
     # Probe sampling still misses thin/elongated domains inside large boxes
     # when every sample falls outside the geometry. Fall back to a spatial
     # descent of the geometry tree for O(log L) overlap detection.
-    geo_cls = geometry.leaf_classification
+    geo_cls = leaf_classes(geometry)
     predicate = if isnothing(geo_cls)
         _ -> true
     else
         leaf_idx -> geo_cls[leaf_idx] != LEAF_EXTERIOR
     end
-    return any_leaf_overlapping(geometry.tree, bbox_min, bbox_max, predicate)
+    return any_leaf_overlapping(geometry_tree(geometry), bbox_min, bbox_max, predicate)
 end
 
 """
