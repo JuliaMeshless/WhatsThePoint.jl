@@ -80,6 +80,6 @@ visualize(cloud; markersize=0.15)
 
 **Fast & Correct**
 
-- **Octree-accelerated spatial queries** via `TriangleOctree` for O(1) point-in-volume testing
+- **Orthtree-accelerated spatial queries** via `TriangleOctree` (3D) and `SegmentQuadtree` (2D) for O(1) point-in-volume testing
 - **Threaded operations** throughout via [OhMyThreads.jl](https://github.com/JuliaFolds2/OhMyThreads.jl)
 - **Full unit support** through [Unitful.jl](https://github.com/PainterQubits/Unitful.jl)

@@ -10,7 +10,7 @@ Volume discretization generates interior points from a boundary surface. This is
 cloud = discretize(boundary, spacing; alg=algorithm)
 ```
 
-The `max_points` keyword is a safety limit that prevents runaway point generation. For the [`Orthtree`](@ref) algorithm it defaults to an automatic estimate from the spacing integral (`∫ 1/h(x)³ dx`), sized so the fill saturates rather than truncates; for all other algorithms it defaults to 10 million. If the cap binds before the domain is filled, discretization stops early and warns.
+The `max_points` keyword is a safety limit that prevents runaway point generation. For the [`Orthtree`](@ref) algorithm it defaults to an automatic estimate from the spacing integral (`∫ 1/h(x)ᴺ dx`, with `N` the spatial dimension), sized so the fill saturates rather than truncates; for all other algorithms it defaults to 10 million. If the cap binds before the domain is filled, discretization stops early and warns.
 
 Not sure what spacing the geometry can host? Run [`suggest_spacing`](@ref) first — it reports the domain extent, the coarsest fillable spacing (`h_ceiling`), and a recommended baseline (`h_baseline`) with estimated point counts.
 
@@ -28,7 +28,7 @@ Not sure what spacing the geometry can host? Run [`suggest_spacing`](@ref) first
 - **2D problems:** [`Orthtree`](@ref) is the default — omit `alg` and it is built from the boundary loops for you (`Orthtree(bnd; spacing)` if you want to configure it). [`FornbergFlyer`](@ref) remains available for the older height-field fill, but requires `ConstantSpacing` and gives no Poisson-disk guarantee.
 - **3D with variable spacing:** Use [`Orthtree`](@ref) with [`BoundaryLayerSpacing`](@ref) for strong near-wall refinement, or [`SlakKosec`](@ref) with `LogLike` for simpler variable spacing.
 - **3D with uniform spacing:** [`SlakKosec`](@ref) (default) or [`VanDerSandeFornberg`](@ref) both work. SlakKosec is more general; VanDerSandeFornberg can be faster for simple geometries.
-- **Large 3D meshes:** Use [`Orthtree`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Orthtree](isinside_octree.md) page.
+- **Large 3D meshes:** Use [`Orthtree`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Orthtree](isinside_orthtree.md) page.
 
 ## Orthtree Algorithm
 
@@ -51,7 +51,7 @@ alg = Orthtree(mesh; spacing, max_growth=0.15)  # gradient-limited grading
 cloud = discretize(boundary, spacing; alg)
 ```
 
-`max_growth` caps how fast the spacing may vary between neighboring points (a Lipschitz limit on `|∇h|`) — steep boundary layers stay sharp at the wall but transition smoothly into the bulk. See the [Orthtree Algorithm](octree.md) page for details.
+`max_growth` caps how fast the spacing may vary between neighboring points (a Lipschitz limit on `|∇h|`) — steep boundary layers stay sharp at the wall but transition smoothly into the bulk. See the [Orthtree Algorithm](orthtree.md) page for details.
 
 The result of exactly this recipe on a vessel bifurcation:
 

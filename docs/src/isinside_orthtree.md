@@ -2,15 +2,16 @@
 CurrentModule = WhatsThePoint
 ```
 
-# Point-in-Volume & Octree
+# Point-in-Volume & Orthtree
 
-WhatsThePoint provides three approaches for testing whether points lie inside a closed boundary, suited to different problem sizes and dimensions.
+WhatsThePoint provides four approaches for testing whether points lie inside a closed boundary, suited to different problem sizes and dimensions. The two accelerated approaches use orthtree spatial indexes — a quadtree in 2D ([`SegmentQuadtree`](@ref)), an octree in 3D ([`TriangleOctree`](@ref)).
 
 ## Overview
 
 | Method | Dimensions | Complexity | When to use |
 |--------|-----------|------------|-------------|
-| Winding number | 2D | O(M) per query | All 2D problems |
+| Winding number | 2D | O(M) per query | Small boundaries, few queries |
+| Quadtree-accelerated | 2D | O(1) most queries | Many queries or large boundaries |
 | Green's function | 3D | O(M) per query | Small/medium meshes |
 | Octree-accelerated | 3D | O(1) most queries | Large meshes (>10k triangles) |
 
@@ -19,6 +20,17 @@ WhatsThePoint provides three approaches for testing whether points lie inside a 
 ## 2D: Winding Number
 
 For 2D domains, [`isinside`](@ref) uses the **winding number algorithm**. It counts the number of times the boundary winds around a query point — nonzero winding number means the point is inside.
+
+## 2D: Quadtree-Accelerated
+
+The [`SegmentQuadtree`](@ref) is the 2D counterpart of the `TriangleOctree`: it indexes the boundary loops of a `PointBoundary` and pre-classifies regions as interior or exterior, so most queries are O(1) lookups. Multiple loops describe multiply-connected domains — outer boundary plus holes, resolved automatically by nesting parity.
+
+```julia
+quadtree = SegmentQuadtree(bnd)   # each surface of the PointBoundary is one closed loop
+isinside(point, quadtree)
+```
+
+This is the same geometry index the 2D `Orthtree` discretization algorithm builds internally (`Orthtree(bnd; spacing)`).
 
 ## 3D: Green's Function
 
@@ -91,7 +103,7 @@ cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 
 ### Using Orthtree
 
-`Orthtree` uses the octree directly to generate volume points. See the [Discretization](discretization.md) page for details.
+`Orthtree` uses the geometry index directly to generate volume points (a `TriangleOctree` in 3D, a `SegmentQuadtree` in 2D). See the [Discretization](discretization.md) page for details.
 
 ```julia
 mesh = import_mesh("model.stl", mm)
@@ -100,7 +112,7 @@ cloud = discretize(boundary, spacing; alg=Orthtree(mesh), max_points=200_000)
 
 ## Choosing an Approach
 
-- **2D problems:** The winding number is used automatically — no configuration needed.
+- **2D problems:** The winding number is used automatically — no configuration needed. For many queries or large boundaries, build a `SegmentQuadtree`.
 - **Small 3D meshes (<10k triangles):** The default Green's function works fine.
 - **Large 3D meshes (>10k triangles):** Build a `TriangleOctree` and pass it to `isinside` or `SlakKosec` for orders-of-magnitude speedup.
 - **When you need volume points directly:** Use `Orthtree` to skip the separate isinside step entirely.
@@ -110,6 +122,7 @@ cloud = discretize(boundary, spacing; alg=Orthtree(mesh), max_points=200_000)
 ```julia
 num_leaves(octree)                 # Number of leaf nodes
 num_triangles(octree)              # Number of triangles in the mesh
+num_segments(quadtree)             # Number of boundary segments in a SegmentQuadtree
 has_consistent_normals(mesh)       # Check if mesh normals are consistently oriented
 ```
 

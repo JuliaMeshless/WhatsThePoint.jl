@@ -37,7 +37,7 @@ spacing = ConstantSpacing(1.0u"m")
 result = discretize(cloud, spacing; alg=SlakKosec(), max_points=10_000)
 ```
 
-## Orthtree-Accelerated Usage (Recommended for large domains)
+## Octree-Accelerated Usage (Recommended for large domains)
 ```julia
 using WhatsThePoint
 

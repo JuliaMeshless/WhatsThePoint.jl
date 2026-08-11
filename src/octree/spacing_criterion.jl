@@ -1,14 +1,15 @@
-# Spacing-driven octree subdivision criterion and node octree construction
+# Spacing-driven tree subdivision criterion and node tree construction
 #
-# This file provides infrastructure for building octrees that subdivide based on
-# a prescribed spacing function, enabling spacing-aware point generation.
+# This file provides infrastructure for building node trees (octree in 3D,
+# quadtree in 2D) that subdivide based on a prescribed spacing function,
+# enabling spacing-aware point generation.
 
 """
     SpacingCriterion{T<:Real, S} <: SubdivisionCriterion
 
-Octree subdivision criterion based on local spacing requirements.
+Tree subdivision criterion based on local spacing requirements.
 
-Subdivides boxes where `h_box > alpha * h_spacing(center)`, ensuring the octree
+Subdivides boxes where `h_box > alpha * h_spacing(center)`, ensuring the tree
 resolution is fine enough to properly represent the spacing function.
 
 # Fields
@@ -17,12 +18,12 @@ resolution is fine enough to properly represent the spacing function.
 - `absolute_min::T`: Absolute minimum box size (prevents infinite subdivision)
 
 # Algorithm
-For each octree box:
+For each box:
 1. Query `h_local = spacing(box_center)`
 2. If `h_box > alpha * h_local`, subdivide
 3. Stop if `h_box ≤ absolute_min`
 
-Smaller `alpha` values create finer octrees (more aggressive subdivision).
+Smaller `alpha` values create finer trees (more aggressive subdivision).
 """
 struct SpacingCriterion{T <: Real, S} <: SubdivisionCriterion
     spacing::S
@@ -53,29 +54,29 @@ end
 can_subdivide(c::SpacingCriterion, tree, idx) = box_size(tree, idx) > c.absolute_min
 
 # ============================================================================
-# Node octree construction
+# Node tree construction
 # ============================================================================
 
 """
-    build_node_octree(triangle_octree, spacing, alpha, node_min_ratio)
+    build_node_octree(geometry, spacing, alpha, node_min_ratio)
 
-Build a spacing-driven node octree from an existing triangle octree.
+Build a spacing-driven node tree from an existing geometry index.
 
-Creates a new `SpatialOctree` that subdivides based on a spacing function,
-enabling spacing-aware point distribution. The node octree is:
+Creates a new `SpatialTree` that subdivides based on a spacing function,
+enabling spacing-aware point distribution. The node tree is:
 1. Recursively subdivided using `SpacingCriterion`
 2. Balanced to maintain 2:1 refinement ratio
-3. Independent of the triangle octree resolution
+3. Independent of the geometry-index resolution
 
 # Arguments
-- `triangle_octree`: Base `TriangleOctree` for geometry
+- `geometry`: Geometry index (`TriangleOctree` in 3D, `SegmentQuadtree` in 2D)
 - `spacing`: Spacing function (e.g., `ConstantSpacing`, `BoundaryLayerSpacing`)
 - `alpha`: Subdivision aggressiveness (`h_box ≤ alpha * h_spacing`)
 - `node_min_ratio`: Minimum box size ratio relative to domain
 
 # Returns
-`SpatialOctree{Int, T}` with spacing-driven subdivision, where `T` is the
-triangle octree's coordinate type (the mesh CRS machine type)
+`SpatialTree{N, Int, T}` with spacing-driven subdivision, where `T` is the
+geometry index's coordinate type (the source CRS machine type)
 
 # Example
 ```julia

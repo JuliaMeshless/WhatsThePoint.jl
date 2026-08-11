@@ -66,7 +66,7 @@ cloud = repel(cloud, spacing)
 cloud = set_topology(cloud, KNNTopology, 9)
 ```
 
-Any closed, ordered polygon works — the starfish is a standard test domain in the RBF-FD literature this package grew out of. The same [`Orthtree`](@ref) algorithm handles graded (non-constant) spacing in 2D; pass it explicitly to configure it — see the [Orthtree Algorithm](octree.md) page:
+Any closed, ordered polygon works — the starfish is a standard test domain in the RBF-FD literature this package grew out of. The same [`Orthtree`](@ref) algorithm handles graded (non-constant) spacing in 2D; pass it explicitly to configure it — see the [Orthtree Algorithm](orthtree.md) page:
 
 ![2D discretization of a starfish domain](assets/2d-discretization.png)
 

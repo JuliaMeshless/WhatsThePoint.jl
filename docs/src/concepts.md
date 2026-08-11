@@ -101,7 +101,7 @@ WhatsThePoint uses [OhMyThreads.jl](https://github.com/JuliaFolds2/OhMyThreads.j
 - Normal computation and orientation (`compute_normals`, `orient_normals!`)
 - Point-in-volume testing (`isinside`)
 - Node repulsion (`repel`)
-- Octree queries and construction
+- Orthtree (octree/quadtree) queries and construction
 
 To use multiple threads, start Julia with:
 

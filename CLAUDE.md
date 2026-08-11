@@ -75,12 +75,12 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 - `surface_operations.jl` - Split, combine, add surfaces to boundaries
 - `surface_sampling.jl` - Graded Poisson-disk sampling of triangle-mesh surfaces (`sample_surface`, `PointBoundary(mesh, spacing)`)
 
-### Octree Spatial Indexing (`src/octree/`)
-- `spatial_octree.jl` - Core octree data structure with adaptive subdivision and 2:1 balancing
-- `triangle_octree.jl` - `TriangleOctree` for mesh-aware spatial queries and leaf classification
-- `spacing_criterion.jl` - `SpacingCriterion` for spacing-driven octree subdivision
+### Orthtree Spatial Indexing (`src/octree/`)
+- `spatial_octree.jl` - Core dimension-generic `SpatialTree{N,E,T}` (octree in 3D, quadtree in 2D) with adaptive subdivision and 2:1 balancing
+- `triangle_octree.jl` - `TriangleOctree` for mesh-aware spatial queries and leaf classification; defines the `AbstractGeometryIndex{M}` seam both indexes implement
+- `segment_quadtree.jl` - `SegmentQuadtree`, the 2D (`𝔼{2}`) counterpart of `TriangleOctree`: indexes boundary loops for accelerated `isinside`/signed-distance queries, with multiply-connected domains resolved by nesting parity
+- `spacing_criterion.jl` - `SpacingCriterion` and `build_node_octree` for spacing-driven node-tree subdivision (2D & 3D)
 - `geometric_utils.jl` - Triangle-box intersection tests
-- `traits.jl` - Octree trait definitions
 
 ### Discretization (`src/discretization/`)
 Four algorithms available with **important 2D vs 3D considerations:**
@@ -123,7 +123,7 @@ WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and 
 ### 2D vs 3D Algorithm Differences
 The discretization algorithms are dimension-specific:
 - 2D geometries: `Orthtree(bnd; spacing)` (default; graded spacing OK) or `FornbergFlyer()` (`ConstantSpacing` only)
-- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()` (`ConstantSpacing` only), or `Orthtree()`
+- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()` (`ConstantSpacing` only), or `Orthtree(mesh; spacing)`
 
 ### Normal Orientation Strategy
 Normal computation and orientation uses a two-step process (Hoppe 1992):
@@ -134,7 +134,7 @@ This approach handles arbitrary surface topologies without requiring manifold as
 
 ### Point-in-Volume Testing
 Different algorithms for different dimensions:
-- **2D:** Winding number algorithm
+- **2D:** Winding number algorithm, or `SegmentQuadtree`-accelerated O(1) queries
 - **3D:** Green's function approach, or `TriangleOctree`-accelerated O(1) queries for large meshes
 
 ### Surface Import Behavior
@@ -317,6 +317,7 @@ test/
 ├── octree_spacing_criterion.jl  # Octree spacing criterion tests
 ├── octree_triangle_octree.jl    # TriangleOctree tests
 ├── octree_regression_curvature.jl # Octree curvature regression tests
+├── segment_quadtree.jl          # SegmentQuadtree and 2D Orthtree discretization tests (incl. discretize default/rejection)
 └── data/
     ├── bifurcation.stl          # Test data (24,780 points)
     ├── box.stl                  # Test data

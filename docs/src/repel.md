@@ -54,7 +54,7 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 | `stall_after` | `50` | Stop after this many iterations without CV improvement (`0` disables) |
 | `kick_after` | `0` (off) | Break balanced standoffs by kicking the frozen closest pair |
 | `cull_ratio` | `0` (off) | Post-relaxation near-duplicate safety net; warns whenever it removes anything |
-| `deposit_ratio` | `0` (off) | Orthtree method only: convert escaped volume points into boundary points (emergent surface sampling) |
+| `deposit_ratio` | `0` (off) | Octree method only: convert escaped volume points into boundary points (emergent surface sampling) |
 | `rebuild_every` | `1` | Iterations between k-NN graph rebuilds (larger = cheaper, staler) |
 
 ## Force Models

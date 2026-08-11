@@ -108,9 +108,9 @@ not matter — it is normalized automatically.
 
 ## Parameters
 
-The constructor supports the same octree controls used elsewhere, plus placement options for candidate generation:
+The constructor supports the same orthtree controls used elsewhere, plus placement options for candidate generation:
 
-- octree refinement controls (`tolerance_relative`, `min_ratio`, `node_min_ratio`, `alpha`)
+- orthtree refinement controls (`tolerance_relative`, `min_ratio`, `node_min_ratio`, `alpha`)
 - placement mode (`:bridson` default, or per-leaf `:random`, `:jittered`, `:lattice`)
 - Bridson disk radius relative to spacing (`bridson_factor`, default 0.75)
 - gradient-limited spacing (`max_growth`, default 0 = off)

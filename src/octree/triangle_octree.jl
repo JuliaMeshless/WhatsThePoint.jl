@@ -35,10 +35,9 @@ end
 
 The query interface that node-generation code (`build_node_octree`, `repel`)
 uses to consult boundary geometry, parameterized by the manifold `M`. Because
-every seam method dispatches on `M`, discretization is generic over `Manifold`
-— the mechanism a 2D reimplementation slots into. Implementations:
-`TriangleOctree{T} <: AbstractGeometryIndex{𝔼{3}}` (today), and a future
-`SegmentQuadtree{T} <: AbstractGeometryIndex{𝔼{2}}`.
+every seam method dispatches on `M`, discretization is generic over `Manifold`.
+Implementations: `TriangleOctree{T} <: AbstractGeometryIndex{𝔼{3}}` (3D) and
+`SegmentQuadtree{T} <: AbstractGeometryIndex{𝔼{2}}` (2D).
 
 Seam contract — what an implementation provides (the accessors have
 field-backed defaults covering the standard `tree`/`leaf_classification`

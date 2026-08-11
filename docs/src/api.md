@@ -89,7 +89,7 @@ generate_shadows
 
 ## Geometry and Queries
 
-Point-in-volume testing, octree acceleration, and spatial utilities.
+Point-in-volume testing, orthtree acceleration, and spatial utilities.
 
 ```@docs
 isinside

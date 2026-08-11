@@ -30,7 +30,7 @@ features:
     link: /guide
   - icon: 🫧
     title: Fill the Volume
-    details: Four discretization algorithms generate well-spaced interior points, including spacing-driven adaptive octree fill with graded Poisson-disk fronts.
+    details: Four discretization algorithms generate well-spaced interior points, including spacing-driven adaptive orthtree fill with graded Poisson-disk fronts.
     link: /discretization
   - icon: 🧲
     title: Optimize the Distribution
@@ -46,8 +46,8 @@ features:
     link: /api
   - icon: ⚡
     title: Fast by Default
-    details: Threaded operations via OhMyThreads.jl, cache-friendly StructArray storage, and octree-accelerated O(1) point-in-volume queries.
-    link: /isinside_octree
+    details: Threaded operations via OhMyThreads.jl, cache-friendly StructArray storage, and orthtree-accelerated O(1) point-in-volume queries.
+    link: /isinside_orthtree
 ---
 ```
 
