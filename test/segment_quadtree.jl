@@ -42,6 +42,36 @@ end
     @test isinside(SVector(1.2, 0.0), sq2)
 end
 
+@testitem "Orthtree discretizes multiply-connected 2D domains" setup = [CommonImports] begin
+    # End-to-end annulus: multi-surface PointBoundary (outer circle + hole)
+    # through the documented pipeline — Orthtree construction + discretize —
+    # with hole/outer orientation resolved by nesting parity.
+    using Random
+    Random.seed!(77)
+    outer_pts = Point.([(2.0 * cos(t), 2.0 * sin(t)) for t in range(0, 2pi; length = 49)[1:48]])
+    hole_pts = Point.([(0.8 * cos(t), 0.8 * sin(t)) for t in range(0, 2pi; length = 25)[1:24]])
+    outer_surf = first(surfaces(PointBoundary(outer_pts)))
+    hole_surf = first(surfaces(PointBoundary(hole_pts)))
+    bnd = PointBoundary(LittleDict(:outer => outer_surf, :hole => hole_surf))
+
+    spacing = ConstantSpacing(0.15m)
+    alg = Orthtree(bnd; spacing)
+    cloud = discretize(bnd, spacing; alg)
+    vol = WhatsThePoint.volume(cloud)
+    @test length(vol) > 100
+
+    # Every volume point lies strictly in the annulus — nothing in the hole,
+    # nothing beyond the outer boundary (0.79/2.001 allow for the polygonal
+    # approximation of the circles).
+    radii = [sqrt(ustrip(to(p)[1])^2 + ustrip(to(p)[2])^2) for p in vol]
+    @test all(r -> 0.79 < r < 2.001, radii)
+    # Both the inner and outer parts of the annulus actually got filled
+    @test minimum(radii) < 1.2
+    @test maximum(radii) > 1.6
+    # And the geometry index agrees point-by-point
+    @test all(isinside(p, alg.geometry) for p in vol)
+end
+
 @testitem "SegmentQuadtree degenerate input errors" setup = [CommonImports] begin
     @test_throws ArgumentError SegmentQuadtree([SVector(0.0, 0.0), SVector(1.0, 0.0)])
     collinear = [SVector(0.0, 0.0), SVector(1.0, 0.0), SVector(2.0, 0.0)]
