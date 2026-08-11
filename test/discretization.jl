@@ -112,6 +112,37 @@ end
     @test length(volume(filled_cloud2)) > 0
 end
 
+@testitem "3D discretize algorithm resolution" setup = [TestData, CommonImports] begin
+    bnd = PointBoundary(TestData.BOX_PATH, u"m")
+    spacing = _relative_spacing(bnd)
+
+    # No `alg` resolves to SlakKosec, and an explicit `alg = nothing` is the
+    # same spelling the 2D path has always accepted.
+    cloud = discretize(bnd, spacing; max_points = 30)
+    @test cloud isa PointCloud
+    @test length(volume(cloud)) > 0
+    @test length(volume(discretize(bnd, spacing; alg = nothing, max_points = 30))) > 0
+
+    # 2D-only algorithm: instructive ArgumentError from both entry points, not
+    # a raw MethodError out of _discretize_volume.
+    @test_throws ArgumentError discretize(bnd, spacing; alg = FornbergFlyer())
+    @test_throws ArgumentError discretize(PointCloud(bnd), spacing; alg = FornbergFlyer())
+
+    # VanDerSandeFornberg has only a ConstantSpacing method
+    graded = BoundaryLayerSpacing(
+        WhatsThePoint.points(bnd);
+        at_wall = 0.5m,
+        bulk = 5.0m,
+        layer_thickness = 2.0m
+    )
+    @test_throws ArgumentError discretize(bnd, graded; alg = VanDerSandeFornberg())
+
+    # An Orthtree built from 2D boundary loops cannot fill a 3D boundary
+    square = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+    alg2d = Orthtree(PointBoundary(square); spacing = ConstantSpacing(0.2m))
+    @test_throws ArgumentError discretize(bnd, spacing; alg = alg2d)
+end
+
 @testitem "SlakKosec with BoundaryLayerSpacing" setup = [TestData, CommonImports] begin
     # Test SlakKosec with variable spacing (exercises calculate_ninit for VariableSpacing)
     bnd = PointBoundary(TestData.BOX_PATH, u"m")

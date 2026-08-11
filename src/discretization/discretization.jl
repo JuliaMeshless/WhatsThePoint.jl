@@ -27,7 +27,8 @@ Generate volume points for the given boundary and return a new PointCloud.
   older height-field fill, which requires `ConstantSpacing`)
 - `max_points`: Maximum number of volume points to generate. For the `Orthtree`
   algorithm, defaults to an automatic estimate from the spacing integral
-  (`∫ 1/h(x)³ dx`) when `nothing`; other algorithms default to 10_000_000.
+  (`∫ 1/h(x)ᴺ dx`, `N` the spatial dimension) when `nothing`; other algorithms
+  default to 10_000_000.
 
 # Example
 ```julia
@@ -42,18 +43,7 @@ cloud = discretize(boundary, 3.0m; alg=Orthtree(mesh))
     into a mesh. No dispatch collision exists — argument types are distinct.
 """
 function discretize(
-        bnd::PointBoundary{𝔼{3}},
-        spacing::AbstractSpacing;
-        alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-        max_points::Union{Int, Nothing} = nothing,
-    )
-    cloud = PointCloud(bnd)
-    new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
-    return PointCloud(boundary(cloud), new_volume, NoTopology())
-end
-
-function discretize(
-        bnd::PointBoundary{𝔼{2}},
+        bnd::PointBoundary,
         spacing::AbstractSpacing;
         alg::Union{Nothing, AbstractNodeGenerationAlgorithm} = nothing,
         max_points::Union{Int, Nothing} = nothing,
@@ -62,18 +52,23 @@ function discretize(
 end
 
 """
-    _resolve_2d_alg(bnd, spacing, alg) -> AbstractNodeGenerationAlgorithm
+    _resolve_alg(bnd, spacing, alg) -> AbstractNodeGenerationAlgorithm
 
-Pick (or validate) the algorithm for a 2D boundary. Single place for the
-decision, so the `PointBoundary` and `PointCloud` entry points cannot drift, and
-so every rejected combination throws an instructive `ArgumentError` rather than
-deferring to a raw `MethodError` inside `_discretize_volume` dispatch.
+Pick (or validate) the algorithm for a boundary, dispatching on its manifold.
+Single place for the decision, so the `PointBoundary` and `PointCloud` entry
+points cannot drift, and so every rejected combination throws an instructive
+`ArgumentError` rather than deferring to a raw `MethodError` inside
+`_discretize_volume` dispatch.
 """
-_resolve_2d_alg(bnd, spacing, ::Nothing) = Orthtree(bnd; spacing)
+_resolve_alg(bnd::PointBoundary{𝔼{2}}, spacing, ::Nothing) = Orthtree(bnd; spacing)
 
-_resolve_2d_alg(bnd, spacing, alg::Orthtree{𝔼{2}}) = alg
+_resolve_alg(::PointBoundary{𝔼{3}}, spacing, ::Nothing) = SlakKosec()
 
-function _resolve_2d_alg(bnd, spacing, alg::Orthtree)
+_resolve_alg(::PointBoundary{𝔼{2}}, spacing, alg::Orthtree{𝔼{2}}) = alg
+
+_resolve_alg(::PointBoundary{𝔼{3}}, spacing, alg::Orthtree{𝔼{3}}) = alg
+
+function _resolve_alg(::PointBoundary{𝔼{2}}, spacing, alg::Orthtree)
     throw(
         ArgumentError(
             "this `Orthtree` indexes 3D geometry ($(nameof(typeof(alg.geometry)))) and " *
@@ -83,7 +78,17 @@ function _resolve_2d_alg(bnd, spacing, alg::Orthtree)
     )
 end
 
-function _resolve_2d_alg(bnd, spacing, alg::FornbergFlyer)
+function _resolve_alg(::PointBoundary{𝔼{3}}, spacing, alg::Orthtree)
+    throw(
+        ArgumentError(
+            "this `Orthtree` indexes 2D geometry ($(nameof(typeof(alg.geometry)))) and " *
+                "cannot fill a 3D boundary — build the 3D one with `Orthtree(mesh; spacing)`, " *
+                "which indexes the surface mesh with a `TriangleOctree`."
+        )
+    )
+end
+
+function _resolve_alg(::PointBoundary{𝔼{2}}, spacing, alg::FornbergFlyer)
     spacing isa ConstantSpacing || throw(
         ArgumentError(
             "FornbergFlyer only supports ConstantSpacing; got $(nameof(typeof(spacing))). " *
@@ -94,11 +99,41 @@ function _resolve_2d_alg(bnd, spacing, alg::FornbergFlyer)
     return alg
 end
 
-function _resolve_2d_alg(bnd, spacing, alg::AbstractNodeGenerationAlgorithm)
+_resolve_alg(::PointBoundary{𝔼{3}}, spacing, alg::SlakKosec) = alg
+
+function _resolve_alg(::PointBoundary{𝔼{3}}, spacing, alg::VanDerSandeFornberg)
+    spacing isa ConstantSpacing || throw(
+        ArgumentError(
+            "VanDerSandeFornberg only supports ConstantSpacing; got " *
+                "$(nameof(typeof(spacing))). For a graded spacing in 3D use `SlakKosec` " *
+                "(the default) or `Orthtree(mesh; spacing)`."
+        )
+    )
+    return alg
+end
+
+function _resolve_alg(::PointBoundary{𝔼{2}}, spacing, alg::AbstractNodeGenerationAlgorithm)
     throw(
         ArgumentError(
             "2D discretization supports Orthtree (the default) and FornbergFlyer " *
                 "(ConstantSpacing only); got $(nameof(typeof(alg)))."
+        )
+    )
+end
+
+function _resolve_alg(::PointBoundary{𝔼{3}}, spacing, alg::AbstractNodeGenerationAlgorithm)
+    throw(
+        ArgumentError(
+            "3D discretization supports SlakKosec (the default), VanDerSandeFornberg " *
+                "(ConstantSpacing only), and Orthtree; got $(nameof(typeof(alg)))."
+        )
+    )
+end
+
+function _resolve_alg(bnd::PointBoundary, spacing, alg)
+    throw(
+        ArgumentError(
+            "discretize supports 2D and 3D Euclidean boundaries; got $(typeof(bnd))."
         )
     )
 end
@@ -109,26 +144,16 @@ end
 Generate volume points for an existing cloud and return a new PointCloud with the volume populated.
 
 For the `Orthtree` algorithm, `max_points` defaults to an automatic estimate from
-the spacing integral (`∫ 1/h(x)³ dx`) when `nothing`. Other algorithms default
+the spacing integral (`∫ 1/h(x)ᴺ dx`, `N` the spatial dimension) when `nothing`. Other algorithms default
 to 10_000_000.
 """
 function discretize(
-        cloud::PointCloud{𝔼{3}},
-        spacing::AbstractSpacing;
-        alg::AbstractNodeGenerationAlgorithm = SlakKosec(),
-        max_points::Union{Int, Nothing} = nothing,
-    )
-    new_volume = _discretize_volume(cloud, spacing, alg; max_points = max_points)
-    return PointCloud(boundary(cloud), new_volume, NoTopology())
-end
-
-function discretize(
-        cloud::PointCloud{𝔼{2}},
+        cloud::PointCloud,
         spacing::AbstractSpacing;
         alg::Union{Nothing, AbstractNodeGenerationAlgorithm} = nothing,
         max_points::Union{Int, Nothing} = nothing,
     )
-    resolved = _resolve_2d_alg(boundary(cloud), spacing, alg)
+    resolved = _resolve_alg(boundary(cloud), spacing, alg)
     new_volume = _discretize_volume(cloud, spacing, resolved; max_points = max_points)
     return PointCloud(boundary(cloud), new_volume, NoTopology())
 end
