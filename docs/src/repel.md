@@ -8,7 +8,7 @@ CurrentModule = WhatsThePoint
 
 Meshless PDE methods (RBF-FD, generalized finite differences) are sensitive to point distribution quality. Irregular spacing leads to poorly conditioned interpolation matrices and reduced accuracy. Node repulsion iteratively pushes points apart to achieve a more uniform distribution while respecting the domain boundary.
 
-With the [`Octree`](@ref) algorithm's default Bridson placement, the generated cloud already satisfies the Poisson-disk criterion, so repulsion is optional polish rather than a required pass — the default [`ClippedSpacingForce`](@ref) is built to preserve (never re-pack) such a cloud.
+With the [`Orthtree`](@ref) algorithm's default Bridson placement, the generated cloud already satisfies the Poisson-disk criterion, so repulsion is optional polish rather than a required pass — the default [`ClippedSpacingForce`](@ref) is built to preserve (never re-pack) such a cloud.
 
 ## Usage
 
@@ -54,7 +54,7 @@ cloud = repel(cloud, spacing; β=0.2, max_iters=1000, convergence=conv)
 | `stall_after` | `50` | Stop after this many iterations without CV improvement (`0` disables) |
 | `kick_after` | `0` (off) | Break balanced standoffs by kicking the frozen closest pair |
 | `cull_ratio` | `0` (off) | Post-relaxation near-duplicate safety net; warns whenever it removes anything |
-| `deposit_ratio` | `0` (off) | Octree method only: convert escaped volume points into boundary points (emergent surface sampling) |
+| `deposit_ratio` | `0` (off) | Orthtree method only: convert escaped volume points into boundary points (emergent surface sampling) |
 | `rebuild_every` | `1` | Iterations between k-NN graph rebuilds (larger = cheaper, staler) |
 
 ## Force Models

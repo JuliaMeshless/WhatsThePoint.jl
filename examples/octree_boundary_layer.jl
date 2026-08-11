@@ -67,7 +67,7 @@ println("Poisson-disk boundary sampling...")
 println("Boundary: $(length(boundary)) points\n")
 
 # placement defaults to :bridson; max_growth grades the steep layer smoothly.
-alg = Octree(mesh; spacing, alpha = 1.0, max_growth = MAX_GROWTH)
+alg = Orthtree(mesh; spacing, alpha = 1.0, max_growth = MAX_GROWTH)
 
 println("Discretizing volume (max_points auto-estimated from the spacing integral)...")
 @time cloud = discretize(boundary, spacing; alg)

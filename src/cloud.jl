@@ -29,7 +29,7 @@ PointCloud(filepath::AbstractString, unit::Unitful.Units) = PointCloud(PointBoun
     PointCloud(boundary::PointBoundary{M,C1}, volume::PointVolume{M,C2}, topo)
 
 When boundary and volume carry different machine types (e.g. a Float32 boundary
-from binary STL combined with Float64 volume points from the Octree algorithm),
+from binary STL combined with Float64 volume points from the Orthtree algorithm),
 promote both to their common promoted type so a single-CRS `PointCloud` can be
 assembled. This makes the cloud construction robust to any `Real` mactype
 combination rather than failing on a CRS mismatch. CRS that differ in more

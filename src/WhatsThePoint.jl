@@ -36,7 +36,7 @@ export metrics, spacing_metrics, spacing_fidelity_metrics
 
 include("geometry.jl")
 
-# Octree spatial indexing
+# Orthtree spatial indexing
 include("octree/spatial_octree.jl")
 include("octree/geometric_utils.jl")
 include("octree/triangle_octree.jl")
@@ -83,7 +83,7 @@ include("discretization/spacings.jl")
 export AbstractSpacing, ConstantSpacing, LogLike, BoundaryLayerSpacing
 
 include("discretization/discretization.jl")
-export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, Octree
+export AbstractNodeGenerationAlgorithm, SlakKosec, VanDerSandeFornberg, FornbergFlyer, Orthtree
 export discretize, suggest_spacing
 
 include("surface_sampling.jl")

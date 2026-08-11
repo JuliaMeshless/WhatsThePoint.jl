@@ -18,8 +18,8 @@ println("Loaded boundary with $(length(boundary)) points")
 octree = TriangleOctree(mesh; classify_leaves = true)
 println("Constructed octree with $(length(octree)) nodes")
 
-# Discretize volume with the Octree algorithm (bunny is ~86m across, 3m gives good density)
-node_gen_alg = Octree(octree)
+# Discretize volume with the Orthtree algorithm (bunny is ~86m across, 3m gives good density)
+node_gen_alg = Orthtree(octree)
 cloud = discretize(boundary, 3.0m; alg = node_gen_alg)
 
 # Print results

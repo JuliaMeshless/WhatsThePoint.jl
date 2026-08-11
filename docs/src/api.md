@@ -60,7 +60,7 @@ AbstractSpacing
 SlakKosec
 VanDerSandeFornberg
 FornbergFlyer
-Octree
+Orthtree
 ConstantSpacing
 BoundaryLayerSpacing
 LogLike

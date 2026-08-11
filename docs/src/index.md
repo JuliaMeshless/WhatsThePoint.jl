@@ -81,7 +81,7 @@ Generate volume points with `discretize`:
 
 ```julia
 spacing = ConstantSpacing(1m)
-cloud = discretize(boundary, spacing; alg=Octree(mesh))
+cloud = discretize(boundary, spacing; alg=Orthtree(mesh))
 ```
 
 ```julia

@@ -21,7 +21,7 @@
     # The headline promise: discretizing at the suggested baseline yields a
     # non-empty cloud (the coarse-spacing clamp is exercised separately).
     bnd = PointBoundary(mesh)
-    alg = Octree(mesh)
+    alg = Orthtree(mesh)
     cloud = discretize(bnd, g.h_baseline; alg, max_points = 5000)
     @test length(WhatsThePoint.volume(cloud)) > 0
 end
@@ -77,14 +77,14 @@ end
     @test ustrip(g_bnd.h_ceiling) ≈ ustrip(g_path.h_ceiling) rtol = 1.0e-6
 end
 
-@testitem "Octree bridson clamps and warns on too-coarse spacing" setup = [
+@testitem "Orthtree bridson clamps and warns on too-coarse spacing" setup = [
     CommonImports, OctreeTestData,
 ] begin
     using Unitful: m
 
     mesh = OctreeTestData.unit_cube_mesh()
     bnd = PointBoundary(mesh)
-    alg = Octree(mesh)
+    alg = Orthtree(mesh)
 
     # h = 1 m on a 1 m cube is above the Poisson-disk ceiling: the unguarded
     # bridson front is empty. The guard must warn loudly and still produce a

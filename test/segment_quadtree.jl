@@ -1,4 +1,4 @@
-# Tests for the 2D geometry index (SegmentQuadtree) and the 2D Octree
+# Tests for the 2D geometry index (SegmentQuadtree) and the 2D Orthtree
 # discretization path.
 
 @testitem "SegmentQuadtree construction and queries" setup = [CommonImports] begin
@@ -178,7 +178,7 @@ end
     @test !isinside(Point(1.5, 0.5), sq)
 end
 
-@testitem "Octree discretization in 2D (bridson)" setup = [CommonImports] begin
+@testitem "Orthtree discretization in 2D (bridson)" setup = [CommonImports] begin
     using Random
     Random.seed!(42)
 
@@ -192,7 +192,7 @@ end
     bnd = PointBoundary(pts)
     spacing = ConstantSpacing(0.08m)
 
-    alg = Octree(bnd; spacing)
+    alg = Orthtree(bnd; spacing)
     cloud = discretize(bnd, spacing; alg)
 
     vol = WhatsThePoint.volume(cloud)
@@ -212,13 +212,13 @@ end
     @test dmin >= 0.75 * 0.08 * (1 - 1.0e-9)
 end
 
-@testitem "Octree 2D respects max_points cap" setup = [CommonImports] begin
+@testitem "Orthtree 2D respects max_points cap" setup = [CommonImports] begin
     using Random
     Random.seed!(7)
     pts = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     bnd = PointBoundary(pts)
     spacing = ConstantSpacing(0.05m)
-    alg = Octree(bnd; spacing)
+    alg = Orthtree(bnd; spacing)
     cloud = @test_logs (:warn, r"truncated") match_mode = :any discretize(
         bnd, spacing; alg, max_points = 20,
     )
@@ -233,7 +233,7 @@ end
     @test WhatsThePoint._auto_min_ratio(Float32, 100, 2) isa Float32
 end
 
-@testitem "Octree 2D preserves the boundary length unit" setup = [CommonImports] begin
+@testitem "Orthtree 2D preserves the boundary length unit" setup = [CommonImports] begin
     using Random
     Random.seed!(11)
     # `Point(pt...)` on unit-stripped magnitudes attaches metres unconditionally,
@@ -244,7 +244,7 @@ end
     spacing = ConstantSpacing(1.0u"mm")
 
     for placement in (:bridson, :random)
-        alg = Octree(bnd; spacing, placement)
+        alg = Orthtree(bnd; spacing, placement)
         cloud = discretize(bnd, spacing; alg, max_points = 60)
         vol = volume(cloud)
         @test length(vol) > 0
@@ -253,13 +253,13 @@ end
     end
 end
 
-@testitem "2D discretize defaults to Octree" setup = [CommonImports] begin
+@testitem "2D discretize defaults to Orthtree" setup = [CommonImports] begin
     using Random
     Random.seed!(19)
     circle = Point.([(cos(t), sin(t)) for t in range(0, 2pi; length = 121)[1:120]])
     bnd = PointBoundary(circle)
 
-    # No `alg`: the Poisson-disk Octree fill, not the FornbergFlyer height field.
+    # No `alg`: the Poisson-disk Orthtree fill, not the FornbergFlyer height field.
     cloud = discretize(bnd, ConstantSpacing(0.1m))
     vol = volume(cloud)
     @test length(vol) > 100
@@ -295,10 +295,10 @@ end
     @test_throws ArgumentError discretize(bnd, spacing; alg = SlakKosec())
     @test_throws ArgumentError discretize(PointCloud(bnd), spacing; alg = SlakKosec())
 
-    # An Octree built from 3D geometry cannot fill a 2D boundary: instructive
+    # An Orthtree built from 3D geometry cannot fill a 2D boundary: instructive
     # ArgumentError, not a raw MethodError out of _discretize_volume.
     mesh = import_mesh(TestData.BOX_PATH, m)
-    @test_throws ArgumentError discretize(bnd, spacing; alg = Octree(mesh; spacing))
+    @test_throws ArgumentError discretize(bnd, spacing; alg = Orthtree(mesh; spacing))
 
     # FornbergFlyer has only a ConstantSpacing method
     graded = BoundaryLayerSpacing(
@@ -307,7 +307,7 @@ end
     @test_throws ArgumentError discretize(bnd, graded; alg = FornbergFlyer())
 end
 
-@testitem "Octree 2D per-leaf placements" setup = [CommonImports] begin
+@testitem "Orthtree 2D per-leaf placements" setup = [CommonImports] begin
     using Random
     Random.seed!(3)
     pts = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
@@ -315,7 +315,7 @@ end
     spacing = ConstantSpacing(0.1m)
 
     for placement in (:random, :jittered, :lattice)
-        alg = Octree(bnd; spacing, placement)
+        alg = Orthtree(bnd; spacing, placement)
         cloud = discretize(bnd, spacing; alg, max_points = 60)
         vol = WhatsThePoint.volume(cloud)
         @test length(vol) > 0

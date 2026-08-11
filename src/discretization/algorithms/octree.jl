@@ -1,5 +1,5 @@
 """
-    Octree <: AbstractNodeGenerationAlgorithm
+    Orthtree <: AbstractNodeGenerationAlgorithm
 
 Spacing-driven volume discretization algorithm.
 
@@ -7,7 +7,7 @@ Spacing-driven volume discretization algorithm.
 by a prescribed spacing function, not by computed solution features.
 
 !!! note
-    `Octree` is a **discretization algorithm** that generates volume fill points.
+    `Orthtree` is a **discretization algorithm** that generates volume fill points.
     [`TriangleOctree`](@ref) is a separate **spatial data structure** used internally
     for mesh geometry queries. They serve different purposes.
 
@@ -74,19 +74,19 @@ polishes the seeding (measured on the cavity gate).
 # Examples
 ```julia
 # Automatic (recommended)
-alg = Octree(mesh; spacing, alpha=1.0)
+alg = Orthtree(mesh; spacing, alpha=1.0)
 cloud = discretize(boundary, spacing; alg, max_points=100_000)
 
 # Manual geometry resolution
-alg = Octree(mesh; min_ratio=1e-3, spacing, alpha=1.0)
+alg = Orthtree(mesh; min_ratio=1e-3, spacing, alpha=1.0)
 
 # 2D: closed loop(s) of ordered boundary points (SegmentQuadtree inside)
 bnd = PointBoundary(loop_points)
-alg = Octree(bnd; spacing)
+alg = Orthtree(bnd; spacing)
 cloud = discretize(bnd, spacing; alg)
 ```
 """
-struct Octree{M <: Manifold, C <: CRS, T <: Real, G <: AbstractGeometryIndex{M}} <: AbstractNodeGenerationAlgorithm
+struct Orthtree{M <: Manifold, C <: CRS, T <: Real, G <: AbstractGeometryIndex{M}} <: AbstractNodeGenerationAlgorithm
     geometry::G  # TriangleOctree{T} (3D) or SegmentQuadtree{T} (2D)
     boundary_oversampling::T
     placement::Symbol
@@ -99,7 +99,7 @@ end
 # Constructor — the single entry point: takes the Meshes.jl object at the
 # package boundary, captures `{M, C, T}` from it, and builds the stripped
 # `TriangleOctree` internally (always with classified leaves).
-function Octree(
+function Orthtree(
         mesh::SimpleMesh{M, C};
         spacing::Union{Nothing, AbstractSpacing} = nothing,
         min_ratio::Union{Nothing, Real} = nothing,
@@ -158,7 +158,7 @@ function Octree(
         geometry_min_ratio
     end
 
-    return Octree{M, C, T, typeof(triangle_octree)}(
+    return Orthtree{M, C, T, typeof(triangle_octree)}(
         triangle_octree,
         T(boundary_oversampling),
         placement,
@@ -184,16 +184,16 @@ function SegmentQuadtree(bnd::PointBoundary{𝔼{2}, C}; kwargs...) where {C}
 end
 
 """
-    Octree(bnd::PointBoundary{𝔼{2}}; kwargs...)
+    Orthtree(bnd::PointBoundary{𝔼{2}}; kwargs...)
 
 Build the spacing-driven discretization algorithm over a 2D boundary — the
-[`SegmentQuadtree`](@ref) counterpart of `Octree(mesh)`. Each surface of `bnd`
+[`SegmentQuadtree`](@ref) counterpart of `Orthtree(mesh)`. Each surface of `bnd`
 must be a closed loop of points ordered around the loop (any orientation);
 multiple surfaces describe multiply-connected domains (outer boundary plus
 holes). Same keywords as the 3D constructor, minus `verify_orientation`
 (loop orientation is normalized during construction).
 """
-function Octree(
+function Orthtree(
         bnd::PointBoundary{𝔼{2}, C};
         spacing::Union{Nothing, AbstractSpacing} = nothing,
         min_ratio::Union{Nothing, Real} = nothing,
@@ -244,7 +244,7 @@ function Octree(
         geometry_min_ratio
     end
 
-    return Octree{𝔼{2}, C, T, typeof(quadtree)}(
+    return Orthtree{𝔼{2}, C, T, typeof(quadtree)}(
         quadtree,
         T(boundary_oversampling),
         placement,
@@ -400,7 +400,7 @@ function _generate_points_in_box(
     return pts
 end
 
-# Note: Octree infrastructure (SpacingCriterion, build_node_octree, etc.)
+# Note: Orthtree infrastructure (SpacingCriterion, build_node_octree, etc.)
 # has been moved to src/octree/spacing_criterion.jl for better code organization
 
 # ============================================================================
@@ -612,7 +612,7 @@ const _BRIDSON_CAP_HEADROOM = 1.5
 """
     _estimate_volume_points(node_tree, classification, spacing) -> Int
 
-Estimate the auto `max_points` cap for the `Octree` algorithm (used when the
+Estimate the auto `max_points` cap for the `Orthtree` algorithm (used when the
 caller leaves `max_points` unset) as `⌈$(_BRIDSON_CAP_HEADROOM) · ∑ box_volume/h(x)³⌉`
 over non-exterior leaves — the discrete spacing integral `∫ 1/h³ dx` with
 headroom for the super-`1/h³` saturated Poisson-disk packing density (see
@@ -806,7 +806,7 @@ end
         -> Vector{SVector{N,T}}
 
 Graded Bridson Poisson-disk sampling of the domain volume with disk radius
-`factor · h(x)` (see the `Octree` docstring for the choice of `factor`).
+`factor · h(x)` (see the `Orthtree` docstring for the choice of `factor`).
 `seeds` (boundary points) initialize the advancing front and occupy the
 background grid so volume points keep their distance from the wall, but are
 not returned. The front runs until saturation or until `max_points` volume
@@ -908,7 +908,7 @@ end
 function _discretize_volume(
         _cloud::PointCloud{M, C},
         spacing::AbstractSpacing,
-        alg::Octree{M, <:CRS, T};
+        alg::Orthtree{M, <:CRS, T};
         max_points::Union{Int, Nothing} = nothing,
     ) where {M <: Manifold, C, T}
     # The unit the boundary's coordinates were stripped of on entry

@@ -89,13 +89,13 @@ spacing = ConstantSpacing(1mm)
 cloud = discretize(boundary, spacing; alg=SlakKosec(octree))
 ```
 
-### Using Octree
+### Using Orthtree
 
-`Octree` uses the octree directly to generate volume points. See the [Discretization](discretization.md) page for details.
+`Orthtree` uses the octree directly to generate volume points. See the [Discretization](discretization.md) page for details.
 
 ```julia
 mesh = import_mesh("model.stl", mm)
-cloud = discretize(boundary, spacing; alg=Octree(mesh), max_points=200_000)
+cloud = discretize(boundary, spacing; alg=Orthtree(mesh), max_points=200_000)
 ```
 
 ## Choosing an Approach
@@ -103,7 +103,7 @@ cloud = discretize(boundary, spacing; alg=Octree(mesh), max_points=200_000)
 - **2D problems:** The winding number is used automatically — no configuration needed.
 - **Small 3D meshes (<10k triangles):** The default Green's function works fine.
 - **Large 3D meshes (>10k triangles):** Build a `TriangleOctree` and pass it to `isinside` or `SlakKosec` for orders-of-magnitude speedup.
-- **When you need volume points directly:** Use `Octree` to skip the separate isinside step entirely.
+- **When you need volume points directly:** Use `Orthtree` to skip the separate isinside step entirely.
 
 ## Query Functions
 

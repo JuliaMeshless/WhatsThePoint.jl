@@ -1,6 +1,6 @@
 @testitem "Float32 pipeline: octree, discretize, sampling, guidance" setup = [CommonImports, OctreeTestData] begin
     # End-to-end machine-type preservation: a Float32 mesh must flow Float32
-    # through TriangleOctree, the Octree algorithm, discretize, sample_surface,
+    # through TriangleOctree, the Orthtree algorithm, discretize, sample_surface,
     # and suggest_spacing — no silent promotion to Float64. Assertions are
     # type-level only; point quality on a coarse Float32 cube is not the target.
     mesh32 = OctreeTestData.unit_cube_mesh(Float32)
@@ -11,7 +11,7 @@
     @test tri.tree isa WhatsThePoint.SpatialOctree{Int, Float32}
     @test eltype(tri.index.bbox_min) === Float32
 
-    alg = Octree(mesh32; spacing = sp)
+    alg = Orthtree(mesh32; spacing = sp)
     @test alg.alpha isa Float32
     @test alg.boundary_oversampling isa Float32
     @test alg.bridson_factor isa Float32
@@ -38,7 +38,7 @@ end
     sp = ConstantSpacing(0.25f0u"m")
     tri = TriangleOctree(mesh32; classify_leaves = true)
     cloud = discretize(
-        PointBoundary(mesh32), sp; alg = Octree(mesh32; spacing = sp), max_points = 200
+        PointBoundary(mesh32), sp; alg = Orthtree(mesh32; spacing = sp), max_points = 200
     )
 
     c_vol = repel(cloud, sp; β = 0.2f0, max_iters = 3)

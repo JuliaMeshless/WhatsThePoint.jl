@@ -10,7 +10,7 @@ Volume discretization generates interior points from a boundary surface. This is
 cloud = discretize(boundary, spacing; alg=algorithm)
 ```
 
-The `max_points` keyword is a safety limit that prevents runaway point generation. For the [`Octree`](@ref) algorithm it defaults to an automatic estimate from the spacing integral (`∫ 1/h(x)³ dx`), sized so the fill saturates rather than truncates; for all other algorithms it defaults to 10 million. If the cap binds before the domain is filled, discretization stops early and warns.
+The `max_points` keyword is a safety limit that prevents runaway point generation. For the [`Orthtree`](@ref) algorithm it defaults to an automatic estimate from the spacing integral (`∫ 1/h(x)³ dx`), sized so the fill saturates rather than truncates; for all other algorithms it defaults to 10 million. If the cap binds before the domain is filled, discretization stops early and warns.
 
 Not sure what spacing the geometry can host? Run [`suggest_spacing`](@ref) first — it reports the domain extent, the coarsest fillable spacing (`h_ceiling`), and a recommended baseline (`h_baseline`) with estimated point counts.
 
@@ -21,16 +21,16 @@ Not sure what spacing the geometry can host? Run [`suggest_spacing`](@ref) first
 | [`SlakKosec`](@ref) | 3D | Yes | Sphere-based candidate generation |
 | [`VanDerSandeFornberg`](@ref) | 3D | Yes (`ConstantSpacing` only) | Grid projection with sphere packing |
 | [`FornbergFlyer`](@ref) | 2D | Yes (`ConstantSpacing` only) | 1D projection with height-field fill |
-| [`Octree`](@ref) | 2D/3D | Yes (variable-friendly) | Tree-guided adaptive fill (octree in 3D, quadtree in 2D); default `:bridson` placement is a global graded Poisson-disk front |
+| [`Orthtree`](@ref) | 2D/3D | Yes (variable-friendly) | Tree-guided adaptive fill (octree in 3D, quadtree in 2D); default `:bridson` placement is a global graded Poisson-disk front |
 
 ### Choosing an Algorithm
 
-- **2D problems:** [`Octree`](@ref) is the default — omit `alg` and it is built from the boundary loops for you (`Octree(bnd; spacing)` if you want to configure it). [`FornbergFlyer`](@ref) remains available for the older height-field fill, but requires `ConstantSpacing` and gives no Poisson-disk guarantee.
-- **3D with variable spacing:** Use [`Octree`](@ref) with [`BoundaryLayerSpacing`](@ref) for strong near-wall refinement, or [`SlakKosec`](@ref) with `LogLike` for simpler variable spacing.
+- **2D problems:** [`Orthtree`](@ref) is the default — omit `alg` and it is built from the boundary loops for you (`Orthtree(bnd; spacing)` if you want to configure it). [`FornbergFlyer`](@ref) remains available for the older height-field fill, but requires `ConstantSpacing` and gives no Poisson-disk guarantee.
+- **3D with variable spacing:** Use [`Orthtree`](@ref) with [`BoundaryLayerSpacing`](@ref) for strong near-wall refinement, or [`SlakKosec`](@ref) with `LogLike` for simpler variable spacing.
 - **3D with uniform spacing:** [`SlakKosec`](@ref) (default) or [`VanDerSandeFornberg`](@ref) both work. SlakKosec is more general; VanDerSandeFornberg can be faster for simple geometries.
-- **Large 3D meshes:** Use [`Octree`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Octree](isinside_octree.md) page.
+- **Large 3D meshes:** Use [`Orthtree`](@ref) or pass a `TriangleOctree` to `SlakKosec` for accelerated `isinside` queries. See the [Point-in-Volume & Orthtree](isinside_octree.md) page.
 
-## Octree Algorithm
+## Orthtree Algorithm
 
 Adaptive tree-based algorithm (octree in 3D, quadtree in 2D) that uses the provided spacing function to decide local point density. This makes it suitable for boundary-layer-style discretizations.
 
@@ -47,17 +47,17 @@ spacing = BoundaryLayerSpacing(
 )
 
 boundary = PointBoundary(mesh, spacing)   # Poisson-disk surface sampling
-alg = Octree(mesh; spacing, max_growth=0.15)  # gradient-limited grading
+alg = Orthtree(mesh; spacing, max_growth=0.15)  # gradient-limited grading
 cloud = discretize(boundary, spacing; alg)
 ```
 
-`max_growth` caps how fast the spacing may vary between neighboring points (a Lipschitz limit on `|∇h|`) — steep boundary layers stay sharp at the wall but transition smoothly into the bulk. See the [Octree Algorithm](octree.md) page for details.
+`max_growth` caps how fast the spacing may vary between neighboring points (a Lipschitz limit on `|∇h|`) — steep boundary layers stay sharp at the wall but transition smoothly into the bulk. See the [Orthtree Algorithm](octree.md) page for details.
 
 The result of exactly this recipe on a vessel bifurcation:
 
 ![Spacing-graded fill of a vessel bifurcation](assets/bifurcation-spacing.png)
 
-*Interior cross-section of a vessel bifurcation filled with `Octree` + `BoundaryLayerSpacing`, each point colored by its local target spacing h(x) — red at the wall, blue in the bulk.*
+*Interior cross-section of a vessel bifurcation filled with `Orthtree` + `BoundaryLayerSpacing`, each point colored by its local target spacing h(x) — red at the wall, blue in the bulk.*
 
 For a complete runnable script, see:
 - [examples/octree_boundary_layer.jl](https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/examples/octree_boundary_layer.jl)
@@ -99,7 +99,7 @@ Requires `ConstantSpacing`. Uses `isinside` (Green's function) for filtering gen
 cloud = discretize(boundary, ConstantSpacing(0.1mm); alg=FornbergFlyer())
 ```
 
-Must be requested explicitly — [`Octree`](@ref) is the 2D default, and the only 2D option for graded spacing.
+Must be requested explicitly — [`Orthtree`](@ref) is the 2D default, and the only 2D option for graded spacing.
 
 ## Spacing Types
 
@@ -132,7 +132,7 @@ spacing = BoundaryLayerSpacing(
 - `bulk` controls the largest spacing far from the boundary.
 - `layer_thickness` sets how fast spacing transitions from wall to bulk.
 
-`boundary_points` must be non-empty; distance queries are KDTree-accelerated. Works especially well with [`Octree`](@ref).
+`boundary_points` must be non-empty; distance queries are KDTree-accelerated. Works especially well with [`Orthtree`](@ref).
 
 ### LogLike
 
@@ -148,16 +148,16 @@ spacing = LogLike(cloud, base_size, growth_rate)
 
 The spacing at a point is computed as `base_size * x / (a + x)` where `x` is the distance to the nearest boundary point.
 
-Works with `SlakKosec` and `Octree`.
+Works with `SlakKosec` and `Orthtree`.
 
 **Typical workflow:**
 ```julia
 # First pass with uniform spacing
-cloud = discretize(boundary, ConstantSpacing(1mm); alg=Octree(mesh))
+cloud = discretize(boundary, ConstantSpacing(1mm); alg=Orthtree(mesh))
 
 # Second pass with variable spacing
 spacing = LogLike(cloud, 0.5mm, 1.2)
-cloud = discretize(boundary, spacing; alg=Octree(mesh))
+cloud = discretize(boundary, spacing; alg=Orthtree(mesh))
 ```
 
 ## References

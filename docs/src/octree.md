@@ -2,12 +2,14 @@
 CurrentModule = WhatsThePoint
 ```
 
-# Octree Algorithm
+# Orthtree Algorithm
 
-`Octree` is a discretization algorithm for 3D and 2D domains that uses a spacing function (for example `BoundaryLayerSpacing`) to adapt point density:
+`Orthtree` is a discretization algorithm for 3D and 2D domains that uses a spacing function (for example `BoundaryLayerSpacing`) to adapt point density:
 
 - finer near walls/boundaries,
 - coarser in the bulk interior.
+
+The name is the dimension-agnostic term for ``2^d``-ary spatial subdivision trees (as in CGAL's *Quadtrees, Octrees, and Orthtrees*): the algorithm guides its fill with a `SpatialTree` — an octree in 3D, a quadtree in 2D.
 
 This is useful for CFD and boundary-layer-dominated meshless simulations where you need high resolution close to surfaces without over-resolving the full volume.
 
@@ -27,7 +29,7 @@ spacing = BoundaryLayerSpacing(
     layer_thickness=8.0m,
 )
 
-alg = Octree(mesh)
+alg = Orthtree(mesh)
 cloud = discretize(boundary, spacing; alg)   # max_points auto-estimated
 ```
 
@@ -90,11 +92,11 @@ spacing = BoundaryLayerSpacing(
     points(bnd);
     at_wall = 0.035m, bulk = 0.14m, layer_thickness = 0.35m,
 )
-alg = Octree(bnd; spacing)              # SegmentQuadtree geometry index
+alg = Orthtree(bnd; spacing)              # SegmentQuadtree geometry index
 cloud = discretize(bnd, spacing; alg)
 ```
 
-![2D Octree result on a starfish domain](assets/quadtree-2d-cloud.png)
+![2D Orthtree result on a starfish domain](assets/quadtree-2d-cloud.png)
 
 *The finished cloud: boundary points (red) and the graded interior fill
 (blue) — dense in the wall layer, coarse in the core, Poisson-disk quality
@@ -115,7 +117,7 @@ The constructor supports the same octree controls used elsewhere, plus placement
 - boundary leaf oversampling (`boundary_oversampling`, per-leaf modes only)
 - orientation and safety checks (`verify_orientation`, etc.)
 
-See [`Octree`](@ref) and [`BoundaryLayerSpacing`](@ref) in the API reference for the exact signatures.
+See [`Orthtree`](@ref) and [`BoundaryLayerSpacing`](@ref) in the API reference for the exact signatures.
 
 ## Included Example Scripts
 
@@ -128,7 +130,7 @@ The 3D script demonstrates:
 
 1. probing the geometry with `suggest_spacing`,
 2. Poisson-disk boundary sampling and a steep gradient-limited `BoundaryLayerSpacing`,
-3. running `Octree` (Bridson placement, auto point budget),
+3. running `Orthtree` (Bridson placement, auto point budget),
 4. checking quality (`spacing_fidelity_metrics`, `metrics`) and rendering cross-section PNGs with CairoMakie,
 5. writing a ParaView `.vtu` via `export_vtk`.
 
@@ -137,7 +139,7 @@ shown on this page (node quadtree, Bridson dart, finished cloud).
 
 ## Notes
 
-- `Octree` supports 3D boundaries (from meshes) and 2D boundaries (closed
+- `Orthtree` supports 3D boundaries (from meshes) and 2D boundaries (closed
   loops of ordered points).
 - For uniform spacing, `SlakKosec` is a good alternative in 3D.
 - If your model scale changes significantly, tune `at_wall`, `bulk`, and `layer_thickness` in physical units.

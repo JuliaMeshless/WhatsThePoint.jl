@@ -3,7 +3,7 @@
 
 2D volume discretization algorithm using a height-field approach projected onto the x-axis.
 Requires `ConstantSpacing` and offers no Poisson-disk guarantee, so it is no
-longer the 2D default — [`Octree`](@ref) is. Pass `alg = FornbergFlyer()`
+longer the 2D default — [`Orthtree`](@ref) is. Pass `alg = FornbergFlyer()`
 explicitly to use it.
 
 See: Fornberg, B. & Flyer, N. (2015). *Comput. Math. Appl.*, 69(7).

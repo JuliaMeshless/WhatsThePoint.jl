@@ -1,7 +1,7 @@
-# 2D Octree discretization on a starfish domain, with a VISUAL breakdown of
+# 2D Orthtree discretization on a starfish domain, with a VISUAL breakdown of
 # the algorithm's stages — the 2D counterpart of octree_boundary_layer.jl.
 #
-# The same `Octree` algorithm that fills 3D meshes runs here on a closed 2D
+# The same `Orthtree` algorithm that fills 3D meshes runs here on a closed 2D
 # loop: a `SegmentQuadtree` indexes the boundary segments, a spacing-driven
 # node quadtree subdivides the domain, its leaves are classified against the
 # boundary, and a graded Bridson (Poisson-disk) front seeded from the boundary
@@ -14,7 +14,7 @@
 #
 # First run pays a one-time CairoMakie precompile; later runs are fast.
 #
-# OUTPUT: three PNGs you just open (the docs figures on the Octree page):
+# OUTPUT: three PNGs you just open (the docs figures on the Orthtree page):
 #   • quadtree_2d_boxes.png — boundary points and the spacing-driven node
 #     quadtree, finer near the wall because the spacing is graded.
 #   • quadtree_2d_dart.png — the Bridson front caught mid-run, with one
@@ -47,7 +47,7 @@ spacing = BoundaryLayerSpacing(
     WhatsThePoint.points(bnd);
     at_wall = H_WALL * m, bulk = H_BULK * m, layer_thickness = LAYER * m,
 )
-alg = Octree(bnd; spacing)
+alg = Orthtree(bnd; spacing)
 cloud = discretize(bnd, spacing; alg)
 
 # ---- gather what the figures need ----

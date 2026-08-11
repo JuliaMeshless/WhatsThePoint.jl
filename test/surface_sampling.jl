@@ -52,7 +52,7 @@ end
     @test length(points(bnd)) > 50
 
     # Integrates with discretize as a drop-in boundary.
-    alg = Octree(mesh; spacing, alpha = 1.0, placement = :bridson)
+    alg = Orthtree(mesh; spacing, alpha = 1.0, placement = :bridson)
     cloud = discretize(bnd, spacing; alg, max_points = 2000)
     @test length(WhatsThePoint.volume(cloud)) > 0
 end

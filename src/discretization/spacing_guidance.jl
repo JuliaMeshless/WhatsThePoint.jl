@@ -45,7 +45,7 @@ Returns a `NamedTuple` with `extent`, `min_extent`, `max_extent`, `diagonal`,
 ```julia
 mesh = import_mesh("bunny.stl", u"m")
 g = suggest_spacing(mesh)
-cloud = discretize(PointBoundary(mesh), g.h_baseline; alg=Octree(mesh))
+cloud = discretize(PointBoundary(mesh), g.h_baseline; alg=Orthtree(mesh))
 ```
 """
 function suggest_spacing(

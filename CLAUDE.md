@@ -85,10 +85,10 @@ All types inherit from `Domain{M,C}` where `M<:Manifold` and `C<:CRS` (coordinat
 ### Discretization (`src/discretization/`)
 Four algorithms available with **important 2D vs 3D considerations:**
 
-- **SlakKosec** (3D only, default) - `algorithms/slak_kosec.jl`
+- **SlakKosec** (3D only, 3D default) - `algorithms/slak_kosec.jl`
 - **VanDerSandeFornberg** (3D only) - `algorithms/vandersande_fornberg.jl`
-- **FornbergFlyer** (2D only) - `algorithms/fornberg_flyer.jl`
-- **Octree** (3D only) - `algorithms/octree.jl` — dual-octree spacing-driven adaptive fill; default `:bridson` placement runs a global graded Poisson-disk front seeded from the boundary, with auto-estimated `max_points` and optional gradient-limited spacing (`max_growth`) (this is a discretization *algorithm*; not to be confused with `TriangleOctree`, a spatial *data structure*)
+- **FornbergFlyer** (2D only, `ConstantSpacing` only) - `algorithms/fornberg_flyer.jl`
+- **Orthtree** (2D & 3D, 2D default) - `algorithms/octree.jl` — dual-tree spacing-driven adaptive fill; default `:bridson` placement runs a global graded Poisson-disk front seeded from the boundary, with auto-estimated `max_points` and optional gradient-limited spacing (`max_growth`) (this is a discretization *algorithm*; not to be confused with `TriangleOctree`/`SegmentQuadtree`, spatial *data structures*)
 
 Spacing types in `spacings.jl`: ConstantSpacing, LogLike, BoundaryLayerSpacing (variable spacings require non-empty boundary points; KDTree-accelerated). `spacing_guidance.jl` provides `suggest_spacing` (geometry probe recommending h_ceiling/h_baseline/h_fine) and the bridson coarse-spacing clamp-and-warn guard.
 
@@ -122,8 +122,8 @@ WhatsThePoint.jl currently supports **Euclidean manifolds only** (`𝔼{2}` and 
 
 ### 2D vs 3D Algorithm Differences
 The discretization algorithms are dimension-specific:
-- 2D geometries: Must use `FornbergFlyer()` (requires `ConstantSpacing`)
-- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()` (`ConstantSpacing` only), or `Octree()`
+- 2D geometries: `Orthtree(bnd; spacing)` (default; graded spacing OK) or `FornbergFlyer()` (`ConstantSpacing` only)
+- 3D geometries: Use `SlakKosec()` (default), `VanDerSandeFornberg()` (`ConstantSpacing` only), or `Orthtree()`
 
 ### Normal Orientation Strategy
 Normal computation and orientation uses a two-step process (Hoppe 1992):
@@ -309,9 +309,9 @@ test/
 ├── utils.jl                     # Utility function tests
 ├── io.jl                        # Import/export tests
 ├── indexing.jl                  # Index-space conversion tests
-├── octree.jl                    # Octree discretization algorithm tests
+├── octree.jl                    # Orthtree discretization algorithm tests
 ├── octree_basic.jl              # Octree data structure tests
-├── octree_discretization.jl     # Octree discretization tests
+├── octree_discretization.jl     # Orthtree discretization tests
 ├── octree_geometric.jl          # Octree geometry tests
 ├── octree_isinside.jl           # Octree-accelerated isinside tests
 ├── octree_spacing_criterion.jl  # Octree spacing criterion tests

@@ -6,8 +6,8 @@ using Unitful: m
 mesh = import_mesh("bunny.stl", m)
 boundary = PointBoundary(mesh)
 
-# Octree with uniform spacing (simple, fast)
+# Orthtree with uniform spacing (simple, fast)
 # Note: "Spacing-driven", not solution-adaptive
-@time cloud = discretize(boundary, ConstantSpacing(1m); alg = Octree(mesh), max_points = 20_000)
+@time cloud = discretize(boundary, ConstantSpacing(1m); alg = Orthtree(mesh), max_points = 20_000)
 
 visualize(cloud; markersize = 0.3)
