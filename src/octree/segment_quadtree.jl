@@ -33,8 +33,6 @@ Fields:
 - `vertex_normal`: per-vertex pseudonormal (sum of the two adjacent segment
   normals) — the sign-exact feature normal for signed-distance queries.
 - `bbox_min`/`bbox_max`: boundary bounding box.
-- `len_tol`: absolute length below which a segment is degenerate — scaled to
-  the boundary (see [`_segment_len_tol`](@ref)), never an absolute `eps`.
 - `len_unit`: the unit stripped from coordinates, re-attached at exits.
 """
 struct SegmentIndex{T <: Real}
@@ -44,7 +42,6 @@ struct SegmentIndex{T <: Real}
     vertex_normal::Vector{SVector{2, T}}
     bbox_min::SVector{2, T}
     bbox_max::SVector{2, T}
-    len_tol::T
     len_unit::Unitful.Units
 end
 
@@ -66,12 +63,23 @@ _compute_bbox(index::SegmentIndex{T}) where {T} = (index.bbox_min, index.bbox_ma
 
 Absolute length below which a segment counts as degenerate. `b - a` carries an
 absolute round-off of order `eps(T)` times the coordinate magnitudes, so the
-floor must scale with the boundary's bbox diagonal: an absolute `eps(T)` would
-declare every segment of a finely-sampled Float32 loop degenerate (zeroed
-normals, endpoint snapping), and would miss true duplicates far from the origin.
+floor must scale with a bbox diagonal: an absolute `eps(T)` would declare
+every segment of a finely-sampled Float32 loop degenerate (zeroed normals,
+endpoint snapping), and would miss true duplicates far from the origin.
+
+Callers pass the diagonal of the *individual loop*, not of the whole boundary:
+one global tolerance lets a large outer boundary silently decimate — or
+collapse outright — a finely-sampled small hole (multi-scale domains).
 """
 @inline _segment_len_tol(diagonal::T) where {T <: Real} =
     max(T(8) * eps(T) * diagonal, floatmin(T))
+
+"Bounding-box diagonal of a loop — its intrinsic length scale."
+function _loop_diagonal(loop::Vector{SVector{2, T}}) where {T}
+    lo = reduce((a, b) -> min.(a, b), loop)
+    hi = reduce((a, b) -> max.(a, b), loop)
+    return norm(hi - lo)
+end
 
 """
 Shoelace signed area of a closed loop (positive = counter-clockwise).
@@ -153,13 +161,11 @@ function SegmentIndex(
         )
     end
 
-    # Degeneracy scales with the boundary, not with the origin: round-off in
-    # every difference below is relative to the coordinate magnitudes.
-    lo_all = reduce((a, b) -> min.(a, b), Iterators.flatten(loops))
-    hi_all = reduce((a, b) -> max.(a, b), Iterators.flatten(loops))
-    len_tol = _segment_len_tol(norm(hi_all - lo_all))
-
-    cleaned = [_dedup_loop(loop, len_tol) for loop in loops]
+    # Degeneracy scales with each loop's own extent (not the union of all
+    # loops, and not the origin): round-off in every difference below is
+    # relative to the coordinate magnitudes, and a small hole loop must not
+    # inherit a large outer boundary's much looser tolerance.
+    cleaned = [_dedup_loop(loop, _segment_len_tol(_loop_diagonal(loop))) for loop in loops]
 
     # Validate and orient: outer loops CCW, holes CW (by nesting parity).
     oriented = Vector{Vector{SVector{2, T}}}(undef, length(cleaned))
@@ -201,6 +207,9 @@ function SegmentIndex(
     offset = 0
     for loop in oriented
         n = length(loop)
+        # Unreachable after dedup (consecutive vertices are > len_tol apart);
+        # kept as defense so a zeroed normal can never leak from a legit loop.
+        len_tol = _segment_len_tol(_loop_diagonal(loop))
         @inbounds for i in 1:n
             vertices[offset + i] = loop[i]
         end
@@ -224,7 +233,7 @@ function SegmentIndex(
 
     bbox_min, bbox_max = _compute_bbox_raw_2d(vertices)
     return SegmentIndex{T}(
-        vertices, segments, normal, vertex_normal, bbox_min, bbox_max, len_tol, len_unit
+        vertices, segments, normal, vertex_normal, bbox_min, bbox_max, len_unit
     )
 end
 
@@ -246,20 +255,22 @@ end
 # ============================================================================
 
 """
-    closest_point_on_segment_feature(p, a, b, len_tol_sq=eps(T)) -> (closest_point, feature)
+    closest_point_on_segment_feature(p, a, b, len_tol_sq=zero(T)) -> (closest_point, feature)
 
 Closest point on segment `a → b`, plus the feature it lies on:
 `FEATURE_FACE` (segment interior), `FEATURE_VERTEX_1` (`a`), or
 `FEATURE_VERTEX_2` (`b`).
 
 `len_tol_sq` is the *squared* length below which the segment is degenerate and
-`a` is returned; callers pass `index.len_tol^2` so the threshold tracks the
-boundary's scale (see [`_segment_len_tol`](@ref)). The default is a bare
-round-off guard against `0/0`, not a geometric tolerance.
+`a` is returned. The default is an exact-zero guard against `0/0` only — a
+tiny nonzero `denom` is harmless (`t` just clamps to an endpoint), while any
+geometric threshold here would need to track the *loop* scale, which a single
+per-index value cannot do for multi-scale domains (a fine hole's short
+segments would snap to endpoints under the outer boundary's tolerance).
 """
 @inline function closest_point_on_segment_feature(
         p::SVector{2, T}, a::SVector{2, T}, b::SVector{2, T},
-        len_tol_sq::T = eps(T),
+        len_tol_sq::T = zero(T),
     ) where {T <: Real}
     ab = b - a
     denom = dot(ab, ab)
@@ -398,15 +409,11 @@ struct _SegmentUpdater{T <: Real}
     point::SVector{2, T}
     index::SegmentIndex{T}
     state::NearestElementState{2, T}
-    len_tol_sq::T
 end
-
-_SegmentUpdater(point, index::SegmentIndex{T}, state) where {T} =
-    _SegmentUpdater(point, index, state, index.len_tol^2)
 
 @inline function (u::_SegmentUpdater{T})(seg_idx::Int) where {T}
     a, b = _get_segment_vertices(u.index, seg_idx)
-    cp, feature = closest_point_on_segment_feature(u.point, a, b, u.len_tol_sq)
+    cp, feature = closest_point_on_segment_feature(u.point, a, b)
     dvec = u.point - cp
     d2 = dot(dvec, dvec)
 

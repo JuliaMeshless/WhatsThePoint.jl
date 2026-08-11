@@ -114,6 +114,31 @@ end
     @test all(p -> !isinside(p, qc), [SVector{2, Float32}(1.5f0 * cos(t), 1.5f0 * sin(t)) for t in range(0, 2pi; length = 64)])
 end
 
+@testitem "SegmentQuadtree tolerances are per-loop (multi-scale domains)" setup = [
+    CommonImports,
+] begin
+    # A finely-sampled small hole inside a much larger outer boundary: with
+    # one global 8·eps·diag tolerance (Float32 outer diag 1.4e4 → tol 0.013),
+    # the hole's 0.006-long segments dedup away — silently decimating the
+    # hole 3× coarser, and collapsing it outright at r = 0.02. Each loop must
+    # use its own bbox diagonal.
+    outer = [
+        SVector{2, Float32}(0.0f0, 0.0f0), SVector{2, Float32}(10000.0f0, 0.0f0),
+        SVector{2, Float32}(10000.0f0, 10000.0f0), SVector{2, Float32}(0.0f0, 10000.0f0),
+    ]
+    for r in (0.1f0, 0.02f0)
+        hole = [
+            SVector{2, Float32}(5000 + r * cos(t), 5000 + r * sin(t))
+                for t in range(0.0f0, 2.0f0 * pi; length = 101)[1:100]
+        ]
+        sq = SegmentQuadtree([outer, hole])
+        @test num_segments(sq) == 104
+        @test !isinside(SVector{2, Float32}(5000.0f0, 5000.0f0), sq)  # in the hole
+        @test isinside(SVector{2, Float32}(5000.0f0 + 10 * r, 5000.0f0), sq)
+        @test !isinside(SVector{2, Float32}(10001.0f0, 5000.0f0), sq)
+    end
+end
+
 @testitem "SegmentQuadtree from PointBoundary" setup = [CommonImports] begin
     pts = Point.([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
     bnd = PointBoundary(pts)
