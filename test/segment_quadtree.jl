@@ -195,6 +195,14 @@ end
     @test length(WhatsThePoint.volume(cloud)) <= 20
 end
 
+@testitem "auto min_ratio scales with dimension" setup = [CommonImports] begin
+    # 2D boundaries use the n^(1/2) analog of the 3D n^(1/3) heuristic — the
+    # cbrt floor on a many-segment loop stops subdivision far too early.
+    @test WhatsThePoint._auto_min_ratio(Float64, 10_000, 2) ≈ 1 / 400
+    @test WhatsThePoint._auto_min_ratio(Float64, 1_000, 3) ≈ 1 / 40
+    @test WhatsThePoint._auto_min_ratio(Float32, 100, 2) isa Float32
+end
+
 @testitem "Octree 2D preserves the boundary length unit" setup = [CommonImports] begin
     using Random
     Random.seed!(11)

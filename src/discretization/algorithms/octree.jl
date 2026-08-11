@@ -121,7 +121,7 @@ function Octree(
     T = CoordRefSystems.mactype(C)
 
     # Triangle octree: geometry-based or user override
-    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, Meshes.nelements(mesh)) : T(min_ratio)
+    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, Meshes.nelements(mesh), 3) : T(min_ratio)
     triangle_octree = TriangleOctree(
         mesh;
         tolerance_relative,
@@ -215,7 +215,7 @@ function Octree(
 
     # Segment quadtree: geometry-based or user override
     n_segments_est = sum(s -> length(points(s)), surfaces(bnd))
-    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, n_segments_est) : T(min_ratio)
+    geometry_min_ratio = isnothing(min_ratio) ? _auto_min_ratio(T, n_segments_est, 2) : T(min_ratio)
     quadtree = SegmentQuadtree(
         bnd;
         tolerance_relative,
@@ -275,17 +275,20 @@ assembly would either throw on the CRS mismatch or mix coordinates 1000× apart.
     [Point((pt .* len_unit)...) for pt in raw]
 
 """
-    _auto_min_ratio(::Type{T}, mesh) where {T}
+    _auto_min_ratio(::Type{T}, n, dim) where {T}
 
-Default triangle octree resolution: `1 / (4 * cbrt(n_triangles))`.
+Default geometry tree resolution from the element count: `1 / (4 * n^(1/dim))`
+— `n^(1/3)` for triangle meshes in 3D, `n^(1/2)` for segment loops in 2D. The
+3D exponent applied to a many-segment 2D boundary floors subdivision far too
+coarsely, degrading leaf queries toward per-leaf linear scans.
 
 Factor of 4 (vs. 2) ensures accurate geometry in high-curvature regions.
 Override with explicit `min_ratio` parameter if needed.
 """
-function _auto_min_ratio(::Type{T}, n::Int) where {T}
+function _auto_min_ratio(::Type{T}, n::Int, dim::Int) where {T}
     # Factor of 4 (rather than 2) for 2× finer subdivision
     # This ensures accurate geometry representation in high-curvature regions
-    return inv(T(4) * cbrt(T(n)))
+    return inv(T(4) * T(n)^inv(T(dim)))
 end
 
 """
