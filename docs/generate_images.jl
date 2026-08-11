@@ -128,7 +128,7 @@ function depth_sorted_meshscatter!(ax, x, y, z, colors, sizes; camdir = CAMDIR)
 end
 
 # ============================================================================
-# Shared scene: Poisson-disk sampled boundary + Octree/Bridson volume fill
+# Shared scene: Poisson-disk sampled boundary + Orthtree/Bridson volume fill
 # ============================================================================
 
 function build_scene(; h = 1.5)
@@ -136,7 +136,7 @@ function build_scene(; h = 1.5)
     spacing = WTP.ConstantSpacing(h * m)
     boundary = WTP.PointBoundary(mesh, spacing)
     octree = WTP.TriangleOctree(mesh; classify_leaves = true)
-    cloud = WTP.discretize(boundary, spacing; alg = WTP.Octree(octree))
+    cloud = WTP.discretize(boundary, spacing; alg = WTP.Orthtree(mesh; spacing))
 
     bx, by, bz = coords_xyz(boundary)
     bnormals = surface_normals(boundary)
@@ -223,7 +223,7 @@ function stencil_panel!(figpos, scene; target = (15.0, -5.0, 28.0), k = 20, radi
 end
 
 # ============================================================================
-# Bifurcation scene: graded Poisson-disk surface + Octree/Bridson volume fill
+# Bifurcation scene: graded Poisson-disk surface + Orthtree/Bridson volume fill
 # ============================================================================
 
 function bifurcation_scene(; at_wall = 0.0006, bulk = 0.0025, layer_thickness = 0.004)
@@ -234,7 +234,7 @@ function bifurcation_scene(; at_wall = 0.0006, bulk = 0.0025, layer_thickness = 
         at_wall = at_wall * m, bulk = bulk * m, layer_thickness = layer_thickness * m,
     )
     boundary = WTP.PointBoundary(mesh, spacing)
-    alg = WTP.Octree(mesh; spacing, alpha = 1.0, max_growth = 0.15)
+    alg = WTP.Orthtree(mesh; spacing, alpha = 1.0, max_growth = 0.15)
     cloud = WTP.discretize(boundary, spacing; alg)
     println("bifurcation scene: $(length(boundary)) boundary + $(length(WTP.volume(cloud))) volume points")
     return (; mesh, octree, spacing, boundary, cloud, at_wall, bulk)
@@ -361,7 +361,7 @@ function generate_pipeline_gif(; h = 2.0, framerate = 12)
     spacing = WTP.ConstantSpacing(h * m)
     boundary = WTP.PointBoundary(mesh, spacing)
     octree = WTP.TriangleOctree(mesh; classify_leaves = true)
-    cloud = WTP.discretize(boundary, spacing; alg = WTP.Octree(octree))
+    cloud = WTP.discretize(boundary, spacing; alg = WTP.Orthtree(mesh; spacing))
     println("  gif scene: $(length(boundary)) boundary + $(length(WTP.volume(cloud))) volume points")
     bx, by, bz = coords_xyz(boundary)
     bshade = lambert_shades(surface_normals(boundary))
