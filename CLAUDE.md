@@ -328,7 +328,7 @@ test/
 
 `.github/workflows/CI.yml` runs on Ubuntu with Julia 1.10, 1.11, and 1.12 across a 1- and 2-thread matrix. Tests trigger on pushes to main, tags, and PRs (excluding docs/license changes).
 
-Documentation builds via `documenter.yml` (and CI.yml's `docs` job, which also runs doctests) and deploys to GitHub Pages. Other workflows: `downgrade.yml` (lower-bound compat tests), `format.yml` (format check), `TagBot.yml`, `dependabot-automerge.yml`.
+Documentation builds via `documenter.yml`, which also runs doctests, and deploys to GitHub Pages. It runs on pushes to main, on tags, on PRs, and via `workflow_dispatch`; tag runs are what publish the `stable` docs, so they depend on TagBot pushing the tag over SSH with the `DOCUMENTER_KEY` deploy key (a `GITHUB_TOKEN`-created tag would not trigger any workflow). Other workflows: `downgrade.yml` (lower-bound compat tests), `format.yml` (format check), `TagBot.yml`, `dependabot-automerge.yml`.
 
 
 # Julia Best Practices

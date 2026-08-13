@@ -6,10 +6,13 @@ on:
       - main
     tags: "*"
   pull_request:
+  workflow_dispatch:
 
+# All runs deploy to the same gh-pages branch, so serialize them: a main build
+# and a tag build have different refs and would otherwise race to push.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+  group: docs
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -19,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # DocumenterVitepress runs `git tag` to decide whether the version being
+          # built earns the `stable` alias; a shallow checkout hides the tag list.
+          fetch-depth: 0
       - uses: julia-actions/setup-julia@v3
         with:
           version: "1.11"
