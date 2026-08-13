@@ -8,7 +8,7 @@ CurrentModule = WhatsThePoint
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/JuliaMeshless/WhatsThePoint.jl")
+Pkg.add("WhatsThePoint")
 ```
 
 ## 3D Example: Surface Mesh to Solver-Ready Point Cloud

@@ -94,7 +94,7 @@ visualize(cloud; markersize=0.15)
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/JuliaMeshless/WhatsThePoint.jl")
+Pkg.add("WhatsThePoint")
 ```
 
 ```@raw html

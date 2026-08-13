@@ -25,7 +25,7 @@ Meshless methods — RBF-FD, generalized finite differences, SPH — need well-d
 ## Installation
 
 ```julia
-] add https://github.com/JuliaMeshless/WhatsThePoint.jl
+] add WhatsThePoint
 ```
 
 ## Quick Example
