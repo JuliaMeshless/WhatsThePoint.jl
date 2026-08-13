@@ -8,7 +8,8 @@
 
 <p align="center">
   <a href="https://github.com/JuliaMeshless/WhatsThePoint.jl/actions/workflows/CI.yml?query=branch%3Amain"><img src="https://github.com/JuliaMeshless/WhatsThePoint.jl/actions/workflows/CI.yml/badge.svg?branch=main" alt="Build Status"></a>
-  <a href="https://JuliaMeshless.github.io/WhatsThePoint.jl/dev"><img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Documentation"></a>
+  <a href="https://JuliaMeshless.github.io/WhatsThePoint.jl/stable"><img src="https://img.shields.io/badge/docs-stable-blue.svg" alt="Stable Docs"></a>
+  <a href="https://JuliaMeshless.github.io/WhatsThePoint.jl/dev"><img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Dev Docs"></a>
   <a href="https://github.com/JuliaMeshless/WhatsThePoint.jl/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
   <a href="https://codecov.io/gh/JuliaMeshless/WhatsThePoint.jl"><img src="https://codecov.io/gh/JuliaMeshless/WhatsThePoint.jl/graph/badge.svg?token=S3BQ5FIULZ" alt="Coverage"></a>
 </p>
@@ -17,7 +18,7 @@
 
 Meshless methods — RBF-FD, generalized finite differences, SPH — need well-distributed point clouds with neighbor connectivity, but getting from a CAD surface to solver-ready points is tedious. WhatsThePoint.jl handles the complete pipeline: surface import, volume discretization, distribution optimization, and stencil connectivity, in a few lines of Julia. Part of the [JuliaMeshless](https://github.com/JuliaMeshless) organization.
 
-**[Full documentation](https://JuliaMeshless.github.io/WhatsThePoint.jl/dev)**
+**[Full documentation](https://JuliaMeshless.github.io/WhatsThePoint.jl/stable)**
 
 > [!NOTE]
 > WhatsThePoint.jl is under active development. The API may change before v1.0.
