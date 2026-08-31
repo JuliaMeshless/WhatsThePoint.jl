@@ -80,7 +80,7 @@ combine_surfaces!
 
 ## Shadow Points
 
-Virtual points offset inward from the boundary for Hermite-type boundary condition enforcement.
+Virtual points offset inward from the boundary, along the inward normal direction.
 
 ```@docs
 ShadowPoints

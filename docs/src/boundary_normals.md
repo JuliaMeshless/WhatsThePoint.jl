@@ -70,7 +70,7 @@ The first name is kept and the second surface is merged into it.
 
 ## Shadow Points
 
-Shadow points are virtual points offset inward from the boundary along the normal direction. They are used in some meshless methods for enforcing boundary conditions (e.g., Hermite-type RBF-FD).
+Shadow points are virtual points offset inward from the boundary along the normal direction. Consumers use them to build one-sided finite differences of a field at the surface.
 
 **Constant offset:**
 

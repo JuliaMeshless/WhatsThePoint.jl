@@ -3,8 +3,9 @@
     ShadowPoints(Δ::Number, order)
 
 Shadow point configuration for generating virtual points offset inward from the boundary.
-`Δ` is the offset distance (constant or a function of position). `order` is the derivative
-order for Hermite-type boundary condition enforcement.
+`Δ` is the offset distance (constant or a function of position). `order` is carried through
+for consumers that build one-sided finite differences from the offset points; it does not
+affect point generation.
 """
 struct ShadowPoints{O, T}
     Δ::T

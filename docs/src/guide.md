@@ -77,7 +77,7 @@ combine_surfaces!(boundary, :surface1, :surface2)
 
 ## Shadow Points (Optional)
 
-Virtual points offset inward from the boundary, used in Hermite-type boundary condition enforcement (e.g., Hermite RBF-FD). Shadow points sit just inside the domain along the inward normal direction.
+Virtual points offset inward from the boundary, sitting just inside the domain along the inward normal direction. Consumers use them to build one-sided finite differences of a field at the surface.
 
 ```julia
 shadow = ShadowPoints(0.5mm)

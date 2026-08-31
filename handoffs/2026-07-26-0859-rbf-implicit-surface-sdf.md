@@ -226,11 +226,10 @@ Per the repo convention: **write the tests, but do not run them unless asked.**
 - **Out of scope, do not drift into it:** rewiring `repel` / `isinside` / `sample_surface` /
   curvature-driven spacing; a partition-of-unity backend; fast-multipole acceleration of
   evaluation (currently O(M) per query); the deformation/NURBS-for-optimization layer.
-- **Two upstream opportunities for RadialBasisFunctions.jl** — note them, don't act on them
-  here: (1) `Interpolator` has no gradient/Hessian evaluation API; (2) Hermite/gradient
-  constraints (`∇f(sᵢ) = n̂ᵢ`, Macêdo et al. 2011) would eliminate the off-surface points
-  and the δ heuristic entirely, but RBF.jl's Hermite machinery currently lives in the
-  operator path, not the interpolator.
+- **One upstream opportunity for RadialBasisFunctions.jl** — note it, don't act on it
+  here: `Interpolator` has no gradient/Hessian evaluation API. (A previous note here
+  proposed reusing RBF.jl's Hermite machinery for gradient constraints; that machinery was
+  removed in RBF.jl 0.9.0, so any such work would start from scratch.)
 
 ## References
 
